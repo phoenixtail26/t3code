@@ -36,7 +36,21 @@ Invoke-WebRequest "https://nodejs.org/dist/$ver/node-$ver-win-x64.zip" -OutFile 
 Expand-Archive "D:\Dev\tools\node-$ver-win-x64.zip" -DestinationPath D:\Dev\tools -Force
 ```
 
-## Launch (daily driver — production build)
+## Launch (daily driver — DESKTOP app)
+
+```powershell
+D:\Dev\t3code\start-t3code-desktop.ps1     # or Start Menu -> "T3 Code (fork)"
+```
+
+Native Electron window ("T3 Code (Alpha)"), spawns its own embedded server on a
+dynamic port, authenticates its own window automatically — **no pairing tokens**.
+Shares the `~\.t3\userdata` store with the standalone server variant below (don't
+run both at once). The installed upstream T3 Code (winget, in
+`AppData\Local\Programs\t3code`) is the UNPATCHED version — avoid it, or uninstall
+(`winget uninstall T3Tools.T3Code`); its codex-default bug re-mints broken bindings
+on any project it creates.
+
+## Launch (alternative — headless server + browser)
 
 ```powershell
 D:\Dev\t3code\start-t3code.ps1        # serves API + web UI on http://localhost:13773
