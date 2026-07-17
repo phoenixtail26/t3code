@@ -71,6 +71,7 @@ import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
+import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeSdkExecutable.ts";
 import {
   getClaudeModelCapabilities,
   isClaudeUltracodeEffort,
@@ -3405,7 +3406,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       const canUseTool: CanUseTool = (toolName, toolInput, callbackOptions) =>
         runPromise(canUseToolEffect(toolName, toolInput, callbackOptions));
 
-      const claudeBinaryPath = claudeSettings.binaryPath;
+      const claudeBinaryPath = resolveClaudeSdkExecutablePath(
+        claudeSettings.binaryPath,
+        claudeEnvironment,
+      );
       const extraArgs = parseCliArgs(claudeSettings.launchArgs).flags;
       const modelSelection =
         input.modelSelection?.instanceId === boundInstanceId ? input.modelSelection : undefined;

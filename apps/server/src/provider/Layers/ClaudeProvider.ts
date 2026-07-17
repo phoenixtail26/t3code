@@ -38,6 +38,7 @@ import {
   type ServerProviderDraft,
 } from "../providerSnapshot.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
+import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeSdkExecutable.ts";
 
 const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],
@@ -597,7 +598,10 @@ const probeClaudeCapabilities = (
         })(),
         options: {
           persistSession: false,
-          pathToClaudeCodeExecutable: claudeSettings.binaryPath,
+          pathToClaudeCodeExecutable: resolveClaudeSdkExecutablePath(
+            claudeSettings.binaryPath,
+            claudeEnvironment,
+          ),
           abortController: abort,
           settingSources: ["user", "project", "local"],
           allowedTools: [],
