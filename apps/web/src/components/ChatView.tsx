@@ -151,7 +151,10 @@ import {
 import { newDraftId, newMessageId, newThreadId } from "~/lib/utils";
 import { getProviderModelCapabilities, resolveSelectableProvider } from "../providerModels";
 import { useEnvironmentSettings } from "../hooks/useSettings";
-import { resolveAppModelSelectionForInstance } from "../modelSelection";
+import {
+  resolveAppModelSelectionForInstance,
+  resolveDefaultNewProjectModelSelection,
+} from "../modelSelection";
 import { getTerminalFocusOwner } from "../lib/terminalFocus";
 import { resolveNewDraftStartFromOrigin } from "../lib/chatThreadActions";
 import {
@@ -1223,19 +1226,25 @@ function ChatViewContent(props: ChatViewProps) {
       ? null
       : ((draftId ? localDraftErrorsByDraftId[draftId] : null) ?? null);
   const localServerError = localServerErrorsByThreadKey[routeThreadKey] ?? null;
+  const fallbackDefaultModelSelection = useMemo(
+    () => resolveDefaultNewProjectModelSelection(primaryEnvironment?.serverConfig?.providers ?? []),
+    [primaryEnvironment?.serverConfig?.providers],
+  );
   const localDraftThread = useMemo(
     () =>
       draftThread
         ? buildLocalDraftThread(
             threadId,
             draftThread,
-            fallbackDraftProject?.defaultModelSelection ?? {
-              instanceId: ProviderInstanceId.make("codex"),
-              model: DEFAULT_MODEL,
-            },
+            fallbackDraftProject?.defaultModelSelection ?? fallbackDefaultModelSelection,
           )
         : undefined,
-    [draftThread, fallbackDraftProject?.defaultModelSelection, threadId],
+    [
+      draftThread,
+      fallbackDraftProject?.defaultModelSelection,
+      fallbackDefaultModelSelection,
+      threadId,
+    ],
   );
   const isServerThread = routeKind === "server" && serverThread !== null;
   const activeThread = isServerThread ? serverThread : localDraftThread;

@@ -1,6 +1,7 @@
 import {
   DEFAULT_GIT_TEXT_GENERATION_MODEL,
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
+  DEFAULT_MODEL,
   defaultInstanceIdForDriver,
   type ModelSelection,
   ProviderDriverKind,
@@ -22,7 +23,11 @@ import {
   resolveSelectableProvider,
 } from "./providerModels";
 import { ModelEsque } from "./components/chat/providerIconUtils";
-import { type ProviderInstanceEntry, deriveProviderInstanceEntries } from "./providerInstances";
+import {
+  type ProviderInstanceEntry,
+  deriveProviderInstanceEntries,
+  isProviderInstancePickerReady,
+} from "./providerInstances";
 import { sortModelsForProviderInstance } from "./modelOrdering";
 
 const MAX_CUSTOM_MODEL_COUNT = 32;
@@ -271,6 +276,33 @@ export function getCustomModelOptionsByInstance(
     out.set(entry.instanceId, getAppModelOptionsForInstance(settings, entry));
   }
   return out;
+}
+
+/**
+ * Default selection for a newly created project (and for draft threads whose
+ * project default is missing): the first ready — else enabled and available —
+ * provider instance, with that instance's default model. A hardcoded Codex
+ * default here strands setups without Codex on a disabled instance: the model
+ * later re-resolves against enabled providers while the instance id sticks,
+ * minting mismatched selections (e.g. a Claude model on the `codex` instance)
+ * whose turns fail with "Provider instance 'codex' is disabled". The Codex
+ * pair remains only as the last resort while provider statuses are unknown.
+ */
+export function resolveDefaultNewProjectModelSelection(providers: ReadonlyArray<ServerProvider>): {
+  readonly instanceId: ProviderInstanceId;
+  readonly model: string;
+} {
+  const entries = deriveProviderInstanceEntries(providers);
+  const entry =
+    entries.find(isProviderInstancePickerReady) ??
+    entries.find((candidate) => candidate.enabled && candidate.isAvailable);
+  const model = entry
+    ? (entry.models.find((candidate) => !candidate.isCustom)?.slug ?? entry.models[0]?.slug)
+    : undefined;
+  if (entry && model !== undefined) {
+    return { instanceId: entry.instanceId, model };
+  }
+  return { instanceId: ProviderInstanceId.make("codex"), model: DEFAULT_MODEL };
 }
 
 export function resolveAppModelSelectionState(

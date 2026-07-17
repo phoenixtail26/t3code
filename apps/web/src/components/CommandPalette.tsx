@@ -7,12 +7,10 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import {
-  DEFAULT_MODEL,
   type DesktopWslState,
   type EnvironmentId,
   type FilesystemBrowseResult,
   type ProjectId,
-  ProviderInstanceId,
   type SourceControlDiscoveryResult,
   type SourceControlProviderKind,
   type SourceControlRepositoryInfo,
@@ -49,6 +47,7 @@ import { OpenAddProjectCommandPaletteProvider } from "../commandPaletteContext";
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { resolveDefaultNewProjectModelSelection } from "../modelSelection";
 import { useClientSettings } from "../hooks/useSettings";
 import { readLocalApi } from "../localApi";
 import { desktopLocalBackendId } from "../connection/desktopLocal";
@@ -1149,6 +1148,9 @@ function OpenCommandPaletteDialog(props: {
       }
 
       const projectId = newProjectId();
+      const targetEnvironment =
+        environments.find((environment) => environment.environmentId === input.environmentId) ??
+        primaryEnvironment;
       const createResult = await createProject({
         environmentId: input.environmentId,
         input: {
@@ -1156,10 +1158,9 @@ function OpenCommandPaletteDialog(props: {
           title: inferProjectTitleFromPath(cwd),
           workspaceRoot: cwd,
           createWorkspaceRootIfMissing: true,
-          defaultModelSelection: {
-            instanceId: ProviderInstanceId.make("codex"),
-            model: DEFAULT_MODEL,
-          },
+          defaultModelSelection: resolveDefaultNewProjectModelSelection(
+            targetEnvironment?.serverConfig?.providers ?? [],
+          ),
         },
       });
       if (createResult._tag === "Failure") {
@@ -1195,7 +1196,9 @@ function OpenCommandPaletteDialog(props: {
     [
       handleNewThread,
       createProject,
+      environments,
       navigate,
+      primaryEnvironment,
       projects,
       setOpen,
       clientSettings.sidebarThreadSortOrder,
