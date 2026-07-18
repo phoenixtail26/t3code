@@ -6,19 +6,19 @@ what changed, roadmap), `RUN_FORK_WINDOWS.md` (running/building here).
 
 ## Topology
 
-| Remote | URL | Role |
-| --- | --- | --- |
-| `origin` | `github.com/phoenixtail26/t3code` | our fork — push here |
-| `upstream` | `github.com/pingdotgg/t3code` | upstream — fetch only |
+| Remote     | URL                               | Role                  |
+| ---------- | --------------------------------- | --------------------- |
+| `origin`   | `github.com/phoenixtail26/t3code` | our fork — push here  |
+| `upstream` | `github.com/pingdotgg/t3code`     | upstream — fetch only |
 
 `upstream`'s push URL is deliberately set to the non-URL string
 `DISABLED_PUSH_TO_ORIGIN_INSTEAD`, so an absent-minded `git push upstream` fails
 loudly instead of attempting to write to someone else's repo.
 
-| Branch | Role |
-| --- | --- |
-| `main` | pristine mirror of `upstream/main` — **never commit here** |
-| `g3code` | our product line; all fork work lands here |
+| Branch           | Role                                                           |
+| ---------------- | -------------------------------------------------------------- |
+| `main`           | pristine mirror of `upstream/main` — **never commit here**     |
+| `g3code`         | our product line; all fork work lands here                     |
 | feature branches | cut from `g3code` (or from `main` if upstreamable — see below) |
 
 Why `main` stays pristine: it makes every upstream sync a guaranteed
