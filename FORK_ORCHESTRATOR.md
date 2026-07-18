@@ -2,7 +2,8 @@
 
 Read this first if you are an agent working in this checkout. It explains why this
 fork exists, what has been changed and why, and where the work is going. Companion
-docs: `RUN_FORK_WINDOWS.md` (how to run/build on this machine),
+docs: `FORK_REMOTES.md` (remotes, branch model, upstream sync),
+`RUN_FORK_WINDOWS.md` (how to run/build on this machine),
 `CLAUDE_WINDOWS_AUTH_FIX.md` (deep-dive on the first bug), upstream `AGENTS.md`
 (code conventions — follow them; the fork additions are at the bottom).
 
@@ -37,7 +38,7 @@ extended toward the orchestrator role.
   Control. T3 Code hosts sessions — and can grow the file-watching part (see
   roadmap).
 
-## What has been changed in this fork (branch `fix/windows-claude-sdk-executable`)
+## What has been changed in this fork (branch `g3code`)
 
 1. **Windows Claude auth fix** (`ClaudeSdkExecutable.ts`) — upstream passes the
    bare string "claude" to the Agent SDK, which stats it as a literal path; npm
@@ -79,9 +80,12 @@ all projects/threads rebound from `codex` to `claudeAgent` + `claude-fable-5`.
   from claude.ai until the roadmap below lands.
 - **Upstream posture**: keep fixes small and cherry-pickable; upstream says "not
   accepting contributions yet", so candidate PRs (#1, #2) wait, but a corrective
-  comment on upstream #2653 is worth posting. Rebase onto upstream main
-  periodically; the fork's own files (FORK*\*, RUN*_, CLAUDE*WINDOWS*_, usage
-  feature) are additive and low-conflict.
+  comment on upstream #2653 is worth posting. Work lives on `g3code`; `main`
+  stays a pristine mirror of `upstream/main` and upstream lands via
+  `merge --ff-only` then `main` → `g3code`. Full workflow, including how to cut
+  an upstreamable PR branch, is in `FORK_REMOTES.md`. The fork's own files
+  (FORK*\*, RUN*_, CLAUDE*WINDOWS*_, usage feature) are additive and
+  low-conflict.
 
 ## Roadmap
 
