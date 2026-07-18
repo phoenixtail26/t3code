@@ -118,18 +118,50 @@ Rationale and decisions live in `FORK_ORCHESTRATOR.md` (roadmap #2). Steps that
 need a human sign-in are marked. Order matters — do Tailscale before pairing so
 the phone pairs against the durable HTTPS URL.
 
-1. **Tailscale on the PC** (sign-in): `winget install tailscale.tailscale`, then
-   sign in. Install the Tailscale app on the phone with the SAME account.
-2. **Expose the backend**: desktop app -> Settings -> Connections -> Manage
-   Local Backend -> **Network access** on (restarts the backend on all
-   interfaces). Tailnet endpoints then appear in the endpoint list.
-3. **HTTPS**: use the **Tailscale HTTPS** row's _Setup_ action (equivalent to
-   `t3 serve --tailscale-serve`) to get `https://machine.tailnet.ts.net`. Make
-   it the default endpoint. HTTPS is required for hosted/PWA pairing and for
-   any future Web Push.
-4. **Pair the phone once**: Create Link -> scan the QR. Remember pairing tokens
-   are single-use. Add the page to the home screen for an app-like PWA.
-5. **Notifications**: pick a LONG RANDOM ntfy topic name (the topic URL is the
+Completed on this machine 2026-07-18; the values below are the live ones.
+
+1. **Tailscale on the PC** (sign-in): `winget install tailscale.tailscale`, sign
+   in with the Google account. Install Tailscale on the phone and sign in with
+   the SAME account — check `tailscale status` lists the phone as a peer, or
+   nothing will reach the PC. Here: PC `viki` = 100.85.106.78, Pixel 9 =
+   100.126.137.78, tailnet `tailae8de0.ts.net`.
+2. **Enable HTTPS certificates** for the tailnet at
+   <https://login.tailscale.com/admin/dns> → **HTTPS Certificates** → Enable.
+   Verify with `tailscale status --json` → `CertDomains` non-empty. Without
+   this the Tailscale HTTPS row cannot issue a certificate.
+3. **RESTART the desktop app after installing Tailscale.** t3code spawns
+   `tailscale.exe` by bare name, so it only finds it if the app's process
+   inherited the PATH entry the installer added (`C:\Program Files\Tailscale\`,
+   machine PATH). An app started before the install — or relaunched from a
+   stale Explorer — shows the Tailscale row with NO switch and the message
+   "Start Tailscale to set up HTTPS access through MagicDNS", which reads like
+   a missing feature. Relaunch from a process with a refreshed PATH.
+4. **Expose the backend**: desktop app → Settings → Connections → **This
+   environment** section (NOT "Manage Local Backend" as upstream docs say) →
+   **Network access** on. It restarts the backend off loopback. Expand the
+   endpoint list (`+N`) and make the Tailscale endpoint the default — the
+   first-listed endpoint is often a useless virtual adapter (`10.5.0.2`,
+   Docker/WSL).
+5. **Tailscale HTTPS row** → switch on → confirm "Set up Tailscale HTTPS?".
+   Verify with `tailscale serve status`: expect
+   `https://viki.tailae8de0.ts.net (tailnet only) |-- / proxy
+http://127.0.0.1:3773`, and a 200 from that URL.
+6. **Pair the phone**: Authorized clients → **Create link**, label it (e.g.
+   "Pixel 9"), keep the **Standard** permission preset — the four checked
+   scopes let the phone drive threads; leave **Manage access** and **Manage
+   relay** off so a lost phone cannot mint credentials for anything else.
+   - **Do not scan the QR with the camera app.** It opens an in-app browser,
+     and the session cookie lands _there_ — reopening in Chrome then shows the
+     pairing prompt again with the token already spent.
+   - Instead: open **Chrome** on the phone, go to
+     `https://viki.tailae8de0.ts.net`, and type the 12-character token into the
+     prompt. Mint tokens headlessly with (from `apps/server`, portable-Node
+     PATH, `T3CODE_HOME=~\.t3`):
+     `node src/bin.ts auth pairing create --ttl 1h --label "Pixel 9" --json`
+   - Then Chrome menu → **Add to Home screen** for the PWA. Pairing leaves a
+     long-lived cookie in THAT browser; the home-screen icon is the durable
+     way back in.
+7. **Notifications**: pick a LONG RANDOM ntfy topic name (the topic URL is the
    only credential — anyone who knows it can read your notifications), install
    the ntfy app on the phone, subscribe to that topic, then set in the settings
    file (`~\.t3\userdata\settings.json`, or dev store when running dev mode):
