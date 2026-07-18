@@ -421,6 +421,13 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.confirmThreadDelete !== DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete
         ? ["Delete confirmation"]
         : []),
+      ...(settings.desktopNotificationsEnabled !==
+      DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled
+        ? ["Desktop notifications"]
+        : []),
+      ...(settings.desktopNotificationSound !== DEFAULT_UNIFIED_SETTINGS.desktopNotificationSound
+        ? ["Notification sound"]
+        : []),
       ...(isGitWritingModelDirty ? ["Git writing model"] : []),
     ],
     [
@@ -428,6 +435,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.autoOpenPlanSidebar,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
+      settings.desktopNotificationsEnabled,
+      settings.desktopNotificationSound,
       settings.addProjectBaseDirectory,
       settings.defaultThreadEnvMode,
       settings.newWorktreesStartFromOrigin,
@@ -873,6 +882,62 @@ export function GeneralSettingsPanel() {
                 updateSettings({ confirmThreadDelete: Boolean(checked) })
               }
               aria-label="Confirm thread deletion"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Desktop notifications"
+          description="Show a system notification when a thread needs approval, asks a question, or fails. Only fires while this app is not focused."
+          resetAction={
+            settings.desktopNotificationsEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled ? (
+              <SettingResetButton
+                label="desktop notifications"
+                onClick={() =>
+                  updateSettings({
+                    desktopNotificationsEnabled:
+                      DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.desktopNotificationsEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ desktopNotificationsEnabled: Boolean(checked) })
+              }
+              aria-label="Enable desktop notifications"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Notification sound"
+          description="Play a short sound with desktop notifications."
+          resetAction={
+            settings.desktopNotificationSound !==
+            DEFAULT_UNIFIED_SETTINGS.desktopNotificationSound ? (
+              <SettingResetButton
+                label="notification sound"
+                onClick={() =>
+                  updateSettings({
+                    desktopNotificationSound: DEFAULT_UNIFIED_SETTINGS.desktopNotificationSound,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.desktopNotificationSound}
+              disabled={!settings.desktopNotificationsEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ desktopNotificationSound: Boolean(checked) })
+              }
+              aria-label="Enable notification sound"
             />
           }
         />

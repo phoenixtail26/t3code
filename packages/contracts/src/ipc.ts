@@ -986,6 +986,12 @@ export interface DesktopBridge {
   ) => Promise<AuthWebSocketTicketResult>;
   onSshPasswordPrompt: (listener: (request: DesktopSshPasswordPromptRequest) => void) => () => void;
   resolveSshPasswordPrompt: (requestId: string, password: string | null) => Promise<void>;
+  /**
+   * Taskbar attention state (overlay dot + flash) while a thread is waiting.
+   * Optional so a newer renderer against an older desktop shell degrades to
+   * "no badge" rather than throwing.
+   */
+  setAttentionState?: (input: { readonly waiting: boolean }) => Promise<void>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
   setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
   setTailscaleServeEnabled: (input: {
