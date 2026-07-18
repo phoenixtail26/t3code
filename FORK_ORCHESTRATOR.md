@@ -113,7 +113,7 @@ Implementation sketch (researched, not started):
 - Owner context: this replaces the earlier "session radar" plan that predated
   choosing t3code (see forsaken `.claude/docs/claudeCommandCenterSetup.md`).
 
-### 2. Phone access (in progress — branch `feat/phone-remote-notifications`)
+### 2. Phone access (DONE 2026-07-18 — merged to `g3code`)
 
 **Goal:** drive t3code threads from the phone while away from the PC, and be
 _told_ when a thread needs attention rather than polling.
@@ -151,14 +151,21 @@ Implementation status:
   data leaves the machine. Per-phase toggles mirror upstream's
   `RelayAgentAwarenessPreferences` (approval/input/failure/completion), and
   notifications carry a click-through to `publicBaseUrl` + the thread route.
-- **Todo — host setup** (needs the owner; sign-ins): install Tailscale on PC +
-  phone, enable Network access + Tailscale Serve, pair the phone once, set
-  `pushNotifications.topicUrl` (use a long random topic name — an ntfy topic is
-  a capability URL) and `publicBaseUrl` to the tailnet HTTPS URL. Install the
-  ntfy app on the phone, subscribe to the same topic. Self-hosting ntfy on the
-  tailnet is the fully-private upgrade.
+- **Done — host setup, verified end to end.** Tailnet `tailae8de0.ts.net`; PC
+  `viki`; Tailscale Serve proxies `https://viki.tailae8de0.ts.net` →
+  127.0.0.1:3773 (tailnet only, real cert). Pixel paired in Chrome and
+  installed as a PWA; a notification rendered by the shipped code arrived on
+  the phone and its click-through opened the deep-linked thread route. Settings
+  live in `~\.t3\userdata\settings.json`. Step-by-step and the four traps this
+  cost (Tailscale cert enablement, restart-after-install PATH detection, the
+  "This environment" section name, camera-app QR eating the pairing cookie) are
+  in `RUN_FORK_WINDOWS.md`.
 - **Todo — settings UI**: the fields exist in the schema and are patchable, but
-  Settings has no controls yet; set them in the settings file for now.
+  Settings has no controls yet; edit the settings file (server normalizes it on
+  boot, so edit while the app is stopped).
+- **Todo — rotate the ntfy topic if it ever leaks**: the topic name is the only
+  credential on that channel. Change `topicUrl` and re-subscribe on the phone.
+  Self-hosting ntfy on the tailnet is the fully-private upgrade.
 - **Later — Web Push** from the PWA itself (service worker + VAPID), removing
   the ntfy app dependency. Requires the HTTPS above.
 
