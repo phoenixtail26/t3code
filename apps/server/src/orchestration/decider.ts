@@ -9,6 +9,7 @@ import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import type * as PlatformError from "effect/PlatformError";
 
+import { projectNotEmptyInvariantDetail } from "@t3tools/shared/orchestrationErrors";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import {
   listThreadsByProjectId,
@@ -187,7 +188,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       if (activeThreads.length > 0 && command.force !== true) {
         return yield* new OrchestrationCommandInvariantError({
           commandType: command.type,
-          detail: `Project '${command.projectId}' is not empty and cannot be deleted without force=true.`,
+          detail: projectNotEmptyInvariantDetail(command.projectId),
         });
       }
       if (activeThreads.length > 0) {

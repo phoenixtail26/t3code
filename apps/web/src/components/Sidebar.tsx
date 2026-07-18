@@ -58,6 +58,7 @@ import {
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
 import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
+import { isProjectNotEmptyInvariantMessage } from "@t3tools/shared/orchestrationErrors";
 import {
   isAtomCommandInterrupted,
   settlePromise,
@@ -1572,6 +1573,49 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
         const error = squashAtomCommandFailure(result);
         const message = error instanceof Error ? error.message : "Unknown error removing project.";
+
+        // The count above only sees threads in the shell snapshot, which omits
+        // archived ones — so a project holding nothing but archived threads
+        // reaches here and the server rejects the unforced delete. Re-confirm
+        // naming what is actually being destroyed, rather than dead-ending on
+        // an invariant message the user can't act on.
+        if (isProjectNotEmptyInvariantMessage(message)) {
+          const archivedConfirmed = await api.dialogs.confirm(
+            [
+              `Remove project "${member.title}" and delete its archived threads?`,
+              `Path: ${member.workspaceRoot}`,
+              ...(member.environmentLabel ? [`Environment: ${member.environmentLabel}`] : []),
+              "This project has no visible threads, but it still holds archived ones.",
+              "This permanently clears conversation history for those threads.",
+              "This action cannot be undone.",
+            ].join("\n"),
+          );
+          if (!archivedConfirmed) {
+            return;
+          }
+
+          const forcedResult = await removeProject(member, { force: true });
+          if (forcedResult._tag === "Failure" && !isAtomCommandInterrupted(forcedResult)) {
+            const forcedError = squashAtomCommandFailure(forcedResult);
+            console.error("Failed to remove project", {
+              projectId: member.id,
+              environmentId: member.environmentId,
+              ...safeErrorLogAttributes(forcedError),
+            });
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: `Failed to remove "${member.title}"`,
+                description:
+                  forcedError instanceof Error
+                    ? forcedError.message
+                    : "Unknown error removing project.",
+              }),
+            );
+          }
+          return;
+        }
+
         console.error("Failed to remove project", {
           projectId: member.id,
           environmentId: member.environmentId,
