@@ -1,4 +1,8 @@
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+// @effect-diagnostics nodeBuiltinImport:off
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+
+import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -16,6 +20,39 @@ export const TAILSCALE_PROBE_TIMEOUT = Duration.millis(2_500);
 // it is always spawned directly rather than through cmd.exe shell mode.
 const tailscaleCommandForPlatform = (platform: NodeJS.Platform): "tailscale" | "tailscale.exe" =>
   platform === "win32" ? "tailscale.exe" : "tailscale";
+
+/**
+ * Spawn target for the tailscale CLI.
+ *
+ * Spawning the bare name relies on PATH, and on Windows that is unreliable in
+ * exactly the case that matters: the installer appends its directory to the
+ * *machine* PATH, but every already-running process — including Explorer, and
+ * therefore anything launched from a shortcut — keeps the environment it
+ * started with. Tailscale then appears "not installed" until the user reboots,
+ * which surfaces as a switch-less Tailscale HTTPS row rather than an error.
+ *
+ * So on Windows prefer the known install location when it exists, and fall
+ * back to the bare name (PATH) for installs elsewhere. The returned value is
+ * only the spawn target; error reporting keeps using the short command name.
+ */
+function resolveTailscaleSpawnTarget(
+  executable: "tailscale" | "tailscale.exe",
+  platform: NodeJS.Platform,
+  env: NodeJS.ProcessEnv,
+): string {
+  if (platform !== "win32") return executable;
+  const programFilesDirs = [env["ProgramFiles"], env["ProgramW6432"], env["ProgramFiles(x86)"]];
+  for (const dir of programFilesDirs) {
+    if (dir === undefined || dir.length === 0) continue;
+    const candidate = NodePath.win32.join(dir, "Tailscale", "tailscale.exe");
+    try {
+      if (NodeFS.statSync(candidate).isFile()) return candidate;
+    } catch {
+      // Not installed here; try the next well-known location.
+    }
+  }
+  return executable;
+}
 
 const TailscaleCommandContext = {
   executable: Schema.Literals(["tailscale", "tailscale.exe"]),
@@ -185,6 +222,11 @@ export const readTailscaleStatus = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const hostPlatform = yield* HostProcessPlatform;
   const executable = tailscaleCommandForPlatform(hostPlatform);
+  const spawnTarget = resolveTailscaleSpawnTarget(
+    executable,
+    hostPlatform,
+    yield* HostProcessEnvironment,
+  );
   const commandContext = {
     executable,
     subcommand: "status" as const,
@@ -192,7 +234,7 @@ export const readTailscaleStatus = Effect.gen(function* () {
   };
   return yield* Effect.gen(function* () {
     const child = yield* spawner
-      .spawn(ChildProcess.make(executable, args))
+      .spawn(ChildProcess.make(spawnTarget, args))
       .pipe(
         Effect.mapError((cause) => new TailscaleCommandSpawnError({ ...commandContext, cause })),
       );
@@ -252,6 +294,11 @@ const runTailscaleCommand = (
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const hostPlatform = yield* HostProcessPlatform;
     const executable = tailscaleCommandForPlatform(hostPlatform);
+    const spawnTarget = resolveTailscaleSpawnTarget(
+      executable,
+      hostPlatform,
+      yield* HostProcessEnvironment,
+    );
     const commandContext = {
       executable,
       subcommand: "serve" as const,
@@ -260,7 +307,7 @@ const runTailscaleCommand = (
     const timeout = Duration.fromInputUnsafe(timeoutInput);
     return yield* Effect.gen(function* () {
       const child = yield* spawner
-        .spawn(ChildProcess.make(executable, args))
+        .spawn(ChildProcess.make(spawnTarget, args))
         .pipe(
           Effect.mapError((cause) => new TailscaleCommandSpawnError({ ...commandContext, cause })),
         );
