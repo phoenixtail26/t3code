@@ -78,6 +78,7 @@ import { VcsStatusBroadcaster } from "../src/vcs/VcsStatusBroadcaster.ts";
 import { GitWorkflowService } from "../src/git/GitWorkflowService.ts";
 import * as VcsProcess from "../src/vcs/VcsProcess.ts";
 import * as AgentAwarenessRelay from "../src/relay/AgentAwarenessRelay.ts";
+import { PushNotifier } from "../src/notifications/PushNotifierService.ts";
 
 const decodeCodexSettings = Schema.decodeEffect(CodexSettings);
 
@@ -372,6 +373,7 @@ export const makeOrchestrationIntegrationHarness = (
           start: () => Effect.void,
         }),
       ),
+      Layer.provideMerge(Layer.succeed(PushNotifier, { start: () => Effect.void })),
     );
     const layer = Layer.empty.pipe(
       Layer.provideMerge(runtimeServicesLayer),

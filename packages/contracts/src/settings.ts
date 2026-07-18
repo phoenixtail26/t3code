@@ -361,6 +361,27 @@ export const ObservabilitySettings = Schema.Struct({
 });
 export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
+/**
+ * Self-hosted phone notifications via an ntfy topic (https://ntfy.sh or a
+ * private ntfy server). Opt-in: with an empty `topicUrl` nothing is sent and
+ * no thread data leaves the machine. Transport-independent counterpart to
+ * T3 Connect's relay push — no cloud account, works over a tailnet.
+ */
+export const PushNotificationSettings = Schema.Struct({
+  /** Full ntfy topic URL, e.g. https://ntfy.sh/<secret-topic>. Empty disables. */
+  topicUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /**
+   * Public base URL of this server, used to build notification click-through
+   * links, e.g. https://machine.tailnet.ts.net. Empty omits the link.
+   */
+  publicBaseUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  notifyOnApproval: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  notifyOnInput: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  notifyOnFailure: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  notifyOnCompletion: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+});
+export type PushNotificationSettings = typeof PushNotificationSettings.Type;
+
 export const DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL = Duration.seconds(30);
 
 export const ServerSettings = Schema.Struct({
@@ -409,6 +430,7 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  pushNotifications: PushNotificationSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -514,6 +536,16 @@ export const ServerSettingsPatch = Schema.Struct({
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(TrimmedString),
       otlpMetricsUrl: Schema.optionalKey(TrimmedString),
+    }),
+  ),
+  pushNotifications: Schema.optionalKey(
+    Schema.Struct({
+      topicUrl: Schema.optionalKey(TrimmedString),
+      publicBaseUrl: Schema.optionalKey(TrimmedString),
+      notifyOnApproval: Schema.optionalKey(Schema.Boolean),
+      notifyOnInput: Schema.optionalKey(Schema.Boolean),
+      notifyOnFailure: Schema.optionalKey(Schema.Boolean),
+      notifyOnCompletion: Schema.optionalKey(Schema.Boolean),
     }),
   ),
   providers: Schema.optionalKey(

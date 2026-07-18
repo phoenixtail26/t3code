@@ -113,14 +113,63 @@ Implementation sketch (researched, not started):
 - Owner context: this replaces the earlier "session radar" plan that predated
   choosing t3code (see forsaken `.claude/docs/claudeCommandCenterSetup.md`).
 
-### 2. Smaller candidates
+### 2. Phone access (in progress — branch `feat/phone-remote-notifications`)
+
+**Goal:** drive t3code threads from the phone while away from the PC, and be
+_told_ when a thread needs attention rather than polling.
+
+Decisions (reviewed 2026-07-18; an earlier draft had HTTPS as optional polish
+and no notification story — both were wrong):
+
+- **Transport: Tailscale**, not T3 Connect. A tailnet gives a private mesh with
+  no cloud account, no third party seeing thread data, and the phone gets _this
+  fork's_ web UI — every feature we add appears there for free. It is also
+  general infrastructure (RDP/SSH/files from anywhere), not single-purpose.
+  T3 Connect (their relay + Cloudflare tunnel + hosted accounts, alpha) stays a
+  watch-item: it is their eventual mobile story and their repo already carries
+  an APNs/live-activity model a browser cannot match.
+- **HTTPS is v1, not polish.** `t3 serve --tailscale-serve` (or the desktop
+  Tailscale HTTPS row) yields `https://machine.tailnet.ts.net`, which is what
+  makes the phone experience installable (PWA via `app.t3.codes` pairing) and
+  is a hard prerequisite for Web Push later. Plain-HTTP LAN pairing is a
+  throwaway you would redo.
+- **Notifications are the missing half of "control from my phone".** A web page
+  cannot tap you on the shoulder; without push you are back to polling — the
+  exact habit this project exists to kill.
+- **Boundary:** every self-hosted option needs the PC awake with the app
+  running. "Away" meaning "PC asleep" is cloud territory (Claude Code on the
+  web / Remote Control), out of scope here.
+
+Implementation status:
+
+- **Done — ntfy notification bridge** (`apps/server/src/notifications/`).
+  Subscribes to `orchestrationEngine.streamDomainEvents`, projects each thread
+  through the SHARED awareness ladder (`@t3tools/shared/agentAwareness` — the
+  same one the relay uses, so both transports agree on "needs attention"), and
+  POSTs to an ntfy topic on phase transitions. Opt-in via
+  `settings.pushNotifications`: an empty `topicUrl` sends nothing and no thread
+  data leaves the machine. Per-phase toggles mirror upstream's
+  `RelayAgentAwarenessPreferences` (approval/input/failure/completion), and
+  notifications carry a click-through to `publicBaseUrl` + the thread route.
+- **Todo — host setup** (needs the owner; sign-ins): install Tailscale on PC +
+  phone, enable Network access + Tailscale Serve, pair the phone once, set
+  `pushNotifications.topicUrl` (use a long random topic name — an ntfy topic is
+  a capability URL) and `publicBaseUrl` to the tailnet HTTPS URL. Install the
+  ntfy app on the phone, subscribe to the same topic. Self-hosting ntfy on the
+  tailnet is the fully-private upgrade.
+- **Todo — settings UI**: the fields exist in the schema and are patchable, but
+  Settings has no controls yet; set them in the settings file for now.
+- **Later — Web Push** from the PWA itself (service worker + VAPID), removing
+  the ntfy app dependency. Requires the HTTPS above.
+
+### 3. Smaller candidates
 
 - Usage meter: per-model breakdown when upstream adds more scoped limits;
   optional statusline-style compact mode.
 - Custom `CLAUDE_CONFIG_DIR`/homePath support in the usage proxy
   (`claudeUsage.ts` documents the limitation), plus macOS keychain credentials.
-- Notification bridge: surface t3code thread events (waiting on approval) as
-  Windows toasts when the window is unfocused.
+- Desktop-side: surface the same awareness transitions as Windows toasts when
+  the app window is unfocused (the ntfy bridge covers the away case).
 
 ## Environment facts agents keep rediscovering (save yourself the time)
 

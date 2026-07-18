@@ -112,6 +112,44 @@ The web UI demands a pairing token. Three traps, all learned the hard way:
   `node src/bin.ts auth pairing create --ttl 1h --json` — the `credential` field is
   the token.
 
+## Phone access + notifications (setup checklist)
+
+Rationale and decisions live in `FORK_ORCHESTRATOR.md` (roadmap #2). Steps that
+need a human sign-in are marked. Order matters — do Tailscale before pairing so
+the phone pairs against the durable HTTPS URL.
+
+1. **Tailscale on the PC** (sign-in): `winget install tailscale.tailscale`, then
+   sign in. Install the Tailscale app on the phone with the SAME account.
+2. **Expose the backend**: desktop app -> Settings -> Connections -> Manage
+   Local Backend -> **Network access** on (restarts the backend on all
+   interfaces). Tailnet endpoints then appear in the endpoint list.
+3. **HTTPS**: use the **Tailscale HTTPS** row's _Setup_ action (equivalent to
+   `t3 serve --tailscale-serve`) to get `https://machine.tailnet.ts.net`. Make
+   it the default endpoint. HTTPS is required for hosted/PWA pairing and for
+   any future Web Push.
+4. **Pair the phone once**: Create Link -> scan the QR. Remember pairing tokens
+   are single-use. Add the page to the home screen for an app-like PWA.
+5. **Notifications**: pick a LONG RANDOM ntfy topic name (the topic URL is the
+   only credential — anyone who knows it can read your notifications), install
+   the ntfy app on the phone, subscribe to that topic, then set in the settings
+   file (`~\.t3\userdata\settings.json`, or dev store when running dev mode):
+
+   ```json
+   "pushNotifications": {
+     "topicUrl": "https://ntfy.sh/t3code-<long-random-suffix>",
+     "publicBaseUrl": "https://machine.tailnet.ts.net",
+     "notifyOnApproval": true,
+     "notifyOnInput": true,
+     "notifyOnFailure": true,
+     "notifyOnCompletion": true
+   }
+   ```
+
+   Empty `topicUrl` disables the feature entirely (nothing leaves the machine).
+   Notifications fire on awareness phase transitions and deep-link back to the
+   thread. For full privacy, self-host ntfy on the tailnet and point
+   `topicUrl` at it.
+
 ## Verify the auth fix
 
 Open the Claude tab (or Settings -> Providers -> Claude). With the fix it reads
