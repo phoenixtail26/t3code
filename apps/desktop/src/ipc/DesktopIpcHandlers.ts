@@ -1,7 +1,12 @@
 import * as Effect from "effect/Effect";
 
 import * as DesktopIpc from "./DesktopIpc.ts";
-import { getSystemIdleSeconds, setAttentionState } from "./methods/attention.ts";
+import {
+  getSystemIdleSeconds,
+  listNotificationSounds,
+  readNotificationSound,
+  setAttentionState,
+} from "./methods/attention.ts";
 import { getClientSettings, setClientSettings } from "./methods/clientSettings.ts";
 import {
   clearConnectionCatalog,
@@ -75,6 +80,8 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(getAdvertisedEndpoints);
   yield* ipc.handle(setAttentionState);
   yield* ipc.handle(getSystemIdleSeconds);
+  yield* ipc.handle(listNotificationSounds);
+  yield* ipc.handle(readNotificationSound);
 
   yield* ipc.handle(getWslState);
   yield* ipc.handle(setWslBackendEnabled);

@@ -19,6 +19,7 @@ const clientSettings: ClientSettings = {
   dismissedProviderUpdateNotificationKeys: [],
   desktopNotificationsEnabled: true,
   desktopNotificationSound: false,
+  desktopNotificationSoundPath: "",
   diffIgnoreWhitespace: true,
   favorites: [],
   providerModelPreferences: {},

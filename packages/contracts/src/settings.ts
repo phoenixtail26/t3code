@@ -55,6 +55,12 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(true)),
   ),
   desktopNotificationSound: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /**
+   * Absolute path of an OS sound to play, from the desktop bridge's sound list.
+   * Empty means the built-in synthesized chime, which is also the fallback
+   * wherever the bridge is unavailable (browser, phone PWA).
+   */
+  desktopNotificationSoundPath: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   // Model favorites. Historically keyed by provider kind, now
   // widened to `ProviderInstanceId` so users can favorite a specific model
   // on a custom provider instance (e.g. "Codex Personal · gpt-5") without
@@ -586,6 +592,7 @@ export const ClientSettingsPatch = Schema.Struct({
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
   desktopNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
   desktopNotificationSound: Schema.optionalKey(Schema.Boolean),
+  desktopNotificationSoundPath: Schema.optionalKey(TrimmedString),
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
   favorites: Schema.optionalKey(
     Schema.Array(

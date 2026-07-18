@@ -63,6 +63,7 @@ import { Button } from "../ui/button";
 import { DraftInput } from "../ui/draft-input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
+import { NotificationSoundControl } from "./NotificationSoundControl";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
@@ -428,6 +429,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.desktopNotificationSound !== DEFAULT_UNIFIED_SETTINGS.desktopNotificationSound
         ? ["Notification sound"]
         : []),
+      ...(settings.desktopNotificationSoundPath !==
+      DEFAULT_UNIFIED_SETTINGS.desktopNotificationSoundPath
+        ? ["Notification sound choice"]
+        : []),
       ...(isGitWritingModelDirty ? ["Git writing model"] : []),
     ],
     [
@@ -437,6 +442,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.confirmThreadDelete,
       settings.desktopNotificationsEnabled,
       settings.desktopNotificationSound,
+      settings.desktopNotificationSoundPath,
       settings.addProjectBaseDirectory,
       settings.defaultThreadEnvMode,
       settings.newWorktreesStartFromOrigin,
@@ -938,6 +944,32 @@ export function GeneralSettingsPanel() {
                 updateSettings({ desktopNotificationSound: Boolean(checked) })
               }
               aria-label="Enable notification sound"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Notification sound choice"
+          description="Pick which sound plays, and preview it. System sounds come from your OS; the built-in chime is used elsewhere."
+          resetAction={
+            settings.desktopNotificationSoundPath !==
+            DEFAULT_UNIFIED_SETTINGS.desktopNotificationSoundPath ? (
+              <SettingResetButton
+                label="notification sound choice"
+                onClick={() =>
+                  updateSettings({
+                    desktopNotificationSoundPath:
+                      DEFAULT_UNIFIED_SETTINGS.desktopNotificationSoundPath,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <NotificationSoundControl
+              value={settings.desktopNotificationSoundPath}
+              disabled={!settings.desktopNotificationsEnabled || !settings.desktopNotificationSound}
+              onChange={(soundPath) => updateSettings({ desktopNotificationSoundPath: soundPath })}
             />
           }
         />

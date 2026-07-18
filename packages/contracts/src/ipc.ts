@@ -998,6 +998,12 @@ export interface DesktopBridge {
    * same version-drift reason as {@link setAttentionState}.
    */
   getSystemIdleSeconds?: () => Promise<number>;
+  /** OS notification sounds available to choose from (Windows only today). */
+  listNotificationSounds?: () => Promise<
+    ReadonlyArray<{ readonly name: string; readonly path: string }>
+  >;
+  /** Base64 WAV bytes for a sound from {@link listNotificationSounds}. */
+  readNotificationSound?: (soundPath: string) => Promise<string | null>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
   setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
   setTailscaleServeEnabled: (input: {
