@@ -42,8 +42,8 @@ function stripWrappingQuotes(value: string): string {
  */
 export function resolveClaudeSdkExecutablePath(
   binaryPath: string,
-  env: NodeJS.ProcessEnv = process.env,
-  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
   probe: ClaudeSdkExecutableProbe = { isFile: isFileWithNode },
 ): string {
   if (platform !== "win32") return binaryPath;

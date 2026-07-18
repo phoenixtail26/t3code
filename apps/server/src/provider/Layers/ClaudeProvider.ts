@@ -39,6 +39,7 @@ import {
 } from "../providerSnapshot.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeSdkExecutable.ts";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
 const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],
@@ -588,6 +589,11 @@ const probeClaudeCapabilities = (
   const abort = new AbortController();
   return Effect.gen(function* () {
     const claudeEnvironment = yield* makeClaudeEnvironment(claudeSettings, environment);
+    const executablePath = resolveClaudeSdkExecutablePath(
+      claudeSettings.binaryPath,
+      claudeEnvironment,
+      yield* HostProcessPlatform,
+    );
     return yield* Effect.tryPromise(async () => {
       const q = claudeQuery({
         // Never yield — we only need initialization data, not a conversation.
@@ -598,10 +604,7 @@ const probeClaudeCapabilities = (
         })(),
         options: {
           persistSession: false,
-          pathToClaudeCodeExecutable: resolveClaudeSdkExecutablePath(
-            claudeSettings.binaryPath,
-            claudeEnvironment,
-          ),
+          pathToClaudeCodeExecutable: executablePath,
           abortController: abort,
           settingSources: ["user", "project", "local"],
           allowedTools: [],

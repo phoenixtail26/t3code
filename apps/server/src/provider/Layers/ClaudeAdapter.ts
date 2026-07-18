@@ -72,6 +72,7 @@ import { ServerConfig } from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeSdkExecutable.ts";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import {
   getClaudeModelCapabilities,
   isClaudeUltracodeEffort,
@@ -1348,6 +1349,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   const claudeEnvironment = yield* makeClaudeEnvironment(claudeSettings, options?.environment).pipe(
     Effect.provideService(Path.Path, path),
   );
+  const claudeHostPlatform = yield* HostProcessPlatform;
   const nativeEventLogger =
     options?.nativeEventLogger ??
     (options?.nativeEventLogPath !== undefined
@@ -3409,6 +3411,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       const claudeBinaryPath = resolveClaudeSdkExecutablePath(
         claudeSettings.binaryPath,
         claudeEnvironment,
+        claudeHostPlatform,
       );
       const extraArgs = parseCliArgs(claudeSettings.launchArgs).flags;
       const modelSelection =
