@@ -39,8 +39,17 @@ Expand-Archive "D:\Dev\tools\node-$ver-win-x64.zip" -DestinationPath D:\Dev\tool
 ## Launch (daily driver — DESKTOP app)
 
 ```powershell
-D:\Dev\t3code\start-t3code-desktop.ps1     # or Start Menu -> "T3 Code (fork)"
+# Start Menu -> "T3 Code (fork)"  (preferred: launches electron.exe directly, NO console window)
+# or, from a terminal:
+D:\Dev\t3code\start-t3code-desktop.ps1
 ```
+
+The Start Menu shortcut targets
+`apps\desktop\node_modules\electron\dist\electron.exe dist-electron\main.cjs`
+(cwd `apps\desktop`) — the exact command the launcher script reduces to on
+Windows, minus the PowerShell/Windows Terminal host window that would otherwise
+have to stay open (WT ignores `-WindowStyle Hidden`). The pnpm-linked electron
+path stays valid across electron version bumps.
 
 Native Electron window ("T3 Code (Alpha)"), spawns its own embedded server on a
 dynamic port, authenticates its own window automatically — **no pairing tokens**.
