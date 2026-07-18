@@ -55,3 +55,23 @@ agents.
   examples of idiomatic usage, tests, module structure, and API design.
 - When writing relay infrastructure code with Alchemy, inspect `.repos/alchemy-effect/` for examples of
   idiomatic usage, tests, module structure, and API design.
+
+## Fork additions (not upstream — this checkout only)
+
+This checkout is a personal fork used as an agent-orchestration platform.
+**Read `FORK_ORCHESTRATOR.md` before starting work** — it carries the goal, the
+changes already made, the roadmap, and the Windows environment gotchas
+(portable Node path, `corepack pnpm`, broken root build filters, pre-existing
+Windows test failures). `RUN_FORK_WINDOWS.md` covers running and building.
+
+### Subagent model usage
+
+- Dispatch well-scoped, mechanical, or exploratory subagent work — codebase
+  search, running builds/tests, log analysis, file discovery — with
+  `model: "sonnet"`. The main session's model is for planning, design, and
+  changes that need judgment.
+- This is a guideline, not a hard rule: a subagent doing genuinely hard
+  reasoning may use a stronger model when the task warrants it.
+- The owner's plan-limit pressure is on the top-tier weekly window (visible in
+  the sidebar usage meter this fork adds) — cheap-model fanout is the main
+  lever for keeping it down.
