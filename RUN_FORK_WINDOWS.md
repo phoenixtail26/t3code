@@ -182,6 +182,32 @@ http://127.0.0.1:3773`, and a 200 from that URL.
    thread. For full privacy, self-host ntfy on the tailnet and point
    `topicUrl` at it.
 
+## Notification branding on Windows (toast says "Electron")
+
+Toast delivery works regardless, but Windows attributes each toast to an
+**AppUserModelID**, not to the window title or the shortcut icon. The app calls
+`setAppUserModelId("com.t3tools.t3code")`; running unpackaged from
+`electron.exe` with no matching registration, Windows falls back to the binary's
+own identity and shows "Electron" with the Electron icon.
+
+Fix (per user, no admin, reversible) — register the identity once:
+
+```powershell
+$key = "HKCU:\SOFTWARE\Classes\AppUserModelId\com.t3tools.t3code"
+New-Item -Path $key -Force | Out-Null
+Set-ItemProperty -Path $key -Name DisplayName -Value "T3 Code (fork)" -Type String
+Set-ItemProperty -Path $key -Name IconUri `
+  -Value "D:\Dev\t3code\apps\desktop\resources\icon.png" -Type String
+```
+
+Restart the app afterwards; Windows resolves the identity at startup. Remove the
+key to undo. Stamping `System.AppUserModel.ID` onto the Start Menu shortcut via
+`IPropertyStore` is the other documented route, but the write did not read back
+here, so the registry entry is the one to rely on.
+
+A packaged build (`pnpm dist:desktop:win`) sets this up properly on install and
+makes the whole issue moot.
+
 ## Verify the auth fix
 
 Open the Claude tab (or Settings -> Providers -> Claude). With the fix it reads
