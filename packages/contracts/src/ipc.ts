@@ -992,6 +992,12 @@ export interface DesktopBridge {
    * "no badge" rather than throwing.
    */
   setAttentionState?: (input: { readonly waiting: boolean }) => Promise<void>;
+  /**
+   * Seconds since the last OS-level user input, so the renderer can report the
+   * user present even while this app is in the background. Optional for the
+   * same version-drift reason as {@link setAttentionState}.
+   */
+  getSystemIdleSeconds?: () => Promise<number>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
   setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
   setTailscaleServeEnabled: (input: {

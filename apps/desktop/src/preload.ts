@@ -86,6 +86,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   resolveSshPasswordPrompt: (requestId, password) =>
     ipcRenderer.invoke(IpcChannels.RESOLVE_SSH_PASSWORD_PROMPT_CHANNEL, { requestId, password }),
   setAttentionState: (input) => ipcRenderer.invoke(IpcChannels.SET_ATTENTION_STATE_CHANNEL, input),
+  getSystemIdleSeconds: () => ipcRenderer.invoke(IpcChannels.GET_SYSTEM_IDLE_SECONDS_CHANNEL),
   getServerExposureState: () => ipcRenderer.invoke(IpcChannels.GET_SERVER_EXPOSURE_STATE_CHANNEL),
   setServerExposureMode: (mode) =>
     ipcRenderer.invoke(IpcChannels.SET_SERVER_EXPOSURE_MODE_CHANNEL, mode),

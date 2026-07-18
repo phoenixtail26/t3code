@@ -495,6 +495,13 @@ export class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestr
       success: ClaudeUsageSummary,
       error: EnvironmentOrchestrationSnapshotErrors,
     }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("reportPresence", "/api/presence", {
+      headers: OptionalBearerHeaders,
+      success: Schema.Void,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
   ) {}
 
 export class EnvironmentConnectHttpApi extends HttpApiGroup.make("connect")

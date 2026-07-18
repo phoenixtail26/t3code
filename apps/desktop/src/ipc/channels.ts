@@ -76,3 +76,4 @@ export const PREVIEW_STATE_CHANGE_CHANNEL = "desktop:preview-state-change";
 export const PREVIEW_POINTER_EVENT_CHANNEL = "desktop:preview-pointer-event";
 
 export const SET_ATTENTION_STATE_CHANNEL = "desktop:set-attention-state";
+export const GET_SYSTEM_IDLE_SECONDS_CHANNEL = "desktop:get-system-idle-seconds";

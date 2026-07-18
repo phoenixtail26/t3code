@@ -17,6 +17,7 @@ const enabledSettings: PushNotificationSettings = {
   notifyOnInput: true,
   notifyOnFailure: true,
   notifyOnCompletion: true,
+  suppressWhenPresentSeconds: 300,
 };
 
 function makeState(overrides: Partial<AgentAwarenessState> = {}): AgentAwarenessState {

@@ -41,6 +41,20 @@ function makeAttentionOverlay(): Electron.NativeImage {
 
 let cachedOverlay: Electron.NativeImage | null = null;
 
+/**
+ * Seconds since the last OS-level user input. Lets the renderer report the user
+ * as present even while t3code sits in the background (working in another app),
+ * which is what keeps the phone quiet while they are at the desk.
+ */
+export const getSystemIdleSeconds = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.GET_SYSTEM_IDLE_SECONDS_CHANNEL,
+  payload: Schema.Void,
+  result: Schema.Number,
+  handler: Effect.fn("desktop.ipc.attention.getSystemIdleSeconds")(function* () {
+    return yield* Effect.sync(() => Electron.powerMonitor.getSystemIdleTime());
+  }),
+});
+
 export const setAttentionState = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.SET_ATTENTION_STATE_CHANNEL,
   payload: AttentionStateInput,

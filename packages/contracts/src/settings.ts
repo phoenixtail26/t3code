@@ -387,6 +387,12 @@ export const PushNotificationSettings = Schema.Struct({
   notifyOnInput: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   notifyOnFailure: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   notifyOnCompletion: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /**
+   * Skip the phone push when a client reported the user present within this
+   * many seconds — they are at the machine and got a desktop notification
+   * instead. 0 disables suppression (always push).
+   */
+  suppressWhenPresentSeconds: Schema.Number.pipe(Schema.withDecodingDefault(Effect.succeed(300))),
 });
 export type PushNotificationSettings = typeof PushNotificationSettings.Type;
 
@@ -554,6 +560,7 @@ export const ServerSettingsPatch = Schema.Struct({
       notifyOnInput: Schema.optionalKey(Schema.Boolean),
       notifyOnFailure: Schema.optionalKey(Schema.Boolean),
       notifyOnCompletion: Schema.optionalKey(Schema.Boolean),
+      suppressWhenPresentSeconds: Schema.optionalKey(Schema.Number),
     }),
   ),
   providers: Schema.optionalKey(

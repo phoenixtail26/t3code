@@ -1,6 +1,7 @@
 import type { ThreadId } from "@t3tools/contracts";
 import { projectThreadAwareness } from "@t3tools/shared/agentAwareness";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -20,6 +21,7 @@ import {
   type PushNotification,
   resolvePushNotification,
 } from "./PushNotifier.ts";
+import { isUserPresent, readLastPresenceMs } from "./UserPresence.ts";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -89,6 +91,23 @@ export const make = Effect.gen(function* () {
     });
     observedPhases.observe(threadId, state?.phase ?? null);
     if (notification === null) return;
+
+    // The user is at the machine and already got a desktop notification, so a
+    // push to their pocket is pure duplication. The phase is recorded above
+    // either way, so stepping away later does not replay old transitions.
+    if (
+      isUserPresent({
+        nowMs: DateTime.toEpochMillis(yield* DateTime.now),
+        windowSeconds: settings.suppressWhenPresentSeconds,
+        lastPresentAtMs: readLastPresenceMs(),
+      })
+    ) {
+      yield* Effect.logDebug("push notification suppressed; user present at machine", {
+        threadId,
+        phase: state?.phase ?? null,
+      });
+      return;
+    }
 
     yield* Effect.logInfo("push notification sending", {
       threadId,
