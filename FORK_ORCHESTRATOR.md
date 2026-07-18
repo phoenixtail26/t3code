@@ -160,12 +160,54 @@ Implementation status:
   cost (Tailscale cert enablement, restart-after-install PATH detection, the
   "This environment" section name, camera-app QR eating the pairing cookie) are
   in `RUN_FORK_WINDOWS.md`.
-- **Todo — settings UI**: the fields exist in the schema and are patchable, but
-  Settings has no controls yet; edit the settings file (server normalizes it on
-  boot, so edit while the app is stopped).
 - **Todo — rotate the ntfy topic if it ever leaks**: the topic name is the only
   credential on that channel. Change `topicUrl` and re-subscribe on the phone.
   Self-hosting ntfy on the tailnet is the fully-private upgrade.
+
+### 3. Notification channels (DONE 2026-07-18 — branch `feat/desktop-notifications`)
+
+Phone push alone left the common case uncovered: t3code on another monitor or
+behind the IDE, with no signal at all until you happened to look. Now:
+
+- **Desktop/browser notifications** (`useThreadAttentionNotifications`) fire on
+  awareness phase transitions, only while the client is unfocused, only once
+  per transition, and never for state that already existed at startup. Clicking
+  one opens that thread. Implemented in the renderer, so Electron delivers a
+  native system notification and the phone PWA gets the same behaviour free.
+- **Windows taskbar attention** (overlay dot + frame flash) via the
+  `setAttentionState` IPC method, cleared the moment the window regains focus.
+- **Per-device preferences** in ClientSettings with Settings rows
+  (notifications on/off, sound on/off — sound synthesized, no asset). Device
+  preferences belong to the client, unlike the server-side phone push config.
+- **Phone suppression**: clients POST `/api/presence`; the ntfy bridge skips
+  the push when presence is recent (`suppressWhenPresentSeconds`, default 300,
+  0 disables). Presence means focused OR recent OS input (Electron
+  `powerMonitor` via `getSystemIdleSeconds`), so working in another app on the
+  same machine still counts. Browsers report focus only, failing safe toward
+  notifying.
+
+Net effect: at the desk you get a toast; away, the phone; never both.
+
+### 4. Notification settings UI for the phone/push fields
+
+`ServerSettings.pushNotifications` (topic URL, public base URL, per-phase
+toggles, suppression window) is still edited by hand in
+`~\.t3\userdata\settings.json`, with the app stopped because the server
+normalizes the file on boot. The per-device desktop toggles now have UI
+(roadmap #3), so this is the remaining gap — a Connections/Notifications
+settings section would complete it, including a "send test notification"
+button to verify a topic without contriving a thread event.
+
+### 5. Web Push from the PWA (drops the ntfy dependency)
+
+Now unblocked by real HTTPS on the tailnet. A service worker plus VAPID keys
+would let the server push straight to the installed PWA, removing the ntfy app
+and the public relay from the path entirely — the fully self-hosted endpoint of
+this line of work. Keep ntfy until this is proven; it is the fallback for
+platforms where Web Push is unreliable.
+
+### 6. Smaller candidates
+
 - **Later — Web Push** from the PWA itself (service worker + VAPID), removing
   the ntfy app dependency. Requires the HTTPS above.
 
@@ -175,8 +217,8 @@ Implementation status:
   optional statusline-style compact mode.
 - Custom `CLAUDE_CONFIG_DIR`/homePath support in the usage proxy
   (`claudeUsage.ts` documents the limitation), plus macOS keychain credentials.
-- Desktop-side: surface the same awareness transitions as Windows toasts when
-  the app window is unfocused (the ntfy bridge covers the away case).
+- Notification history: a list of recent attention events, so a toast missed
+  while the machine was locked is still discoverable in the app.
 
 ## Environment facts agents keep rediscovering (save yourself the time)
 
