@@ -86,6 +86,10 @@ export function makeDesktopContentSecurityPolicy(input: DesktopProtocolRegistrat
     `script-src ${scriptSources.join(" ")}`,
     `connect-src ${connectSources.join(" ")}`,
     `img-src 'self' ${input.scheme}: blob: data: http: https:`,
+    // Notification sounds are read through the desktop bridge and played from a
+    // blob URL; `media-src` otherwise inherits `default-src 'self'` and blocks
+    // them. Deliberately narrower than img-src: no remote media is loaded.
+    "media-src 'self' blob:",
     "style-src 'self' 'unsafe-inline'",
     `font-src 'self' ${input.scheme}: data:`,
     "worker-src 'self' blob:",

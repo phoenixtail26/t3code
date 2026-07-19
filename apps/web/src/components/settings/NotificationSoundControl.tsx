@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 
 import { playNotificationSound } from "../../lib/notificationSound";
 import { Button } from "../ui/button";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { toastManager } from "../ui/toast";
 
 interface NotificationSoundOption {
   readonly name: string;
@@ -10,6 +12,7 @@ interface NotificationSoundOption {
 }
 
 const BUILT_IN_VALUE = "";
+const BUILT_IN_LABEL = "Built-in chime";
 
 /**
  * Sound picker for desktop notifications: the OS sound set (Windows ships
@@ -46,28 +49,41 @@ export function NotificationSoundControl({
     };
   }, []);
 
+  const selectedLabel =
+    value === BUILT_IN_VALUE
+      ? BUILT_IN_LABEL
+      : (options.find((option) => option.path === value)?.name ?? BUILT_IN_LABEL);
+
   return (
     <div className="flex items-center gap-2">
-      <select
-        className="h-8 rounded-md border border-input bg-transparent px-2 text-xs disabled:opacity-50"
-        disabled={disabled}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-label="Notification sound"
-      >
-        <option value={BUILT_IN_VALUE}>Built-in chime</option>
-        {options.map((option) => (
-          <option key={option.path} value={option.path}>
-            {option.name}
-          </option>
-        ))}
-      </select>
+      <Select value={value} onValueChange={(next) => onChange(next as string)}>
+        <SelectTrigger className="w-44" aria-label="Notification sound" disabled={disabled}>
+          <SelectValue>{selectedLabel}</SelectValue>
+        </SelectTrigger>
+        <SelectPopup align="end" alignItemWithTrigger={false}>
+          <SelectItem value={BUILT_IN_VALUE}>{BUILT_IN_LABEL}</SelectItem>
+          {options.map((option) => (
+            <SelectItem key={option.path} value={option.path}>
+              {option.name}
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
       <Button
         type="button"
         variant="outline"
         size="sm"
         disabled={disabled}
-        onClick={() => void playNotificationSound(value)}
+        onClick={() => {
+          void playNotificationSound(value).then((played) => {
+            if (played) return;
+            toastManager.add({
+              type: "warning",
+              title: "Could not play that sound",
+              description: "Fell back to the built-in chime.",
+            });
+          });
+        }}
         aria-label="Preview notification sound"
       >
         <PlayIcon className="size-3.5" />

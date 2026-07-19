@@ -55,21 +55,32 @@ async function resolveObjectUrl(soundPath: string): Promise<string | null> {
   return objectUrl;
 }
 
-/** Play the configured sound, falling back to the built-in chime. */
-export async function playNotificationSound(soundPath: string): Promise<void> {
+/**
+ * Play the configured sound, falling back to the built-in chime.
+ *
+ * Returns whether the chosen sound actually played, so callers that can show
+ * feedback (the settings preview) can say the choice did not work rather than
+ * leaving the user to wonder why every option sounds identical — the failure
+ * mode when `media-src` blocks blob URLs.
+ */
+export async function playNotificationSound(soundPath: string): Promise<boolean> {
   if (soundPath.length === 0) {
     playSynthesizedChime();
-    return;
+    return true;
   }
   try {
     const objectUrl = await resolveObjectUrl(soundPath);
     if (objectUrl === null) {
       playSynthesizedChime();
-      return;
+      return false;
     }
     await new Audio(objectUrl).play();
-  } catch {
-    // A missing or unreadable sound file should still make *some* noise.
+    return true;
+  } catch (error) {
+    // A missing, unreadable, or policy-blocked sound should still make *some*
+    // noise, but the reason belongs in the console rather than nowhere.
+    console.warn("Notification sound failed to play; using the built-in chime.", error);
     playSynthesizedChime();
+    return false;
   }
 }
