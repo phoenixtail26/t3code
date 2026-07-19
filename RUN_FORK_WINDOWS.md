@@ -303,25 +303,47 @@ http://127.0.0.1:3773`, and a 200 from that URL.
    thread. For full privacy, self-host ntfy on the tailnet and point
    `topicUrl` at it.
 
-## Phone shows stale data ("out of sync")
+## Phone misbehaves: stale data, or stuck on the splash screen
 
-Symptom: the phone displays an old thread list and never updates while the PC is
-current. Seen 2026-07-19; the cause was stale PWA state, not the network.
-
-**Check the server first.** Issue an admin session and read the client list; a
-mobile session's `lastConnectedAt` says whether the phone reaches this server at
-all (from `apps/server`, portable-Node PATH, `T3CODE_HOME=~\.t3`):
+Three distinct failure modes were hit on 2026-07-19, with one triage step that
+separates them. **Check the server first.** Issue an admin session and read the
+client list; a mobile session's `lastConnectedAt` says whether the phone is
+reaching this server at all (from `apps/server`, portable-Node PATH,
+`T3CODE_HOME=~\.t3`):
 
 ```powershell
 node src/bin.ts auth session issue --ttl 10m --json    # take .token, then
 # GET http://127.0.0.1:3773/api/auth/clients  with  Authorization: Bearer <token>
 ```
 
-A recent `lastConnectedAt` means tunnel, TLS and auth are all fine and the fault
-is client-side. `connected: false` on its own means nothing — it only says no
-socket is open at that instant (screen off).
+`connected: false` on its own means nothing — it only says no socket is open at
+that instant (screen off). What matters is `lastConnectedAt`:
 
-**Fix: reset the PWA, not just the browser.** An installed PWA on Android is a
+| lastConnectedAt | Symptom                                 | It is                                           |
+| --------------- | --------------------------------------- | ----------------------------------------------- |
+| recent          | old thread list that never updates      | stale client state (mode 1)                     |
+| recent          | stuck on splash after a rebuild         | pre-fix stale-shell cache (mode 2)              |
+| **hours old**   | stuck on splash, reloads change nothing | **phone's Tailscale tunnel is wedged (mode 3)** |
+
+**Mode 3 — Android VPN half-death — is the sneaky one.** `tailscale ping
+pixel-9` from the PC still succeeds (daemon-level disco works) while the
+phone's _browser_ traffic into the tailnet silently hangs; the splash on
+screen is Chrome's cached shell. Usually caused by Doze/battery optimization
+after hours idle, and the Tailscale app may still claim "Connected". Fix:
+toggle the VPN off and on in the Tailscale app. Prevention: Settings → Apps →
+Tailscale → Battery → **Unrestricted**. Confusion hazard: ntfy notifications
+still arrive (they route via ntfy.sh, not the tailnet), so "notifications work
+but the app is dead" points exactly here.
+
+**Mode 2** was a real server bug, fixed 2026-07-19: static responses carried no
+cache headers, so a client could hold a stale HTML shell pointing at
+fingerprinted assets that no longer existed after a rebuild — and the SPA
+fallback served the dead asset URLs as index.html with a 200, hanging the app
+on its splash with no error. The shell is now `no-store` and hashed assets
+`immutable`, so this cannot recur; if splash-hang appears again, look at modes
+1 and 3.
+
+**Mode 1 fix: reset the PWA, not just the browser.** An installed PWA on Android is a
 WebAPK with its own storage container, so Chrome's "Delete data" does NOT clear
 it and the app keeps its stale environment and session. Uninstall the
 home-screen icon (long-press → Uninstall), then Chrome → Site settings → the
