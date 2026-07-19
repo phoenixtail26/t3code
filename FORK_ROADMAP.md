@@ -157,7 +157,55 @@ base as `input.refName` (`GitVcsDriverCore.ts:2267`) and hardcodes nothing.
 Worth pairing with the existing `startFromOrigin` path (`ws.ts:840`) so the
 default can be "always cut from `origin/g3code`", avoiding stale local bases.
 
-## 7. Smaller candidates
+## 7. Fork a thread into a new thread (split work off a big one)
+
+**Goal:** take a thread that has built up real context and branch it into a new
+thread that inherits that context, so a side-task can be split off without
+re-explaining the problem. Prior art: AgentCraft's "fork a hero".
+
+The provider side is already solved for Claude. The SDK exposes
+`forkSession(sessionId, { upToMessageId, title })`, which copies the transcript
+into a new session file, remaps every message UUID and preserves the
+`parentUuid` chain (`@anthropic-ai/claude-agent-sdk`, `sdk.d.ts:686`); there is
+also a `forkSession: boolean` option to use with `resume` (:1465). Note forks
+start without undo history — file-history snapshots are not copied.
+
+t3code already persists what a fork needs. Each provider session carries an
+opaque `resumeCursor` (`packages/contracts/src/provider.ts:45`), and the Claude
+adapter writes `{ resume: <sessionId>, resumeSessionAt: <lastAssistantUuid> }`
+into it (`ClaudeAdapter.ts:1456`) and reads it back on start (`:564`, consumed
+at `:3094`). A fork is therefore: create a thread, seed its `resumeCursor` from
+the parent's, and start with fork semantics. Because `upToMessageId` /
+`resumeSessionAt` take a specific message UUID, fork-from-any-point is available
+for free — the natural UI is a per-message action, not just "fork from tip".
+
+**The worktree question is the hard part.** `worktreePath` is a plain nullable
+string on the thread (`orchestration.ts:354`) with no uniqueness constraint, so
+two threads sharing one worktree is already representable, and cleanup already
+understands sharing: `getOrphanedWorktreePathForThread` only offers to delete a
+worktree when no _other_ thread still references it (`worktreeCleanup.ts:25`).
+So the data model needs no change. The options:
+
+- **Share the parent's worktree** — cheapest, and the inherited context stays
+  true, because the files the transcript describes are the files that are
+  there. Hazard: two agents writing one tree concurrently.
+- **New worktree cut from the parent's branch** — isolation, but the fork
+  inherits a transcript describing uncommitted edits that do not exist in the
+  new tree. The context and the filesystem silently disagree, which is worse
+  than no context.
+- **New worktree plus carrying the uncommitted changes over** — correct but the
+  most work, and needs a story for dirty/conflicting state.
+
+Suggested v1: make it an explicit choice at fork time, defaulting to sharing,
+and only offer the fork when the parent thread is idle. That two-writers guard
+is the same one roadmap #1 flags for adopting external sessions — worth solving
+once for both rather than twice.
+
+Scope note: Claude-first. The Codex/Cursor/Grok adapters keep their own
+`resumeCursor` shapes and have no equivalent fork primitive, so the action
+should be gated on provider capability rather than assumed universal.
+
+## 8. Smaller candidates
 
 - Usage meter: per-model breakdown when upstream adds more scoped limits;
   optional statusline-style compact mode.
