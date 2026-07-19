@@ -303,6 +303,42 @@ http://127.0.0.1:3773`, and a 200 from that URL.
    thread. For full privacy, self-host ntfy on the tailnet and point
    `topicUrl` at it.
 
+## Phone shows stale data ("out of sync")
+
+Symptom: the phone displays an old thread list and never updates while the PC is
+current. Seen 2026-07-19; the cause was stale PWA state, not the network.
+
+**Check the server first.** Issue an admin session and read the client list; a
+mobile session's `lastConnectedAt` says whether the phone reaches this server at
+all (from `apps/server`, portable-Node PATH, `T3CODE_HOME=~\.t3`):
+
+```powershell
+node src/bin.ts auth session issue --ttl 10m --json    # take .token, then
+# GET http://127.0.0.1:3773/api/auth/clients  with  Authorization: Bearer <token>
+```
+
+A recent `lastConnectedAt` means tunnel, TLS and auth are all fine and the fault
+is client-side. `connected: false` on its own means nothing — it only says no
+socket is open at that instant (screen off).
+
+**Fix: reset the PWA, not just the browser.** An installed PWA on Android is a
+WebAPK with its own storage container, so Chrome's "Delete data" does NOT clear
+it and the app keeps its stale environment and session. Uninstall the
+home-screen icon (long-press → Uninstall), then Chrome → Site settings → the
+host → Delete data, then re-pair with a fresh token and re-add to the home
+screen. Landing on the pairing prompt is the proof the reset took.
+
+**Two dead ends, so nobody repeats them:**
+
+- Fetching the tailnet HTTPS URL _from the PC itself_ proves nothing. Windows
+  generally cannot hairpin to its own `100.x` address, so it times out even
+  while the listener is healthy and phones can reach it fine. Confirm the
+  listener with `Get-NetTCPConnection -LocalPort 443` (expect `tailscaled`).
+- Absence of `webSocketTicket` requests in the log is EXPECTED for same-origin
+  browser clients: they derive `wss://` from the page origin and authenticate
+  with the session cookie. Only remote/bearer (DPoP) environments use the ticket
+  endpoint, so its absence says nothing about a phone on the tailnet.
+
 ## Notification branding on Windows (toast says "Electron")
 
 Toast delivery works regardless, but Windows attributes each toast to an
