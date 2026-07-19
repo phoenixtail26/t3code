@@ -54,6 +54,13 @@ failures). `FORK_ROADMAP.md` carries the planned and in-flight work.
 `FORK_REMOTES.md` covers the remote topology, upstream syncing, and how to cut
 an upstreamable PR branch.
 
+**Upstream sync is every agent's job, not a special event.** Before working in
+upstream files, run the drift check in FORK_REMOTES.md ("Cadence and
+responsibility"): if upstream drift is under a week and merges clean, run
+`/sync-upstream` yourself; if it is older than a week or the dry-run shows
+conflicts, propose the sync to the owner before building on stale code. Use
+`/ship` to land work on `g3code`, `/build` to rebuild the daily driver.
+
 **Before running or testing anything, read `RUN_FORK_WINDOWS.md` — especially
 "Dogfooding: testing a branch from inside t3code".** You are running inside the
 app you are changing: the live instance owns `~\.t3\userdata`, and the session

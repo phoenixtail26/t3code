@@ -32,17 +32,54 @@ cross-fork compare views and upstream PRs work normally.
 
 ## Taking upstream updates
 
+Use **`/sync-upstream`** — it encodes the full flow with its guards. The shape
+of it (do not run these by hand unless the skill is unavailable):
+
 ```sh
 git fetch upstream
-git checkout main && git merge --ff-only upstream/main   # always clean
+git merge-base --is-ancestor main upstream/main && git branch -f main upstream/main
 git push origin main
-git checkout g3code && git merge main                    # conflicts land here, once
+git -C <main-worktree> merge main    # conflicts land here, once
 ```
+
+`main` is updated by ref (ancestry-guarded `branch -f`), not by checkout — no
+worktree normally holds it, and the main worktree staying parked on `g3code` is
+load-bearing for how new threads pick their base branch.
 
 Conflict expectation: the fork's own files (`FORK_*`, `RUN_FORK_*`,
 `CLAUDE_WINDOWS_*`, the usage-meter files) are additive and low-conflict. The
 real contact points are `ClaudeAdapter.ts`, `ClaudeProvider.ts`,
-`modelSelection.ts`, `Sidebar.tsx` — small, surgical edits inside upstream files.
+`modelSelection.ts`, `Sidebar.tsx`, `ChatView.tsx` — small, surgical edits
+inside upstream files.
+
+### Cadence and responsibility — every agent, every session
+
+Upstream moves fast (dozens of commits/week). Left alone, drift compounds:
+the 2026-07-19 sync was 49 commits and one conflict file; a month of neglect
+would be hundreds of commits and real conflicts.
+
+**Before working in any upstream file** (anything outside the fork's own
+`FORK_*`/`RUN_FORK_*`/skill files), check the drift — it costs seconds and
+touches nothing:
+
+```sh
+git fetch upstream --quiet
+git rev-list --count g3code..upstream/main                     # backlog size
+git merge-tree --write-tree --name-only g3code upstream/main   # dry-run; grep CONFLICT
+```
+
+Then act on what you find:
+
+- **Backlog under a week old and the dry-run is conflict-free** → run
+  `/sync-upstream` yourself, as part of your session. Don't ask.
+- **Backlog older than a week, or the dry-run shows conflicts** → propose the
+  sync to the owner before proceeding: report the backlog size, the conflict
+  list, and anything upstream landed in Claude-provider or Windows code. The
+  owner picks the timing (other sessions may be mid-work in the merge target).
+- **Either way, never build new fork features on top of week-stale code** in
+  the contact files — that manufactures the next conflict.
+
+The last-sync date is readable from `git log --merges -1 --format='%cs %s' g3code`.
 
 ## Sending a fix back to upstream
 
