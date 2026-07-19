@@ -968,10 +968,11 @@ label:has(> select#reasoning-effort) select {
 @media (max-width: 767px) {
   /* Tailwind sizes are rem-based, so lifting the root size scales type AND
      the spacing around it together, instead of leaving bigger text crammed
-     into desktop-sized rows. 18px reads comfortably at arm's length; the
-     platform default of 16-17px still measured tight in use. */
+     into desktop-sized rows. 19px, arrived at by trying it on-device: the
+     platform default of 16-17px, and even 18px, still read tight at arm's
+     length. */
   html {
-    font-size: 18px;
+    font-size: 19px;
   }
 
   /* The sidebar still looked disproportionately small after the root bump,
