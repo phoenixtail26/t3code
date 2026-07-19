@@ -11,6 +11,14 @@
     <meta name="theme-color" content="#161616" />
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Fork: makes "Add to Home screen" install a standalone PWA rather than a
+         browser bookmark, which is what replaces browser chrome with an app
+         shell on the phone. Desktop browsers ignore it. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="T3 Code" />
     <script>
       (() => {
         const LIGHT_BACKGROUND = "#ffffff";
