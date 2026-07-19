@@ -34,6 +34,30 @@ don't hardcode it. Feature work usually runs in a linked worktree under
 Stage and commit on the current branch, in the current worktree. If the tree is
 clean, skip to step 3 and say so — do not create an empty commit.
 
+Two shells are available here and they take different syntax, so pick one and
+stay in it. For a multi-line message via the Bash tool (Git Bash), use a
+heredoc — PowerShell here-strings (`@'...'@`) are NOT interpreted there and the
+delimiters land as literal text, producing a commit whose subject is `@` with
+the real subject on line 2:
+
+```sh
+git commit --file=- <<'EOF'
+subject line
+
+body
+EOF
+```
+
+Then verify before pushing, since a lint-staged hook rewrites files mid-commit
+and a bad subject is far cheaper to fix while it is still local:
+
+```sh
+git log -1 --format='%s'
+```
+
+If the subject is wrong and the commit has NOT been pushed, `git commit --amend`
+is the right fix. Once pushed, leave it and move on.
+
 **3. If already on `g3code`, there is nothing to merge.** Push and stop:
 
 ```sh
