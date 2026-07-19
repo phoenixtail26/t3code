@@ -18,6 +18,7 @@ import {
 import { Skeleton } from "~/components/ui/skeleton";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useIsMobile } from "~/hooks/useMediaQuery";
+import { useSidebarEdgeSwipe } from "~/hooks/useSidebarEdgeSwipe";
 import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
 import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
 import * as Schema from "effect/Schema";
@@ -135,6 +136,11 @@ function SidebarProvider({
   const toggleSidebar = React.useCallback(() => {
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
   }, [isMobile, setOpen]);
+
+  // Fork: swipe in from the left edge to open the thread list, swipe left to
+  // dismiss it. See useSidebarEdgeSwipe — kept out of this file so it survives
+  // upstream merges.
+  useSidebarEdgeSwipe({ enabled: isMobile, isOpen: openMobile, setOpen: setOpenMobile });
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
