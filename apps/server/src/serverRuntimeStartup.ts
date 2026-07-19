@@ -34,6 +34,7 @@ import * as AnalyticsService from "./telemetry/AnalyticsService.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import * as ProviderSessionReaper from "./provider/Services/ProviderSessionReaper.ts";
+import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import {
   formatHeadlessServeOutput,
   formatHostForUrl,
@@ -183,6 +184,7 @@ export const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
   const projectionReadModelQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
   const orchestrationEngine = yield* OrchestrationEngine.OrchestrationEngineService;
+  const repositoryIdentityResolver = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
   const path = yield* Path.Path;
 
   let bootstrapProjectId: ProjectId | undefined;
@@ -190,23 +192,28 @@ export const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
 
   if (serverConfig.autoBootstrapProjectFromCwd) {
     yield* Effect.gen(function* () {
-      const existingProject = yield* projectionReadModelQuery.getActiveProjectByWorkspaceRoot(
+      // Bootstrap off the repository root rather than the raw cwd. Dev scripts
+      // and editors routinely launch the server from a subdirectory, and
+      // keying on cwd registered a second project for the same checkout.
+      const bootstrapWorkspaceRoot = yield* repositoryIdentityResolver.resolveWorkspaceRoot(
         serverConfig.cwd,
       );
+      const existingProject =
+        yield* projectionReadModelQuery.getActiveProjectByWorkspaceRoot(bootstrapWorkspaceRoot);
       let nextProjectId: ProjectId;
       let nextProjectDefaultModelSelection: ModelSelection;
 
       if (Option.isNone(existingProject)) {
         const createdAt = DateTime.formatIso(yield* DateTime.now);
         nextProjectId = ProjectId.make(yield* randomUUID);
-        const bootstrapProjectTitle = path.basename(serverConfig.cwd) || "project";
+        const bootstrapProjectTitle = path.basename(bootstrapWorkspaceRoot) || "project";
         nextProjectDefaultModelSelection = getAutoBootstrapDefaultModelSelection();
         yield* orchestrationEngine.dispatch({
           type: "project.create",
           commandId: CommandId.make(yield* randomUUID),
           projectId: nextProjectId,
           title: bootstrapProjectTitle,
-          workspaceRoot: serverConfig.cwd,
+          workspaceRoot: bootstrapWorkspaceRoot,
           defaultModelSelection: nextProjectDefaultModelSelection,
           createdAt,
         });

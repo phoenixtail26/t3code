@@ -14,6 +14,7 @@ import * as ServerConfig from "./config.ts";
 import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
 import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as AnalyticsService from "./telemetry/AnalyticsService.ts";
+import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 
 it("uses the canonical Codex default for auto-bootstrapped model selection", () => {
@@ -169,6 +170,10 @@ it.effect("resolveAutoBootstrapWelcomeTargets returns existing project and threa
           ),
         streamDomainEvents: Stream.empty,
       } satisfies OrchestrationEngine.OrchestrationEngineService["Service"]),
+      Effect.provideService(RepositoryIdentityResolver.RepositoryIdentityResolver, {
+        resolve: () => Effect.die("unused"),
+        resolveWorkspaceRoot: (cwd: string) => Effect.succeed(cwd),
+      }),
       Effect.provide(NodeServices.layer),
     );
 
@@ -212,12 +217,69 @@ it.effect("resolveAutoBootstrapWelcomeTargets creates a project and thread when 
           ),
         streamDomainEvents: Stream.empty,
       } satisfies OrchestrationEngine.OrchestrationEngineService["Service"]),
+      Effect.provideService(RepositoryIdentityResolver.RepositoryIdentityResolver, {
+        resolve: () => Effect.die("unused"),
+        resolveWorkspaceRoot: (cwd: string) => Effect.succeed(cwd),
+      }),
       Effect.provide(NodeServices.layer),
     );
 
     assert.equal(typeof targets.bootstrapProjectId, "string");
     assert.equal(typeof targets.bootstrapThreadId, "string");
     assert.deepStrictEqual(yield* Ref.get(dispatchCalls), ["project.create", "thread.create"]);
+  }),
+);
+
+it.effect("resolveAutoBootstrapWelcomeTargets bootstraps the repository root, not the cwd", () =>
+  Effect.gen(function* () {
+    // Launching from a subdirectory (dev scripts do this) must not register a
+    // second project for a checkout that already has one.
+    const lookedUpWorkspaceRoots = yield* Ref.make<ReadonlyArray<string>>([]);
+    const createdWorkspaceRoots = yield* Ref.make<ReadonlyArray<string>>([]);
+
+    yield* ServerRuntimeStartup.resolveAutoBootstrapWelcomeTargets.pipe(
+      Effect.provideService(ServerConfig.ServerConfig, {
+        cwd: "/tmp/startup-project/apps/server",
+        autoBootstrapProjectFromCwd: true,
+      } as never),
+      Effect.provideService(ProjectionSnapshotQuery.ProjectionSnapshotQuery, {
+        getCommandReadModel: () => Effect.die("unused"),
+        getSnapshot: () => Effect.die("unused"),
+        getShellSnapshot: () => Effect.die("unused"),
+        getArchivedShellSnapshot: () => Effect.die("unused"),
+        getSnapshotSequence: () => Effect.die("unused"),
+        getCounts: () => Effect.die("unused"),
+        getActiveProjectByWorkspaceRoot: (workspaceRoot: string) =>
+          Ref.update(lookedUpWorkspaceRoots, (roots) => [...roots, workspaceRoot]).pipe(
+            Effect.as(Option.none()),
+          ),
+        getProjectShellById: () => Effect.die("unused"),
+        getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
+        getThreadCheckpointContext: () => Effect.succeed(Option.none()),
+        getFullThreadDiffContext: () => Effect.succeed(Option.none()),
+        getThreadShellById: () => Effect.die("unused"),
+        getThreadDetailById: () => Effect.die("unused"),
+        getThreadDetailSnapshot: () => Effect.die("unused"),
+      }),
+      Effect.provideService(OrchestrationEngine.OrchestrationEngineService, {
+        readEvents: () => Stream.empty,
+        dispatch: (command) =>
+          (command.type === "project.create"
+            ? Ref.update(createdWorkspaceRoots, (roots) => [...roots, command.workspaceRoot])
+            : Effect.void
+          ).pipe(Effect.as({ sequence: 1 })),
+        streamDomainEvents: Stream.empty,
+      } satisfies OrchestrationEngine.OrchestrationEngineService["Service"]),
+      Effect.provideService(RepositoryIdentityResolver.RepositoryIdentityResolver, {
+        resolve: () => Effect.die("unused"),
+        resolveWorkspaceRoot: (cwd: string) =>
+          Effect.succeed(cwd === "/tmp/startup-project/apps/server" ? "/tmp/startup-project" : cwd),
+      }),
+      Effect.provide(NodeServices.layer),
+    );
+
+    assert.deepStrictEqual(yield* Ref.get(lookedUpWorkspaceRoots), ["/tmp/startup-project"]);
+    assert.deepStrictEqual(yield* Ref.get(createdWorkspaceRoots), ["/tmp/startup-project"]);
   }),
 );
 
@@ -261,6 +323,10 @@ it.effect("resolveAutoBootstrapWelcomeTargets preserves typed UUID generation fa
           ),
         streamDomainEvents: Stream.empty,
       } satisfies OrchestrationEngine.OrchestrationEngineService["Service"]),
+      Effect.provideService(RepositoryIdentityResolver.RepositoryIdentityResolver, {
+        resolve: () => Effect.die("unused"),
+        resolveWorkspaceRoot: (cwd: string) => Effect.succeed(cwd),
+      }),
       Effect.provideService(Crypto.Crypto, {
         ...crypto,
         randomUUIDv4: Effect.fail(uuidError),

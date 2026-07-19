@@ -35,6 +35,7 @@ import * as Struct from "effect/Struct";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
+import { normalizeProjectPathForComparison } from "@t3tools/shared/path";
 import {
   isPersistenceError,
   toPersistenceDecodeError,
@@ -658,10 +659,16 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       `,
   });
 
-  const getActiveProjectRowByWorkspaceRoot = SqlSchema.findOneOption({
-    Request: WorkspaceRootLookupInput,
+  // Rows are matched in TS rather than SQL because `workspace_root` is stored
+  // verbatim: on Windows the same directory can be spelled with either
+  // separator and in any case, and SQLite's `=` would treat those as distinct
+  // projects. `decider.ts` already rejects `project.create` for a workspace
+  // root that normalizes onto an existing one, so an exact-match read here
+  // would miss the existing project and then fail that guard.
+  const listActiveProjectRows = SqlSchema.findAll({
+    Request: Schema.Void,
     Result: ProjectionProjectLookupRowSchema,
-    execute: ({ workspaceRoot }) =>
+    execute: () =>
       sql`
         SELECT
           project_id AS "projectId",
@@ -673,12 +680,26 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"
         FROM projection_projects
-        WHERE workspace_root = ${workspaceRoot}
-          AND deleted_at IS NULL
+        WHERE deleted_at IS NULL
         ORDER BY created_at ASC, project_id ASC
-        LIMIT 1
       `,
   });
+
+  const getActiveProjectRowByWorkspaceRoot = ({
+    workspaceRoot,
+  }: typeof WorkspaceRootLookupInput.Type) => {
+    const normalizedWorkspaceRoot = normalizeProjectPathForComparison(workspaceRoot);
+    return listActiveProjectRows().pipe(
+      Effect.map((rows) =>
+        Option.fromUndefinedOr(
+          rows.find(
+            (row) =>
+              normalizeProjectPathForComparison(row.workspaceRoot) === normalizedWorkspaceRoot,
+          ),
+        ),
+      ),
+    );
+  };
 
   const getActiveProjectRowById = SqlSchema.findOneOption({
     Request: ProjectIdLookupInput,

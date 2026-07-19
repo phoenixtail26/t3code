@@ -2,7 +2,8 @@
 
 How this fork relates to upstream, and the two workflows that keep it healthy.
 Set up 2026-07-18. Companion docs: `FORK_ORCHESTRATOR.md` (why this fork exists,
-what changed, roadmap), `RUN_FORK_WINDOWS.md` (running/building here).
+what changed), `FORK_ROADMAP.md` (where it is going), `RUN_FORK_WINDOWS.md`
+(running/building here).
 
 ## Topology
 

@@ -696,6 +696,54 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       }),
   );
 
+  it.effect("matches workspace roots that differ only by separator or case", () =>
+    Effect.gen(function* () {
+      const snapshotQuery = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+
+      yield* sql`DELETE FROM projection_projects`;
+      yield* sql`DELETE FROM projection_threads`;
+
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id,
+          title,
+          workspace_root,
+          default_model_selection_json,
+          scripts_json,
+          created_at,
+          updated_at,
+          deleted_at
+        )
+        VALUES (
+          'project-windows',
+          'Windows Project',
+          'D:\\Dev\\t3code',
+          '{"provider":"codex","model":"gpt-5-codex"}',
+          '[]',
+          '2026-03-01T00:00:00.000Z',
+          '2026-03-01T00:00:01.000Z',
+          NULL
+        )
+      `;
+
+      // Bootstrap resolves cwd through the OS, so the same directory can arrive
+      // with either separator and in any case. All of these must find the one
+      // existing project rather than prompting a duplicate `project.create`.
+      for (const workspaceRoot of ["D:\\Dev\\t3code", "D:/Dev/t3code", "d:\\dev\\t3code"]) {
+        const project = yield* snapshotQuery.getActiveProjectByWorkspaceRoot(workspaceRoot);
+        assert.equal(project._tag, "Some", `expected a match for ${workspaceRoot}`);
+        if (project._tag === "Some") {
+          assert.equal(project.value.id, asProjectId("project-windows"));
+        }
+      }
+
+      // A nested directory is a genuinely different workspace root.
+      const nested = yield* snapshotQuery.getActiveProjectByWorkspaceRoot("D:\\Dev\\t3code\\apps");
+      assert.equal(nested._tag, "None");
+    }),
+  );
+
   it.effect("reads single-thread checkpoint context without hydrating unrelated threads", () =>
     Effect.gen(function* () {
       const snapshotQuery = yield* ProjectionSnapshotQuery;
@@ -1454,6 +1502,7 @@ it.effect(
                 rootPath: cwd,
               };
             }),
+          resolveWorkspaceRoot: (cwd: string) => Effect.succeed(cwd),
         }),
       ),
       Layer.provideMerge(SqlitePersistenceMemory),

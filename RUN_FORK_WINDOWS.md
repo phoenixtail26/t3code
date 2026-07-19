@@ -114,7 +114,7 @@ The web UI demands a pairing token. Three traps, all learned the hard way:
 
 ## Phone access + notifications (setup checklist)
 
-Rationale and decisions live in `FORK_ORCHESTRATOR.md` (roadmap #2). Steps that
+Rationale and decisions live in `FORK_ROADMAP.md` (#2). Steps that
 need a human sign-in are marked. Order matters — do Tailscale before pairing so
 the phone pairs against the durable HTTPS URL.
 

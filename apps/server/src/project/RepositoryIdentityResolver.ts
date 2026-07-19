@@ -26,6 +26,13 @@ export class RepositoryIdentityResolver extends Context.Service<
   RepositoryIdentityResolver,
   {
     readonly resolve: (cwd: string) => Effect.Effect<RepositoryIdentity | null>;
+    /**
+     * The enclosing git worktree root, or `cwd` unchanged when it isn't in a
+     * repository. Callers that key a workspace off a directory want this so
+     * that starting from `<repo>/apps/server` lands on the same workspace as
+     * starting from `<repo>`.
+     */
+    readonly resolveWorkspaceRoot: (cwd: string) => Effect.Effect<string>;
   }
 >()("t3/project/RepositoryIdentityResolver") {}
 
@@ -157,16 +164,21 @@ export const make = Effect.fn("RepositoryIdentityResolver.make")(function* (
     },
   );
 
+  const resolveWorkspaceRoot: RepositoryIdentityResolver["Service"]["resolveWorkspaceRoot"] =
+    Effect.fn("RepositoryIdentityResolver.resolveWorkspaceRoot")(function* (cwd) {
+      return yield* resolveRepositoryIdentityCacheKey(cwd).pipe(
+        Effect.provideService(ProcessRunner.ProcessRunner, processRunner),
+      );
+    });
+
   const resolve: RepositoryIdentityResolver["Service"]["resolve"] = Effect.fn(
     "RepositoryIdentityResolver.resolve",
   )(function* (cwd) {
-    const cacheKey = yield* resolveRepositoryIdentityCacheKey(cwd).pipe(
-      Effect.provideService(ProcessRunner.ProcessRunner, processRunner),
-    );
+    const cacheKey = yield* resolveWorkspaceRoot(cwd);
     return yield* Cache.get(repositoryIdentityCache, cacheKey);
   });
 
-  return RepositoryIdentityResolver.of({ resolve });
+  return RepositoryIdentityResolver.of({ resolve, resolveWorkspaceRoot });
 });
 
 export const layer = Layer.effect(RepositoryIdentityResolver, make()).pipe(

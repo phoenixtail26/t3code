@@ -62,9 +62,10 @@ This checkout is a personal fork (`phoenixtail26/t3code`) used as an
 agent-orchestration platform. Fork work lives on the `g3code` branch; `main` is
 a pristine mirror of `upstream/main` and must not be committed to.
 **Read `FORK_ORCHESTRATOR.md` before starting work** — it carries the goal, the
-changes already made, the roadmap, and the Windows environment gotchas
-(portable Node path, `corepack pnpm`, broken root build filters, pre-existing
-Windows test failures). `RUN_FORK_WINDOWS.md` covers running and building.
+changes already made, and the Windows environment gotchas (portable Node path,
+`corepack pnpm`, broken root build filters, pre-existing Windows test
+failures). `FORK_ROADMAP.md` carries the planned and in-flight work.
+`RUN_FORK_WINDOWS.md` covers running and building.
 `FORK_REMOTES.md` covers the remote topology, upstream syncing, and how to cut
 an upstreamable PR branch.
 
