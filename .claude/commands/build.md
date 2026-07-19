@@ -72,6 +72,32 @@ If the timestamps did not move, the build did nothing — report that as a
 failure regardless of exit code. A healthy run reports packages built and
 finishes in roughly 10-30s warm.
 
+## The icon is NOT a build output — do not chase it here
+
+The app icon and the name on Windows toast notifications come from the
+_launcher_, not from anything this command produces. Verified: running this
+command yields a byte-identical `main.cjs`, and `apps/desktop/resources/`
+(`icon.ico`, `icon.png`, `icon.icns`) is committed, not generated — the
+`icons:export` script needs macOS Icon Composer and cannot run here.
+
+The window/taskbar icon is resolved at runtime from `../resources/icon.ico`
+relative to `main.cjs` (`DesktopAssets.resolveResourcePathCandidates`), so it
+works from any build. If an icon looks wrong, check these three launcher-side
+things instead of rebuilding:
+
+1. **Start Menu shortcut** — `%APPDATA%\Microsoft\Windows\Start Menu\Programs\T3 Code (fork).lnk`
+   targets `apps\desktop\node_modules\electron\dist\electron.exe` with argument
+   `dist-electron\main.cjs`, cwd `apps\desktop`, and `IconLocation` set to
+   `apps\desktop\resources\icon.ico`.
+2. **Toast identity** — Windows attributes notifications to the app's
+   AppUserModelID (`com.t3tools.t3code`). Unpackaged, nothing claims that ID, so
+   toasts show "Electron" with the Electron icon until it is registered:
+   `HKCU:\SOFTWARE\Classes\AppUserModelId\com.t3tools.t3code` with `DisplayName`
+   and `IconUri`. Restart the app afterwards. See RUN_FORK_WINDOWS.md.
+3. **Launching `electron.exe` directly** is what makes the process identity
+   generic in the first place. A packaged build (`pnpm dist:desktop:win`) sets
+   icon and identity properly and makes all of the above unnecessary.
+
 ## Report
 
 State what was rebuilt (with the before/after timestamps as evidence), which
