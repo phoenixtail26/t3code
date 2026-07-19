@@ -93,11 +93,24 @@ once (tokens are single-use, see below). Rebuild after changing/pulling code:
 ```powershell
 # NOTE: `corepack pnpm build` at the repo root silently builds NOTHING on Windows —
 # the script's single-quoted filters ('./apps/*') reach vp literally via cmd.exe and
-# match no packages (exit 0 regardless). Pass the filters yourself:
-$env:PATH = "D:\Dev\tools\node-v24.18.0-win-x64;$env:USERPROFILE\.vite-plus\bin;$env:PATH"
+# match no packages (exit 0 regardless). Pass the filters yourself.
+# `.t3-bin` (pnpm shims) is REQUIRED on PATH: pnpm's dep-status check shells out
+# to a bare `pnpm install`, so without it the build dies with
+# "'pnpm' is not recognized" before compiling anything.
+$env:PATH = "D:\Dev\tools\node-v24.18.0-win-x64;$env:USERPROFILE\.t3-bin;$env:USERPROFILE\.vite-plus\bin;$env:PATH"
 cd D:\Dev\t3code
 corepack pnpm exec vp run --filter "./apps/*" --filter "./packages/*" build
 ```
+
+Verify it actually built — this build's failure mode is a silent no-op, and
+piping it into `tail` masks a nonzero exit. Check that artifact mtimes moved:
+
+```powershell
+Get-Item apps\desktop\dist-electron\main.cjs, apps\web\dist\index.html |
+  Select-Object LastWriteTime, Name
+```
+
+`/build` wraps all of the above.
 
 Note: dev mode (`:5733`) and production (`:13773`) are different origins AND
 different auth stores (`~\.t3\dev` vs `~\.t3\userdata`) — a browser paired with one
