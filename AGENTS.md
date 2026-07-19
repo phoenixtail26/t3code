@@ -65,6 +65,15 @@ a pristine mirror of `upstream/main` and must not be committed to.
 changes already made, the roadmap, and the Windows environment gotchas
 (portable Node path, `corepack pnpm`, broken root build filters, pre-existing
 Windows test failures). `RUN_FORK_WINDOWS.md` covers running and building.
+
+**Before running or testing anything, read `RUN_FORK_WINDOWS.md` — especially
+"Dogfooding: testing a branch from inside t3code".** You are running inside the
+app you are changing: the live instance owns `~\.t3\userdata`, and the session
+you are working in is a thread in that database. Do not restart it and do not
+point a second server at that state dir. Test a branch with `pnpm dev:desktop`
+from the worktree, which uses a separate database and needs no pairing token.
+The traps that waste the most time (auto-bootstrap defaulting off, dev vs
+userdata stores, pairing token TTL) are all listed there.
 `FORK_REMOTES.md` covers the remote topology, upstream syncing, and how to cut
 an upstreamable PR branch.
 
