@@ -113,7 +113,39 @@ normalizes the file on boot. The per-device desktop toggles now have UI
 settings section would complete it, including a "send test notification"
 button to verify a topic without contriving a thread event.
 
-## 5. Web Push from the PWA (drops the ntfy dependency)
+## 5. Surface a stale connection instead of rendering old data
+
+**Goal:** a client that has lost its live connection says so, rather than
+silently displaying whatever snapshot it last received.
+
+Motivating incident (2026-07-19): the phone showed an old thread list for hours
+while the PC was current. Everything downstream was healthy — Tailscale up,
+TLS valid, session authenticating minutes earlier — the client simply held a
+stale render with no indication anything was wrong. The user's only clue was
+noticing the content looked old, and diagnosis took far longer than the fix
+(reset the PWA's storage and re-pair; see RUN_FORK_WINDOWS.md).
+
+The failure mode matters more than that one incident: this fork exists so the
+owner can trust a glance at a screen. A surface that can lie about being current
+undermines every feature built on top of it — usage meter, notifications, the
+session radar — because none of them are worth anything if the view is silently
+frozen.
+
+Sketch:
+
+- **Connection state in the UI.** The client already knows when its socket
+  drops; show it (a subtle banner or sidebar indicator), including a "last
+  updated" time so staleness is legible even mid-reconnect.
+- **Reconnect with visible backoff**, and a manual retry. Verify the client
+  actually retries indefinitely after a long sleep — a phone that gives up
+  after N attempts and never says so is exactly this bug.
+- **Treat a snapshot older than a threshold as stale** even if the socket
+  claims healthy: a wedged-but-open socket looks identical to a working one.
+- **Cheap server-side check** for triage, already documented: a mobile
+  session's `lastConnectedAt` from `/api/auth/clients` localises fault to
+  client-vs-transport in one step.
+
+## 6. Web Push from the PWA (drops the ntfy dependency)
 
 Now unblocked by real HTTPS on the tailnet. A service worker plus VAPID keys
 would let the server push straight to the installed PWA, removing the ntfy app
@@ -121,7 +153,7 @@ and the public relay from the path entirely — the fully self-hosted endpoint o
 this line of work. Keep ntfy until this is proven; it is the fallback for
 platforms where Web Push is unreliable.
 
-## 6. Default base branch for new threads
+## 7. Default base branch for new threads
 
 **Goal:** a new thread in a project starts from that project's intended base
 branch, instead of silently inheriting whatever the previous thread was using.
@@ -157,7 +189,7 @@ base as `input.refName` (`GitVcsDriverCore.ts:2267`) and hardcodes nothing.
 Worth pairing with the existing `startFromOrigin` path (`ws.ts:840`) so the
 default can be "always cut from `origin/g3code`", avoiding stale local bases.
 
-## 7. Fork a thread into a new thread (split work off a big one)
+## 8. Fork a thread into a new thread (split work off a big one)
 
 **Goal:** take a thread that has built up real context and branch it into a new
 thread that inherits that context, so a side-task can be split off without
@@ -205,7 +237,7 @@ Scope note: Claude-first. The Codex/Cursor/Grok adapters keep their own
 `resumeCursor` shapes and have no equivalent fork primitive, so the action
 should be gated on provider capability rather than assumed universal.
 
-## 8. Smaller candidates
+## 9. Smaller candidates
 
 - Usage meter: per-model breakdown when upstream adds more scoped limits;
   optional statusline-style compact mode.
