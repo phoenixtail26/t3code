@@ -968,10 +968,24 @@ label:has(> select#reasoning-effort) select {
 @media (max-width: 767px) {
   /* Tailwind sizes are rem-based, so lifting the root size scales type AND
      the spacing around it together, instead of leaving bigger text crammed
-     into desktop-sized rows. 17px matches the platform default for body text
-     on Android/iOS. */
+     into desktop-sized rows. 18px reads comfortably at arm's length; the
+     platform default of 16-17px still measured tight in use. */
   html {
-    font-size: 17px;
+    font-size: 18px;
+  }
+
+  /* The sidebar still looked disproportionately small after the root bump,
+     because its type is set with `text-xs` and arbitrary pixel classes such
+     as `text-[10px]` — and px values do NOT scale with the root size, only
+     rem ones do. Lift those explicitly, scoped to the sidebar so the density
+     of the rest of the UI is untouched. Both the docked sidebar and the
+     mobile sheet carry `data-sidebar="sidebar"`, so one selector covers both. */
+  [data-sidebar="sidebar"] [class~="text-xs"] {
+    font-size: 0.875rem;
+  }
+
+  [data-sidebar="sidebar"] [class~="text-[10px]"] {
+    font-size: 0.75rem;
   }
 
   /* Touch targets. 44px is the long-standing platform minimum; applied as a
