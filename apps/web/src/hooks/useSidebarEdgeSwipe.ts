@@ -1,22 +1,56 @@
 import { useEffect } from "react";
 
 /**
- * Edge-swipe gestures for the mobile sidebar: drag in from the left edge to
- * open the thread list, drag left to dismiss it. This is the one navigation
- * affordance phones expect and the desktop-first layout never had — reaching
- * the toggle button in the top-left corner one-handed is awkward.
+ * Swipe-right anywhere to open the mobile sidebar; swipe left to dismiss it.
+ * The one navigation affordance phones expect and the desktop-first layout
+ * never had.
  *
- * Fork-local and deliberately self-contained: it attaches its own listeners
- * rather than threading gesture state through the sidebar's render, so it
- * stays a single additive block against an upstream file.
+ * Deliberately NOT edge-gated: Android's system back gesture owns the screen
+ * edges, so an edge-only opener lands in exactly the strip the OS confiscates
+ * (observed: edge swipes triggered Chrome back / closed the PWA and never
+ * reached the page). Mid-screen swipes are ours.
+ *
+ * Horizontal scrolling stays safe without edge-gating because a swipe defers
+ * to a scrollable ancestor only when that ancestor can actually consume the
+ * gesture: a rightward swipe scrolls content leftward, which is only possible
+ * when `scrollLeft > 0`. A code block at rest cannot consume a right-swipe, so
+ * the gesture is free to mean "open the sidebar". Once the user has scrolled
+ * into a block, swipes over it scroll it back — matching native-app behavior.
+ *
+ * Fork-local and self-contained: attaches its own listeners rather than
+ * threading gesture state through the sidebar's render, so it stays a single
+ * additive line against an upstream file.
  */
 
-/** Only a drag starting this close to the left edge opens the sidebar. */
-const EDGE_ZONE_PX = 28;
 /** Horizontal travel before a drag counts as a swipe. */
 const TRIGGER_DISTANCE_PX = 56;
 /** Beyond this much vertical travel it is a scroll, not a swipe. */
 const MAX_VERTICAL_DRIFT_PX = 40;
+
+/** True when the touch begins in a context that owns horizontal drags. */
+function touchOwnsHorizontalDrag(target: EventTarget | null, deltaRight: boolean): boolean {
+  let element = target instanceof Element ? target : null;
+  while (element !== null && element !== document.body) {
+    if (
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLTextAreaElement ||
+      (element instanceof HTMLElement && element.isContentEditable)
+    ) {
+      return true;
+    }
+    const canScrollX = element.scrollWidth > element.clientWidth + 1;
+    if (canScrollX) {
+      // A right-swipe needs scrollLeft > 0 to be consumable; a left-swipe
+      // needs room remaining on the right.
+      const consumable = deltaRight
+        ? element.scrollLeft > 0
+        : element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
+      if (consumable) return true;
+    }
+    element = element.parentElement;
+  }
+  return false;
+}
 
 export function useSidebarEdgeSwipe(input: {
   readonly enabled: boolean;
@@ -30,6 +64,7 @@ export function useSidebarEdgeSwipe(input: {
 
     let startX: number | null = null;
     let startY: number | null = null;
+    let startTarget: EventTarget | null = null;
     let handled = false;
 
     const handleTouchStart = (event: TouchEvent) => {
@@ -39,14 +74,9 @@ export function useSidebarEdgeSwipe(input: {
         startX = null;
         return;
       }
-      // Opening is edge-initiated so it cannot fight horizontal scrolling in
-      // code blocks; closing can start anywhere over the open sheet.
-      if (!isOpen && touch.clientX > EDGE_ZONE_PX) {
-        startX = null;
-        return;
-      }
       startX = touch.clientX;
       startY = touch.clientY;
+      startTarget = event.target;
       handled = false;
     };
 
@@ -61,12 +91,19 @@ export function useSidebarEdgeSwipe(input: {
         startX = null;
         return;
       }
-      if (!isOpen && deltaX > TRIGGER_DISTANCE_PX) {
+      if (Math.abs(deltaX) < TRIGGER_DISTANCE_PX) return;
+
+      const deltaRight = deltaX > 0;
+      if (touchOwnsHorizontalDrag(startTarget, deltaRight)) {
+        startX = null;
+        return;
+      }
+      if (!isOpen && deltaRight) {
         handled = true;
         setOpen(true);
         return;
       }
-      if (isOpen && deltaX < -TRIGGER_DISTANCE_PX) {
+      if (isOpen && !deltaRight) {
         handled = true;
         setOpen(false);
       }
@@ -75,6 +112,7 @@ export function useSidebarEdgeSwipe(input: {
     const handleTouchEnd = () => {
       startX = null;
       startY = null;
+      startTarget = null;
     };
 
     // Passive: this never calls preventDefault, so scrolling stays smooth.
