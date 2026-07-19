@@ -42,6 +42,28 @@ const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
 const DESKTOP_RENDERER_ORIGINS = ["t3code://app", "t3code-dev://app"];
 
+/**
+ * Static responses previously carried no caching headers at all, so a client
+ * was free to hold the HTML shell indefinitely with nothing to revalidate
+ * against. After a rebuild that shell points at fingerprinted asset names that
+ * no longer exist, and the app hangs on its loading screen — seen on an
+ * installed PWA, which caches more eagerly than a browser tab and has no
+ * address bar to force a reload from.
+ *
+ * So: never store the shell (it is the index that must reflect the current
+ * build), and let fingerprinted assets be cached forever, since a content
+ * change always produces a new filename.
+ */
+const HTML_SHELL_CACHE_HEADERS = { "cache-control": "no-store" } as const;
+const IMMUTABLE_ASSET_CACHE_HEADERS = {
+  "cache-control": "public, max-age=31536000, immutable",
+} as const;
+
+/** Vite emits `name-<hash>.ext`; only those are safe to cache immutably. */
+function isFingerprintedAsset(filePath: string): boolean {
+  return /-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/.test(filePath);
+}
+
 export const browserApiCorsLayer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
@@ -276,6 +298,7 @@ export const staticAndDevRouteLayer = HttpRouter.add(
       return HttpServerResponse.uint8Array(indexData, {
         status: 200,
         contentType: "text/html; charset=utf-8",
+        headers: HTML_SHELL_CACHE_HEADERS,
       });
     }
 
@@ -288,6 +311,9 @@ export const staticAndDevRouteLayer = HttpRouter.add(
     return HttpServerResponse.uint8Array(data, {
       status: 200,
       contentType,
+      headers: isFingerprintedAsset(filePath)
+        ? IMMUTABLE_ASSET_CACHE_HEADERS
+        : HTML_SHELL_CACHE_HEADERS,
     });
   }),
 );
