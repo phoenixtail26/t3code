@@ -38,7 +38,12 @@ function touchOwnsHorizontalDrag(target: EventTarget | null, deltaRight: boolean
     ) {
       return true;
     }
-    const canScrollX = element.scrollWidth > element.clientWidth + 1;
+    // Clipped-but-not-scrollable elements (e.g. `truncate` text) also report
+    // scrollWidth > clientWidth; only real scroll containers may claim the drag.
+    const overflowX = window.getComputedStyle(element).overflowX;
+    const isScrollContainer =
+      overflowX === "auto" || overflowX === "scroll" || overflowX === "overlay";
+    const canScrollX = isScrollContainer && element.scrollWidth > element.clientWidth + 1;
     if (canScrollX) {
       // A right-swipe needs scrollLeft > 0 to be consumable; a left-swipe
       // needs room remaining on the right.
