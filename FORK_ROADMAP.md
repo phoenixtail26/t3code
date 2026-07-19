@@ -121,7 +121,43 @@ and the public relay from the path entirely — the fully self-hosted endpoint o
 this line of work. Keep ntfy until this is proven; it is the fallback for
 platforms where Web Push is unreliable.
 
-## 6. Smaller candidates
+## 6. Default base branch for new threads
+
+**Goal:** a new thread in a project starts from that project's intended base
+branch, instead of silently inheriting whatever the previous thread was using.
+
+Today there is no project-level default base at all. New draft threads copy the
+previous draft's `worktreePath` (`composerDraftStore.ts:1331`), and the same
+carry-forward applies to `branch` (:1337) and `startFromOrigin` (:1343). The
+reset only fires on `projectChanged` (:1327), which compares `environmentId` /
+`projectId` — so switching threads _within_ a project never clears it. The
+branch picker then renders that inherited value: `BranchToolbar.tsx:224` reads
+`draftThread?.worktreePath`, so the `currentGitBranch` fallback in
+`resolveBranchToolbarValue` (`BranchToolbar.logic.ts:94`) is unreachable in
+practice.
+
+Observed 2026-07-19: a brand-new thread in this project defaulted to the
+`t3code-ba6550be` worktree on `fix/project-bootstrap-duplication` while the
+main working tree sat on `g3code`. The recorded merge bases show the drift
+accumulating — `git config --get-regexp 'branch\..*\.gh-merge-base'` returns
+three worktree branches with three different bases (`g3code`,
+`fix/windows-claude-sdk-executable`, `fix/project-bootstrap-duplication`),
+because each inherited from whatever preceded it.
+
+Stickiness is a reasonable default when consecutive threads are related, and a
+trap when they are not: for this fork nearly all work should branch from
+`g3code`, so the inherited value is usually wrong and has to be corrected by
+hand on every new thread — easy to forget, and the mistake is only visible
+later as a bad merge base.
+
+Sketch: a per-project default base ref in project settings, consulted when a
+draft thread is created with no explicit override, falling back to current
+behaviour when unset. `createWorktree` needs no change — it already takes the
+base as `input.refName` (`GitVcsDriverCore.ts:2267`) and hardcodes nothing.
+Worth pairing with the existing `startFromOrigin` path (`ws.ts:840`) so the
+default can be "always cut from `origin/g3code`", avoiding stale local bases.
+
+## 7. Smaller candidates
 
 - Usage meter: per-model breakdown when upstream adds more scoped limits;
   optional statusline-style compact mode.
