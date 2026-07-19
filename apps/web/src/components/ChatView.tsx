@@ -152,10 +152,8 @@ import {
 import { newDraftId, newMessageId, newThreadId } from "~/lib/utils";
 import { getProviderModelCapabilities, resolveSelectableProvider } from "../providerModels";
 import { useEnvironmentSettings } from "../hooks/useSettings";
-import {
-  resolveAppModelSelectionForInstance,
-  resolveDefaultNewProjectModelSelection,
-} from "../modelSelection";
+import { resolveAppModelSelectionForInstance } from "../modelSelection";
+import { useFallbackDefaultModelSelection } from "../hooks/useFallbackDefaultModelSelection";
 import { getTerminalFocusOwner } from "../lib/terminalFocus";
 import { resolveNewDraftStartFromOrigin } from "../lib/chatThreadActions";
 import {
@@ -1322,10 +1320,7 @@ function ChatViewContent(props: ChatViewProps) {
     ? null
     : ((draftId ? localDraftErrorsByDraftId[draftId]?.message : null) ?? null);
   const localServerError = localServerErrorsByThreadKey[routeThreadKey]?.message ?? null;
-  const fallbackDefaultModelSelection = useMemo(
-    () => resolveDefaultNewProjectModelSelection(primaryEnvironment?.serverConfig?.providers ?? []),
-    [primaryEnvironment?.serverConfig?.providers],
-  );
+  const fallbackDefaultModelSelection = useFallbackDefaultModelSelection();
   // Draft errors are keyed by draftId while server errors are keyed by thread
   // key, so a pending draft entry must migrate when the server thread loads or
   // a failed send would silently disappear on promotion. When both keys hold
