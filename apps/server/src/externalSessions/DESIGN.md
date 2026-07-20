@@ -134,6 +134,13 @@ Per-file tail state: `{ offset: number, carry: string, meta: ExternalSessionMeta
 - State decay: a 30s tick re-derives `working`→`idle` for sessions whose
   mtime aged past the threshold without new FS events (mtime never fires an
   event by itself).
+- Known edge (surfaced by the test harness): `start`/`watchDir` fork the
+  `fs.watch` reader and return before it has attached, and the watcher is
+  purely event-driven with no reconciliation pass — a change landing in that
+  sub-second window is missed until an unrelated later event re-triggers a
+  refresh. Unrealistic in production (sessions aren't created microseconds
+  after server boot); the cheap fix if it ever matters is to piggyback a
+  `syncDirs` + watched-dir refresh onto the 30s decay tick.
 
 Emissions: `PubSub` carries full per-session snapshots
 (`ExternalSessionShell`-shaped, see contracts task 2.1) plus removal
