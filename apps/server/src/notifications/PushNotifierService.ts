@@ -1,4 +1,4 @@
-import type { ThreadId } from "@t3tools/contracts";
+import type { PushNotificationSettings, ThreadId } from "@t3tools/contracts";
 import { projectThreadAwareness } from "@t3tools/shared/agentAwareness";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -53,6 +53,50 @@ const sendNotification = (notification: PushNotification) =>
       // Response body omitted: it can echo request content back into logs.
       yield* Effect.logWarning("push notification rejected", { status: response.value.status });
     }
+  }).pipe(Effect.provide(FetchHttpClient.layer));
+
+/**
+ * Fire a test push with the given settings so the user can verify a topic URL
+ * from the settings UI. Deliberately bypasses presence suppression — the user
+ * is at the machine clicking the button. Failures are returned as values, not
+ * errors, so the UI can show them inline.
+ */
+export const sendTestPushNotification = (
+  settings: PushNotificationSettings,
+): Effect.Effect<{ readonly sent: boolean; readonly detail: string }> =>
+  Effect.gen(function* () {
+    if (settings.topicUrl.length === 0) {
+      return { sent: false, detail: "No topic URL configured." };
+    }
+    const client = yield* HttpClient.HttpClient;
+    const request = HttpClientRequest.post(settings.topicUrl).pipe(
+      HttpClientRequest.setHeader("title", "Test notification"),
+      HttpClientRequest.setHeader("priority", "default"),
+      HttpClientRequest.setHeader("tags", "bell"),
+      settings.publicBaseUrl.length > 0
+        ? HttpClientRequest.setHeader("click", settings.publicBaseUrl)
+        : (unchanged) => unchanged,
+      HttpClientRequest.bodyText("T3 Code phone push is configured correctly.", "text/plain"),
+    );
+    return yield* client.execute(request).pipe(
+      Effect.timeoutOption(REQUEST_TIMEOUT_MS),
+      Effect.map((response) => {
+        if (Option.isNone(response)) {
+          return {
+            sent: false,
+            detail: `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s.`,
+          };
+        }
+        const status = response.value.status;
+        return status >= 200 && status < 300
+          ? { sent: true, detail: `Delivered (HTTP ${status}).` }
+          : { sent: false, detail: `The push server rejected the request (HTTP ${status}).` };
+      }),
+      Effect.orElseSucceed(() => ({
+        sent: false,
+        detail: "Could not reach the topic URL.",
+      })),
+    );
   }).pipe(Effect.provide(FetchHttpClient.layer));
 
 export const make = Effect.gen(function* () {
