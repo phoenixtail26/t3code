@@ -4,6 +4,11 @@ import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import {
+  EXTERNAL_SESSIONS_WS_METHODS,
+  ExternalSessionsStreamItem,
+  ExternalSessionsSubscribeInput,
+} from "./externalSessions.ts";
+import {
   AuthAccessStreamError,
   AuthAccessStreamEvent,
   EnvironmentAuthorizationError,
@@ -697,6 +702,15 @@ export const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess,
   stream: true,
 });
 
+// Fork feature ("the radar"): read-only stream of external Claude Code
+// sessions. See ./externalSessions.ts.
+export const WsExternalSessionsSubscribeRpc = Rpc.make(EXTERNAL_SESSIONS_WS_METHODS.subscribe, {
+  payload: ExternalSessionsSubscribeInput,
+  success: ExternalSessionsStreamItem,
+  error: EnvironmentAuthorizationError,
+  stream: true,
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -767,4 +781,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
+  WsExternalSessionsSubscribeRpc,
 );

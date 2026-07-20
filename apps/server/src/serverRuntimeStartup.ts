@@ -23,6 +23,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 
 import * as ServerConfig from "./config.ts";
+import * as ExternalSessionsWatcher from "./externalSessions/ExternalSessionsWatcher.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
@@ -302,6 +303,7 @@ export const make = Effect.gen(function* () {
   const providerSessionReaper = yield* ProviderSessionReaper.ProviderSessionReaper;
   const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const externalSessions = yield* ExternalSessionsWatcher.ExternalSessionsWatcher;
   const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
   const crypto = yield* Crypto.Crypto;
 
@@ -326,6 +328,9 @@ export const make = Effect.gen(function* () {
         Effect.forkScoped,
       ),
     );
+
+    yield* Effect.logDebug("startup phase: starting external sessions watcher");
+    yield* runStartupPhase("externalSessions.start", externalSessions.start);
 
     yield* Effect.logDebug("startup phase: starting server settings runtime");
     yield* runStartupPhase(

@@ -81,12 +81,14 @@ import { isTerminalFocused } from "../lib/terminalFocus";
 import { cn, isMacPlatform } from "../lib/utils";
 import {
   readThreadShell,
+  useExternalSessionsForProject,
   useProject,
   useProjects,
   useServerConfigs,
   useThreadShells,
   useThreadShellsForProjectRefs,
 } from "../state/entities";
+import { ExternalSessionsSection } from "./ExternalSessionsSection";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { useThreadDiscoveredPorts } from "../portDiscoveryState";
@@ -1114,6 +1116,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     (settings) => settings.confirmThreadArchive,
   );
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
+  // Fork feature ("the radar"): external Claude Code sessions for this project.
+  const showExternalSessions = useClientSettings<boolean>(
+    (settings) => settings.showExternalSessions,
+  );
+  const externalSessions = useExternalSessionsForProject(project.id);
   const serverConfigs = useServerConfigs();
   const deleteProject = useAtomCommand(projectEnvironment.delete, {
     reportFailure: false,
@@ -2389,6 +2396,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         expandThreadListForProject={expandThreadListForProject}
         collapseThreadListForProject={collapseThreadListForProject}
       />
+
+      {projectExpanded && showExternalSessions ? (
+        <ExternalSessionsSection sessions={externalSessions} />
+      ) : null}
 
       <Dialog
         open={projectRenameTarget !== null}
