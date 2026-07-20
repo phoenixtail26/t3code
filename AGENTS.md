@@ -72,12 +72,24 @@ userdata stores, pairing token TTL) are all listed there.
 
 ### Subagent model usage
 
-- Dispatch well-scoped, mechanical, or exploratory subagent work — codebase
-  search, running builds/tests, log analysis, file discovery — with
-  `model: "sonnet"`. The main session's model is for planning, design, and
-  changes that need judgment.
+- **ALWAYS delegate codebase exploration to the `codebase-search-specialist`
+  agent** (`.claude/agents/codebase-search-specialist.md`, pinned to sonnet via
+  frontmatter): finding usages/implementations, tracing symbols across
+  packages, understanding how a subsystem works, file discovery. Do not run
+  multi-step Grep/Glob exploration from the main session — a quick single
+  lookup where you already know the file is fine; a search *campaign* is not.
+- Dispatch other well-scoped, mechanical subagent work — running builds/tests,
+  log analysis — with `model: "sonnet"` on the `Agent` call. The main session's
+  model is for planning, design, and changes that need judgment.
 - This is a guideline, not a hard rule: a subagent doing genuinely hard
   reasoning may use a stronger model when the task warrants it.
 - The owner's plan-limit pressure is on the top-tier weekly window (visible in
   the sidebar usage meter this fork adds) — cheap-model fanout is the main
   lever for keeping it down.
+- **Per-call `model:` is not automatic.** Subagents inherit the main session's
+  model unless overridden; built-in agent types (`Explore`, `general-purpose`,
+  `Plan`) have no cheaper default of their own. Frontmatter in
+  `.claude/agents/*.md` is the only enforcement that survives the dispatcher
+  forgetting — new agent definitions there should default to `model: sonnet`,
+  and repeatedly-delegated work should get a named agent rather than rely on
+  per-call discipline.
