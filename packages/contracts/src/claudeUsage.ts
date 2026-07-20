@@ -33,6 +33,7 @@ export const ClaudeUsageUnavailableReason = Schema.Literals([
   "no-credentials",
   "request-failed",
   "unauthorized",
+  "rate-limited",
 ]);
 export type ClaudeUsageUnavailableReason = typeof ClaudeUsageUnavailableReason.Type;
 

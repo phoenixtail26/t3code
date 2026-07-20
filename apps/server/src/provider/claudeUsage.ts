@@ -173,7 +173,7 @@ export const getClaudeUsageSummary = Effect.fn("getClaudeUsageSummary")(function
     }
     const httpResponse = response.value;
     if (httpResponse.status === 429) {
-      return { summary: unavailableSummary("request-failed", checkedAt), rateLimited: true };
+      return { summary: unavailableSummary("rate-limited", checkedAt), rateLimited: true };
     }
     if (httpResponse.status === 401 || httpResponse.status === 403) {
       return { summary: unavailableSummary("unauthorized", checkedAt), rateLimited: false };

@@ -172,8 +172,8 @@ function UsageLimitRow({ limit }: { readonly limit: ClaudeUsageLimit }) {
  * other limit crosses into warning or error an extra alert row appears under
  * them, and escalations observed at runtime raise a toast. Hover shows the
  * full per-window breakdown — the same data as the Claude Code `/usage`
- * screen. Hidden while usage is unavailable (no Claude credentials, offline,
- * or no limit data).
+ * screen. A transient outage (rate limit, unreachable endpoint) degrades to
+ * a "Usage —" pill; only missing/invalid credentials hide it entirely.
  */
 export function SidebarClaudeUsagePill() {
   const [summary, setSummary] = useState<ClaudeUsageSummary | null>(null);
@@ -212,8 +212,37 @@ export function SidebarClaudeUsagePill() {
     };
   }, [refresh]);
 
-  if (summary === null || summary.status !== "ok" || summary.limits.length === 0) {
-    return null;
+  if (summary === null) return null;
+  if (summary.status !== "ok" || summary.limits.length === 0) {
+    // A transient outage (rate-limited or unreachable endpoint) shows a
+    // degraded pill rather than vanishing — a missing meter reads as a bug.
+    // Missing/invalid credentials stay hidden: there is nothing to meter.
+    const reason = summary.unavailableReason;
+    if (reason !== "rate-limited" && reason !== "request-failed") return null;
+    const explanation =
+      reason === "rate-limited"
+        ? "Anthropic's usage endpoint is rate-limiting requests from this account (too many pollers). Numbers return automatically once the block lifts."
+        : "The usage endpoint is unreachable. Numbers return automatically on the next successful poll.";
+    return (
+      <Tooltip onOpenChange={setBreakdownOpen} open={breakdownOpen}>
+        <TooltipTrigger
+          render={
+            <div
+              className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-lg px-2 text-xs text-muted-foreground/50 transition-colors hover:bg-accent"
+              aria-label="Claude plan usage unavailable"
+              onClick={() => setBreakdownOpen((open) => !open)}
+            >
+              <GaugeIcon className="size-3.5" />
+              <span>Usage</span>
+              <span className="ml-auto font-medium">—</span>
+            </div>
+          }
+        />
+        <TooltipPopup align="start" side="top">
+          <div className="w-56 text-left text-xs leading-4">{explanation}</div>
+        </TooltipPopup>
+      </Tooltip>
+    );
   }
   const sessionLimit = pickSessionLimit(summary.limits);
   if (sessionLimit === null) return null;
