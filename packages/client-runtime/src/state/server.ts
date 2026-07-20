@@ -339,6 +339,10 @@ export function createServerEnvironmentAtoms<R, E>(
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
+    sendTestPushNotification: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:send-test-push-notification",
+      tag: WS_METHODS.serverSendTestPushNotification,
+    }),
     signalProcess: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:signal-process",
       tag: WS_METHODS.serverSignalProcess,

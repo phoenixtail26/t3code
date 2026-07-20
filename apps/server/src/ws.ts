@@ -80,6 +80,7 @@ import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerSettings from "./serverSettings.ts";
+import { sendTestPushNotification } from "./notifications/PushNotifierService.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as PreviewManager from "./preview/Manager.ts";
@@ -1293,6 +1294,16 @@ const makeWsRpcLayer = (
             serverSettings
               .updateSettings(patch)
               .pipe(Effect.map(ServerSettings.redactServerSettingsForClient)),
+            {
+              "rpc.aggregate": "server",
+            },
+          ),
+        [WS_METHODS.serverSendTestPushNotification]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.serverSendTestPushNotification,
+            serverSettings.getSettings.pipe(
+              Effect.flatMap((settings) => sendTestPushNotification(settings.pushNotifications)),
+            ),
             {
               "rpc.aggregate": "server",
             },

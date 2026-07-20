@@ -18,7 +18,10 @@ import {
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import {
+  DEFAULT_UNIFIED_SETTINGS,
+  type PushNotificationSettings,
+} from "@t3tools/contracts/settings";
 import { createModelSelection } from "@t3tools/shared/model";
 import * as Arr from "effect/Array";
 import * as Duration from "effect/Duration";
@@ -499,6 +502,178 @@ export function useSettingsRestore(onRestored?: () => void) {
     changedSettingLabels,
     restoreDefaults,
   };
+}
+
+/**
+ * Server-side phone push (ntfy) configuration. Unlike the per-device desktop
+ * notification toggles above it, these live in ServerSettings — one config for
+ * the machine, edited from any client. Previously hand-edited in
+ * settings.json with the app stopped.
+ */
+function PushNotificationSettingsSection() {
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  const primaryEnvironmentId = usePrimaryEnvironment()?.environmentId ?? null;
+  const sendTestPush = useAtomCommand(
+    serverEnvironment.sendTestPushNotification,
+    "send test push notification",
+  );
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ sent: boolean; detail: string } | null>(null);
+
+  const push = settings.pushNotifications;
+  const pushDefaults = DEFAULT_UNIFIED_SETTINGS.pushNotifications;
+  const disabled = push.topicUrl.length === 0;
+  const updatePush = (patch: Partial<PushNotificationSettings>) =>
+    updateSettings({ pushNotifications: { ...push, ...patch } });
+
+  const runTest = () => {
+    if (primaryEnvironmentId === null || testing) return;
+    setTesting(true);
+    setTestResult(null);
+    void (async () => {
+      const settled = await settlePromise(() =>
+        sendTestPush({ environmentId: primaryEnvironmentId, input: {} }),
+      );
+      const outcome = settled._tag === "Success" ? settled.value : settled;
+      setTesting(false);
+      setTestResult(
+        outcome._tag === "Success"
+          ? outcome.value
+          : { sent: false, detail: "Request failed. Check the server log." },
+      );
+    })();
+  };
+
+  const phaseToggle = (
+    key: "notifyOnApproval" | "notifyOnInput" | "notifyOnFailure" | "notifyOnCompletion",
+    title: string,
+    description: string,
+  ) => (
+    <SettingsRow
+      title={title}
+      description={description}
+      resetAction={
+        push[key] !== pushDefaults[key] ? (
+          <SettingResetButton
+            label={title.toLowerCase()}
+            onClick={() => updatePush({ [key]: pushDefaults[key] })}
+          />
+        ) : null
+      }
+      control={
+        <Switch
+          checked={push[key]}
+          disabled={disabled}
+          onCheckedChange={(checked) => updatePush({ [key]: Boolean(checked) })}
+          aria-label={title}
+        />
+      }
+    />
+  );
+
+  return (
+    <SettingsSection title="Phone push">
+      <SettingsRow
+        title="ntfy topic URL"
+        description="Full topic URL, e.g. https://ntfy.sh/your-secret-topic. Empty disables phone push entirely. The topic name is the only credential — treat it like a secret."
+        resetAction={
+          push.topicUrl !== pushDefaults.topicUrl ? (
+            <SettingResetButton
+              label="ntfy topic URL"
+              onClick={() => updatePush({ topicUrl: pushDefaults.topicUrl })}
+            />
+          ) : null
+        }
+        control={
+          <DraftInput
+            className="w-full sm:w-72"
+            value={push.topicUrl}
+            onCommit={(next) => updatePush({ topicUrl: next.trim() })}
+            placeholder="https://ntfy.sh/your-secret-topic"
+            spellCheck={false}
+            aria-label="ntfy topic URL"
+          />
+        }
+      />
+      <SettingsRow
+        title="Click-through base URL"
+        description="Public URL of this server used to build notification links, e.g. https://machine.tailnet.ts.net. Empty omits the link."
+        resetAction={
+          push.publicBaseUrl !== pushDefaults.publicBaseUrl ? (
+            <SettingResetButton
+              label="click-through base URL"
+              onClick={() => updatePush({ publicBaseUrl: pushDefaults.publicBaseUrl })}
+            />
+          ) : null
+        }
+        control={
+          <DraftInput
+            className="w-full sm:w-72"
+            value={push.publicBaseUrl}
+            onCommit={(next) => updatePush({ publicBaseUrl: next.trim() })}
+            placeholder="https://machine.tailnet.ts.net"
+            spellCheck={false}
+            aria-label="Click-through base URL"
+          />
+        }
+      />
+      {phaseToggle(
+        "notifyOnApproval",
+        "Push on approval",
+        "A thread is waiting for permission approval.",
+      )}
+      {phaseToggle(
+        "notifyOnInput",
+        "Push on question",
+        "A thread asked a question and is waiting.",
+      )}
+      {phaseToggle("notifyOnFailure", "Push on failure", "A thread failed.")}
+      {phaseToggle("notifyOnCompletion", "Push on completion", "A thread finished its work.")}
+      <SettingsRow
+        title="Suppress while at the computer"
+        description="Skip the phone push if you were active at this machine within this many seconds — you already got the desktop notification. 0 always pushes."
+        resetAction={
+          push.suppressWhenPresentSeconds !== pushDefaults.suppressWhenPresentSeconds ? (
+            <SettingResetButton
+              label="presence suppression window"
+              onClick={() =>
+                updatePush({ suppressWhenPresentSeconds: pushDefaults.suppressWhenPresentSeconds })
+              }
+            />
+          ) : null
+        }
+        control={
+          <DraftInput
+            className="w-full sm:w-24 text-right"
+            value={String(push.suppressWhenPresentSeconds)}
+            onCommit={(next) => {
+              const parsed = Number(next.trim());
+              if (!Number.isFinite(parsed) || parsed < 0) return;
+              updatePush({ suppressWhenPresentSeconds: Math.round(parsed) });
+            }}
+            inputMode="numeric"
+            spellCheck={false}
+            aria-label="Presence suppression window in seconds"
+          />
+        }
+      />
+      <SettingsRow
+        title="Send a test notification"
+        description={
+          testResult === null
+            ? "Verify the topic URL by sending a test push right now. Ignores the presence suppression above."
+            : testResult.detail
+        }
+        control={
+          <Button size="xs" variant="outline" disabled={disabled || testing} onClick={runTest}>
+            {testing ? <LoaderIcon className="size-3.5 animate-spin" /> : null}
+            {testing ? "Sending…" : "Send test"}
+          </Button>
+        }
+      />
+    </SettingsSection>
+  );
 }
 
 export function GeneralSettingsPanel() {
@@ -1058,6 +1233,8 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
+
+      <PushNotificationSettingsSection />
 
       <SettingsSection title="About">
         {isElectron || HOSTED_APP_CHANNEL ? (

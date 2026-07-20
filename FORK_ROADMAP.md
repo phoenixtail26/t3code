@@ -103,15 +103,24 @@ behind the IDE, with no signal at all until you happened to look. Now:
 
 Net effect: at the desk you get a toast; away, the phone; never both.
 
-## 4. Notification settings UI for the phone/push fields
+## 4. Notification settings UI for the phone/push fields (DONE 2026-07-20)
 
-`ServerSettings.pushNotifications` (topic URL, public base URL, per-phase
-toggles, suppression window) is still edited by hand in
-`~\.t3\userdata\settings.json`, with the app stopped because the server
-normalizes the file on boot. The per-device desktop toggles now have UI
-(roadmap #3), so this is the remaining gap — a Connections/Notifications
-settings section would complete it, including a "send test notification"
-button to verify a topic without contriving a thread event.
+`ServerSettings.pushNotifications` is now editable in Settings → General under
+a "Phone push" section: topic URL, click-through base URL, the four per-phase
+toggles, the presence-suppression window, and a "Send test" button backed by a
+new `server.sendTestPushNotification` RPC (bypasses presence suppression by
+design; delivery problems come back inline as values, not errors). The write
+path needed no new plumbing — `ServerSettingsPatch` already exposed
+`pushNotifications` and `server.updateSettings` deep-merges.
+
+Verification note: in an isolated browser-paired dev environment
+(`vp run dev` + pairing token), server-settings writes from the web UI never
+reached the server — for the new section AND for long-shipped settings like
+"Add project starts in" (optimistic UI updates, no RPC sent, no error
+surfaced). Pre-existing behavior, not a regression; the Electron daily driver
+uses the local bootstrap grant and is the real test. If phone-PWA sessions
+show the same silent read-only behavior, that silent drop deserves its own
+fix — surfacing it belongs with roadmap #5's honesty work.
 
 ## 5. Surface a stale connection instead of rendering old data
 

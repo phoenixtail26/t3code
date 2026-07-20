@@ -208,6 +208,7 @@ export const WS_METHODS = {
   serverRemoveKeybinding: "server.removeKeybinding",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
+  serverSendTestPushNotification: "server.sendTestPushNotification",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverGetTraceDiagnostics: "server.getTraceDiagnostics",
   serverGetProcessDiagnostics: "server.getProcessDiagnostics",
@@ -283,6 +284,21 @@ export const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSetting
   success: ServerSettings,
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
 });
+
+/**
+ * Fire a test phone push with the currently saved settings, so a topic URL can
+ * be verified without contriving a thread event. Delivery problems (no topic,
+ * HTTP rejection, timeout) come back as `sent: false` with a human-readable
+ * `detail` rather than as an error, so the settings UI can render them inline.
+ */
+export const WsServerSendTestPushNotificationRpc = Rpc.make(
+  WS_METHODS.serverSendTestPushNotification,
+  {
+    payload: Schema.Struct({}),
+    success: Schema.Struct({ sent: Schema.Boolean, detail: Schema.String }),
+    error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
+  },
+);
 
 export const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
   payload: Schema.Struct({}),
@@ -689,6 +705,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRemoveKeybindingRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
+  WsServerSendTestPushNotificationRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerGetTraceDiagnosticsRpc,
   WsServerGetProcessDiagnosticsRpc,
