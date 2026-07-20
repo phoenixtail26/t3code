@@ -387,6 +387,44 @@ here, so the registry entry is the one to rely on.
 A packaged build (`pnpm dist:desktop:win`) sets this up properly on install and
 makes the whole issue moot.
 
+## Action Center toast clicks do nothing (banner clicks work)
+
+Two different activation paths. A click on the live banner is delivered
+in-process via the WinRT `Activated` event; a click after the toast has slid
+into the Action Center goes through COM — Windows looks up the toast's
+AppUserModelID on a Start Menu shortcut, reads its
+`System.AppUserModel.ToastActivatorCLSID`, and activates that COM class. No
+CLSID on the matched shortcut → the click is silently dropped.
+
+Electron (41+) self-registers everything at runtime: the CLSID under
+`HKCU\Software\Classes\CLSID\{C227FFB3-BAB6-4AF5-9F0C-11CE39C524A0}` with
+`LocalServer32` pointing at this fork's `electron.exe`, plus an auto-created
+`Electron.lnk` in the Start Menu carrying AUMID + CLSID. The trap: the manual
+`T3 Code (fork).lnk` shares the same AUMID **without** the CLSID property, and
+Windows may resolve activation through whichever shortcut it finds first —
+landing on the bare one kills Action Center clicks while banner clicks keep
+working.
+
+**Status 2026-07-20: unresolved unpackaged; accepted.** Two fixes were applied
+and verified present, and Action Center clicks still did nothing:
+
+1. Stamped the same CLSID onto the launcher shortcut. The property is
+   `VT_CLSID` (fmtid `9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3`, pid 26) — it must
+   be written as a GUID via `IPropertyStore` (ShellLink CoClass →
+   `SetValue` with a `VT_CLSID` PROPVARIANT → `Commit` → `IPersistFile.Save`);
+   writing it as a string fails. Read back with
+   `$item.ExtendedProperty("System.AppUserModel.ToastActivatorCLSID")`.
+2. Added `CustomActivator = {C227FFB3-…}` to the
+   `HKCU\Software\Classes\AppUserModelId\com.t3tools.t3code` key (the branding
+   resolves through this registry registration, which uses `CustomActivator`
+   for activation), then restarted the app.
+
+Both registrations are left in place — they are correct and harmless. The
+conclusion is that unpackaged Electron does not get reliable Action Center
+activation on this setup; the definitive fix is the packaged build
+(`pnpm dist:desktop:win`), which registers identity and activator at install.
+Banner clicks, the taskbar dot, and phone push are unaffected and work.
+
 ## Verify the auth fix
 
 Open the Claude tab (or Settings -> Providers -> Claude). With the fix it reads
