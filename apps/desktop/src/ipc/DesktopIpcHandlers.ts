@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 
 import * as DesktopIpc from "./DesktopIpc.ts";
 import {
+  focusMainWindow,
   getSystemIdleSeconds,
   listNotificationSounds,
   readNotificationSound,
@@ -79,6 +80,7 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(setTailscaleServeEnabled);
   yield* ipc.handle(getAdvertisedEndpoints);
   yield* ipc.handle(setAttentionState);
+  yield* ipc.handle(focusMainWindow);
   yield* ipc.handle(getSystemIdleSeconds);
   yield* ipc.handle(listNotificationSounds);
   yield* ipc.handle(readNotificationSound);

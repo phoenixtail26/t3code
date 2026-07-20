@@ -993,6 +993,13 @@ export interface DesktopBridge {
    */
   setAttentionState?: (input: { readonly waiting: boolean }) => Promise<void>;
   /**
+   * Restore/show/focus the main window from the main process. Renderer-side
+   * `window.focus()` cannot foreground a minimized/background window on
+   * Windows, so notification clicks need this. Optional for the same
+   * version-drift reason as {@link setAttentionState}.
+   */
+  focusMainWindow?: () => Promise<void>;
+  /**
    * Seconds since the last OS-level user input, so the renderer can report the
    * user present even while this app is in the background. Optional for the
    * same version-drift reason as {@link setAttentionState}.

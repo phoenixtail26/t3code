@@ -127,6 +127,23 @@ export const getSystemIdleSeconds = DesktopIpc.makeIpcMethod({
   }),
 });
 
+/**
+ * Restore/show/focus the main window. `window.focus()` in the renderer cannot
+ * un-minimize or foreground a window on Windows, so a notification click that
+ * navigates without this appears to do nothing.
+ */
+export const focusMainWindow = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.FOCUS_MAIN_WINDOW_CHANNEL,
+  payload: Schema.Void,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.attention.focusMainWindow")(function* () {
+    const electronWindow = yield* ElectronWindow.ElectronWindow;
+    const window = yield* electronWindow.currentMainOrFirst;
+    if (Option.isNone(window)) return;
+    yield* electronWindow.reveal(window.value);
+  }),
+});
+
 export const setAttentionState = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.SET_ATTENTION_STATE_CHANNEL,
   payload: AttentionStateInput,
