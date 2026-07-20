@@ -1,6 +1,6 @@
 import type { ClaudeUsageLimit, ClaudeUsageSeverity, ClaudeUsageSummary } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import { GaugeIcon, TriangleAlertIcon } from "lucide-react";
+import { CalendarClockIcon, GaugeIcon, TriangleAlertIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { PrimaryEnvironmentHttpClient } from "../../environments/primary/httpClient";
@@ -54,13 +54,33 @@ export function pickSessionLimit(limits: ReadonlyArray<ClaudeUsageLimit>): Claud
   return limits.find((limit) => limit.kind === "session") ?? pickHeadlineLimit(limits);
 }
 
-/** Worst non-session limit that has crossed into warning/error, if any. */
-export function pickAlertLimit(
+/**
+ * The model-scoped weekly window (e.g. "Week · Fable") — the budget that can
+ * burn through in a single heavy day, so it stays on screen from 0% rather
+ * than surfacing only once it has already crossed into warning. Highest
+ * utilization wins when the account has several scoped windows.
+ */
+export function pickScopedWeeklyLimit(
   limits: ReadonlyArray<ClaudeUsageLimit>,
   sessionLimit: ClaudeUsageLimit | null,
 ): ClaudeUsageLimit | null {
+  let scoped: ClaudeUsageLimit | null = null;
+  for (const limit of limits) {
+    if (limit.kind !== "weekly_scoped" || limit === sessionLimit) continue;
+    if (scoped === null || limit.percent > scoped.percent) {
+      scoped = limit;
+    }
+  }
+  return scoped;
+}
+
+/** Worst limit not already pinned on screen that has crossed into warning/error. */
+export function pickAlertLimit(
+  limits: ReadonlyArray<ClaudeUsageLimit>,
+  pinnedLimits: ReadonlyArray<ClaudeUsageLimit | null>,
+): ClaudeUsageLimit | null {
   const alertCandidates = limits.filter(
-    (limit) => limit !== sessionLimit && limit.severity !== "normal",
+    (limit) => !pinnedLimits.includes(limit) && limit.severity !== "normal",
   );
   return pickHeadlineLimit(alertCandidates);
 }
@@ -147,12 +167,13 @@ function UsageLimitRow({ limit }: { readonly limit: ClaudeUsageLimit }) {
 }
 
 /**
- * Plan-usage meter for the sidebar footer: the session (5-hour) window is
- * always on screen; when a weekly/scoped limit crosses into warning or
- * error an extra alert row appears under it, and escalations observed at
- * runtime raise a toast. Hover shows the full per-window breakdown — the
- * same data as the Claude Code `/usage` screen. Hidden while usage is
- * unavailable (no Claude credentials, offline, or no limit data).
+ * Plan-usage meter for the sidebar footer: the session (5-hour) window and
+ * the model-scoped weekly window (e.g. Fable) are always on screen; when any
+ * other limit crosses into warning or error an extra alert row appears under
+ * them, and escalations observed at runtime raise a toast. Hover shows the
+ * full per-window breakdown — the same data as the Claude Code `/usage`
+ * screen. Hidden while usage is unavailable (no Claude credentials, offline,
+ * or no limit data).
  */
 export function SidebarClaudeUsagePill() {
   const [summary, setSummary] = useState<ClaudeUsageSummary | null>(null);
@@ -196,7 +217,8 @@ export function SidebarClaudeUsagePill() {
   }
   const sessionLimit = pickSessionLimit(summary.limits);
   if (sessionLimit === null) return null;
-  const alertLimit = pickAlertLimit(summary.limits, sessionLimit);
+  const scopedWeeklyLimit = pickScopedWeeklyLimit(summary.limits, sessionLimit);
+  const alertLimit = pickAlertLimit(summary.limits, [sessionLimit, scopedWeeklyLimit]);
 
   return (
     <Tooltip onOpenChange={setBreakdownOpen} open={breakdownOpen}>
@@ -216,6 +238,17 @@ export function SidebarClaudeUsagePill() {
                 {Math.round(sessionLimit.percent)}%
               </span>
             </div>
+            {scopedWeeklyLimit && (
+              <div className="flex h-7 items-center gap-2 px-2 pt-0 text-xs text-muted-foreground/70">
+                <CalendarClockIcon className="size-3.5" />
+                <span className="truncate">{scopedWeeklyLimit.label}</span>
+                <span
+                  className={`ml-auto font-medium tabular-nums ${SEVERITY_TEXT[scopedWeeklyLimit.severity]}`}
+                >
+                  {Math.round(scopedWeeklyLimit.percent)}%
+                </span>
+              </div>
+            )}
             {alertLimit && (
               <div
                 className={`mx-1 mb-1 flex h-6 items-center gap-2 rounded-md px-1.5 text-xs ${

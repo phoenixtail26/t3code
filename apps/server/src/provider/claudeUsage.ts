@@ -36,9 +36,15 @@ const REQUEST_TIMEOUT_MS = 10_000;
 // current without hammering the endpoint from every connected client.
 // Filled by fetches, invalidated by TTL expiry, cleared on server restart.
 const CACHE_TTL_MS = 60_000;
+// The endpoint rate-limits per account, and this server is not the only
+// consumer (every Claude Code session polls it, plus any second T3 instance).
+// Once a 429 arrives, retrying on the normal cadence just prolongs the
+// blackout for every consumer — back off much further.
+const RATE_LIMITED_TTL_MS = 5 * 60_000;
 
 interface CacheEntry {
   readonly fetchedAtMs: number;
+  readonly ttlMs: number;
   readonly summary: ClaudeUsageSummary;
 }
 
@@ -143,7 +149,7 @@ export const getClaudeUsageSummary = Effect.fn("getClaudeUsageSummary")(function
   const credentialsPath = resolveClaudeCredentialsPath(homePath);
   const nowMs = DateTime.toEpochMillis(yield* DateTime.now);
   const cached = cacheByCredentialsPath.get(credentialsPath);
-  if (cached && nowMs - cached.fetchedAtMs < CACHE_TTL_MS) {
+  if (cached && nowMs - cached.fetchedAtMs < cached.ttlMs) {
     return cached.summary;
   }
 
@@ -155,7 +161,7 @@ export const getClaudeUsageSummary = Effect.fn("getClaudeUsageSummary")(function
     return unavailableSummary("no-credentials", checkedAt);
   }
 
-  const summary = yield* Effect.gen(function* () {
+  const fetched = yield* Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     const request = HttpClientRequest.get(USAGE_ENDPOINT).pipe(
       HttpClientRequest.setHeader("authorization", `Bearer ${token}`),
@@ -163,34 +169,47 @@ export const getClaudeUsageSummary = Effect.fn("getClaudeUsageSummary")(function
     );
     const response = yield* client.execute(request).pipe(Effect.timeoutOption(REQUEST_TIMEOUT_MS));
     if (Option.isNone(response)) {
-      return unavailableSummary("request-failed", checkedAt);
+      return { summary: unavailableSummary("request-failed", checkedAt), rateLimited: false };
     }
     const httpResponse = response.value;
+    if (httpResponse.status === 429) {
+      return { summary: unavailableSummary("request-failed", checkedAt), rateLimited: true };
+    }
     if (httpResponse.status === 401 || httpResponse.status === 403) {
-      return unavailableSummary("unauthorized", checkedAt);
+      return { summary: unavailableSummary("unauthorized", checkedAt), rateLimited: false };
     }
     if (httpResponse.status < 200 || httpResponse.status >= 300) {
-      return unavailableSummary("request-failed", checkedAt);
+      return { summary: unavailableSummary("request-failed", checkedAt), rateLimited: false };
     }
     const payload = yield* httpResponse.json;
-    return {
+    const summary: ClaudeUsageSummary = {
       status: "ok",
       checkedAt,
       limits: mapUpstreamLimits(payload),
-    } satisfies ClaudeUsageSummary;
+    };
+    return { summary, rateLimited: false };
   }).pipe(
     Effect.provide(FetchHttpClient.layer),
-    Effect.orElseSucceed(() => unavailableSummary("request-failed", checkedAt)),
+    Effect.orElseSucceed(() => ({
+      summary: unavailableSummary("request-failed", checkedAt),
+      rateLimited: false,
+    })),
   );
 
+  const { summary, rateLimited } = fetched;
+  const ttlMs = rateLimited ? RATE_LIMITED_TTL_MS : CACHE_TTL_MS;
   if (summary.status === "unavailable" && cached?.summary.status === "ok") {
     // Stale-while-error: a transient upstream failure keeps serving the last
     // good numbers (and re-arms the TTL so the retry is paced) instead of
     // blanking every client's meter for a cycle.
-    cacheByCredentialsPath.set(credentialsPath, { fetchedAtMs: nowMs, summary: cached.summary });
+    cacheByCredentialsPath.set(credentialsPath, {
+      fetchedAtMs: nowMs,
+      ttlMs,
+      summary: cached.summary,
+    });
     return cached.summary;
   }
 
-  cacheByCredentialsPath.set(credentialsPath, { fetchedAtMs: nowMs, summary });
+  cacheByCredentialsPath.set(credentialsPath, { fetchedAtMs: nowMs, ttlMs, summary });
   return summary;
 });
