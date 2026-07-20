@@ -641,6 +641,32 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
+          title="External sessions"
+          description="Show Claude Code sessions running outside T3 (CLI, IDE terminals) under each project in the sidebar."
+          resetAction={
+            settings.showExternalSessions !== DEFAULT_UNIFIED_SETTINGS.showExternalSessions ? (
+              <SettingResetButton
+                label="external sessions"
+                onClick={() =>
+                  updateSettings({
+                    showExternalSessions: DEFAULT_UNIFIED_SETTINGS.showExternalSessions,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.showExternalSessions}
+              onCheckedChange={(checked) =>
+                updateSettings({ showExternalSessions: Boolean(checked) })
+              }
+              aria-label="Show external Claude Code sessions in the sidebar"
+            />
+          }
+        />
+
+        <SettingsRow
           title="Hide whitespace changes"
           description="Set whether the diff panel ignores whitespace-only edits by default."
           resetAction={

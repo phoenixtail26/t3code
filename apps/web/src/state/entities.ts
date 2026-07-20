@@ -6,6 +6,7 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import { mergeEnvironmentThread } from "@t3tools/client-runtime/state/threads";
 import type {
+  ExternalSessionShell,
   OrchestrationMessage,
   OrchestrationProposedPlan,
   OrchestrationSession,
@@ -18,6 +19,8 @@ import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { Atom } from "effect/unstable/reactivity";
 import { useMemo } from "react";
 import { appAtomRegistry } from "../rpc/atomRegistry";
+import { environmentExternalSessions } from "./externalSessions";
+import { primaryEnvironmentIdAtom } from "./primaryEnvironment";
 import { environmentProjects } from "./projects";
 import { environmentServerConfigsAtom } from "./server";
 import { allEnvironmentShellsBootstrappedAtom } from "./shell";
@@ -28,6 +31,7 @@ const EMPTY_THREAD_REFS: ReadonlyArray<ScopedThreadRef> = Object.freeze([]);
 const EMPTY_MESSAGES: ReadonlyArray<OrchestrationMessage> = Object.freeze([]);
 const EMPTY_ACTIVITIES: ReadonlyArray<OrchestrationThreadActivity> = Object.freeze([]);
 const EMPTY_PROPOSED_PLANS: ReadonlyArray<OrchestrationProposedPlan> = Object.freeze([]);
+const EMPTY_EXTERNAL_SESSIONS: ReadonlyArray<ExternalSessionShell> = Object.freeze([]);
 
 const EMPTY_PROJECT_ATOM = Atom.make<EnvironmentProject | null>(null).pipe(
   Atom.withLabel("web-project:empty"),
@@ -55,6 +59,9 @@ const EMPTY_PROPOSED_PLANS_ATOM = Atom.make(EMPTY_PROPOSED_PLANS).pipe(
 );
 const EMPTY_SESSION_ATOM = Atom.make<OrchestrationSession | null>(null).pipe(
   Atom.withLabel("web-thread-session:empty"),
+);
+const EMPTY_EXTERNAL_SESSIONS_ATOM = Atom.make(EMPTY_EXTERNAL_SESSIONS).pipe(
+  Atom.withLabel("web-external-sessions:empty"),
 );
 
 export const activeEnvironmentIdAtom = Atom.make<EnvironmentId | null>(null).pipe(
@@ -122,6 +129,23 @@ export function useThreadShellsForProjectRefs(
   refs: ReadonlyArray<ScopedProjectRef>,
 ): ReadonlyArray<EnvironmentThreadShell> {
   return useAtomValue(environmentThreadShells.threadShellsForProjectRefsAtom(refs));
+}
+
+/**
+ * External Claude Code sessions ("the radar") for a project, sorted
+ * `working` first then `lastActivityAt` descending. The radar only watches
+ * the local filesystem, so sessions are scoped to the primary environment;
+ * there is nothing to show before it is known.
+ */
+export function useExternalSessionsForProject(
+  projectId: string,
+): ReadonlyArray<ExternalSessionShell> {
+  const primaryEnvironmentId = useAtomValue(primaryEnvironmentIdAtom);
+  return useAtomValue(
+    primaryEnvironmentId === null
+      ? EMPTY_EXTERNAL_SESSIONS_ATOM
+      : environmentExternalSessions.sessionsForProjectAtom(primaryEnvironmentId, projectId),
+  );
 }
 
 export function useProject(ref: ScopedProjectRef | null): EnvironmentProject | null {

@@ -10,7 +10,8 @@ branch model, upstream sync), `RUN_FORK_WINDOWS.md` (how to run/build here).
 started in Rider terminals or plain CLI — not just threads it spawned, with at
 minimum read visibility and ideally one-click resume.
 
-Implementation sketch (researched, not started):
+Full implementation plan with phase/task/delegation breakdown:
+`FORK_PLAN_RADAR.md` (2026-07-20). Sketch below kept for context:
 
 - **Discovery:** watch `~/.claude/projects/<project-slug>/*.jsonl` (every
   surface writes there; slug maps to cwd). Tail the newest entries for state:
