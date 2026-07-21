@@ -2081,7 +2081,7 @@ const makeWsRpcLayer = (
             }),
             { "rpc.aggregate": "auth" },
           ),
-        ...(yield* makeExternalSessionsWsHandlers({ observeRpcStreamEffect })),
+        ...(yield* makeExternalSessionsWsHandlers({ observeRpcStreamEffect, observeRpcEffect })),
         ...(yield* makeWebPushWsHandlers({ observeRpcEffect })),
       });
     }),
