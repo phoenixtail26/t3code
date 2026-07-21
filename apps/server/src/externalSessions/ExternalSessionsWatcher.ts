@@ -38,7 +38,7 @@ import {
 } from "./sessionMetadata.ts";
 import { parseTranscriptLine, splitJsonlChunk } from "./transcriptRecords.ts";
 
-export type ExternalSessionState = "working" | "idle";
+export type ExternalSessionState = "working" | "idle" | "waiting";
 
 export interface ExternalSessionSnapshot {
   readonly sessionId: string;
@@ -62,13 +62,14 @@ const TAIL_SCAN_BYTES = 64 * 1024;
 const MAX_TAIL_READ_BYTES = 256 * 1024;
 /** Hard cap on watched project dirs — the radar is best-effort, not exhaustive. */
 const MAX_WATCHED_DIRS = 64;
-/** `working` decays to `idle` without an FS event; re-derive on a tick. */
+/** Time-derived state transitions (`working`→`idle`, dangling tool_use
+ * →`waiting`) happen without an FS event; re-derive on a tick. */
 const STATE_DECAY_TICK_MS = 30_000;
 /** Sessions idle longer than this are ignored entirely — the radar is for
  * current work, not history (long-lived projects accumulate hundreds of
  * transcripts). Any new activity on an old session (a single appended line)
  * brings it back within one dir event. */
-const MAX_SESSION_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_SESSION_AGE_MS = 2 * 24 * 60 * 60 * 1000;
 
 const textDecoder = new TextDecoder();
 
@@ -155,7 +156,7 @@ const make = Effect.gen(function* () {
     filePath: tail.filePath,
     cwd: tail.meta.cwd,
     title: resolveTitle(tail.meta),
-    state: deriveExternalSessionState(nowMs, tail.mtimeMs),
+    state: deriveExternalSessionState(nowMs, tail.mtimeMs, tail.meta),
     lastActivityAt: DateTime.formatIso(DateTime.makeUnsafe(tail.mtimeMs)),
   });
 
@@ -349,8 +350,9 @@ const make = Effect.gen(function* () {
           }
           continue;
         }
-        const prev = sessions.get(tail.sessionId);
-        if (prev === undefined || prev.state === "idle") continue;
+        // Re-derive unconditionally: `working` decays to `idle`/`waiting`
+        // and a dangling tool_use crosses into `waiting` purely by time
+        // passing, with no FS event. `applyUpsert` drops no-op publishes.
         yield* applyUpsert(snapshotOf(tail, nowMs));
       }
     }),

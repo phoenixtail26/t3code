@@ -10,6 +10,7 @@ import {
   emptyMetadata,
   foldRecord,
   resolveTitle,
+  WAITING_THRESHOLD_MS,
   WORKING_THRESHOLD_MS,
   type ExternalSessionMetadata,
 } from "./sessionMetadata.ts";
@@ -43,6 +44,8 @@ describe("emptyMetadata", () => {
       aiTitle: null,
       summaryTitle: null,
       lastTimestamp: null,
+      pendingToolUse: false,
+      permissionMode: null,
     });
   });
 });
@@ -73,6 +76,23 @@ describe("foldRecord", () => {
     expect(meta.aiTitle).toBe("second ai title");
     expect(meta.summaryTitle).toBe("a summary");
     expect(meta.customTitle).toBe("a custom title");
+  });
+
+  it("tracks pendingToolUse latest-wins, ignoring records with no opinion", () => {
+    let meta = emptyMetadata();
+    meta = foldRecord(meta, { pendingToolUse: true });
+    expect(meta.pendingToolUse).toBe(true);
+    meta = foldRecord(meta, { title: { kind: "ai", value: "no opinion record" } });
+    expect(meta.pendingToolUse).toBe(true);
+    meta = foldRecord(meta, { pendingToolUse: false });
+    expect(meta.pendingToolUse).toBe(false);
+  });
+
+  it("tracks permissionMode latest-wins", () => {
+    let meta = emptyMetadata();
+    meta = foldRecord(meta, { permissionMode: "default" });
+    meta = foldRecord(meta, { permissionMode: "bypassPermissions" });
+    expect(meta.permissionMode).toBe("bypassPermissions");
   });
 });
 
@@ -137,6 +157,22 @@ describe("fixture-driven fold", () => {
     expect(resolveTitle(meta)).toBe("Style review of parse.ts via subagent");
   });
 
+  it("tool-use.jsonl ends with no pending tool_use (every tool_use answered)", () => {
+    const meta = foldFixture("tool-use.jsonl");
+    expect(meta.pendingToolUse).toBe(false);
+    expect(meta.permissionMode).toBe("default");
+  });
+
+  it("dangling-tool-use.jsonl ends pending and derives waiting once stale", () => {
+    const meta = foldFixture("dangling-tool-use.jsonl");
+    expect(meta.sessionId).toBe("b10cced0-aaaa-4b7f-9716-327cdc3b1f92");
+    expect(meta.pendingToolUse).toBe(true);
+    expect(meta.permissionMode).toBe("default");
+    const nowMs = 1_000_000;
+    expect(deriveExternalSessionState(nowMs, nowMs - 1_000, meta)).toBe("working");
+    expect(deriveExternalSessionState(nowMs, nowMs - WAITING_THRESHOLD_MS, meta)).toBe("waiting");
+  });
+
   it("truncated-tail.jsonl still yields sessionId and cwd from the complete lines, with no title", () => {
     const meta = foldFixture("truncated-tail.jsonl");
     expect(meta.sessionId).toBe("d34db33f-0001-4a2a-9b9a-3f6d0c8e1a99");
@@ -146,22 +182,67 @@ describe("fixture-driven fold", () => {
 });
 
 describe("deriveExternalSessionState", () => {
+  const quiet = emptyMetadata();
+  const pending: ExternalSessionMetadata = {
+    ...emptyMetadata(),
+    pendingToolUse: true,
+    permissionMode: "default",
+  };
+
   it("is working when the file was touched now", () => {
-    expect(deriveExternalSessionState(1_000_000, 1_000_000)).toBe("working");
+    expect(deriveExternalSessionState(1_000_000, 1_000_000, quiet)).toBe("working");
   });
 
   it("is working just under the threshold", () => {
     const nowMs = 1_000_000;
-    expect(deriveExternalSessionState(nowMs, nowMs - (WORKING_THRESHOLD_MS - 1))).toBe("working");
+    expect(deriveExternalSessionState(nowMs, nowMs - (WORKING_THRESHOLD_MS - 1), quiet)).toBe(
+      "working",
+    );
   });
 
   it("is idle exactly at the threshold", () => {
     const nowMs = 1_000_000;
-    expect(deriveExternalSessionState(nowMs, nowMs - WORKING_THRESHOLD_MS)).toBe("idle");
+    expect(deriveExternalSessionState(nowMs, nowMs - WORKING_THRESHOLD_MS, quiet)).toBe("idle");
   });
 
   it("is idle well past the threshold", () => {
     const nowMs = 1_000_000;
-    expect(deriveExternalSessionState(nowMs, nowMs - WORKING_THRESHOLD_MS - 1)).toBe("idle");
+    expect(deriveExternalSessionState(nowMs, nowMs - WORKING_THRESHOLD_MS - 1, quiet)).toBe("idle");
+  });
+
+  it("is working while a dangling tool_use is younger than the waiting threshold", () => {
+    const nowMs = 1_000_000;
+    expect(deriveExternalSessionState(nowMs, nowMs - (WAITING_THRESHOLD_MS - 1), pending)).toBe(
+      "working",
+    );
+  });
+
+  it("is waiting once a dangling tool_use crosses the waiting threshold", () => {
+    const nowMs = 1_000_000;
+    expect(deriveExternalSessionState(nowMs, nowMs - WAITING_THRESHOLD_MS, pending)).toBe(
+      "waiting",
+    );
+  });
+
+  it("stays waiting past the working threshold (never decays to idle while blocked)", () => {
+    const nowMs = 100_000_000;
+    expect(deriveExternalSessionState(nowMs, nowMs - WORKING_THRESHOLD_MS * 100, pending)).toBe(
+      "waiting",
+    );
+  });
+
+  it("never reports waiting for a bypassPermissions session", () => {
+    const bypass: ExternalSessionMetadata = { ...pending, permissionMode: "bypassPermissions" };
+    const nowMs = 1_000_000;
+    expect(deriveExternalSessionState(nowMs, nowMs - WAITING_THRESHOLD_MS, bypass)).toBe("working");
+    expect(deriveExternalSessionState(nowMs, nowMs - WORKING_THRESHOLD_MS, bypass)).toBe("idle");
+  });
+
+  it("reports waiting for a dangling tool_use even when no permission-mode was ever seen", () => {
+    const unknownMode: ExternalSessionMetadata = { ...pending, permissionMode: null };
+    const nowMs = 1_000_000;
+    expect(deriveExternalSessionState(nowMs, nowMs - WAITING_THRESHOLD_MS, unknownMode)).toBe(
+      "waiting",
+    );
   });
 });

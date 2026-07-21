@@ -3,7 +3,7 @@
 Status (2026-07-21): **MVP (phases 1–3) SHIPPED** — merged to `g3code`,
 browser-verified (test-t3-app: live discovery, ai-title extraction,
 working→idle decay, settings toggle), built into the daily driver. Since the
-MVP cut: the watcher fs-integration harness landed (10 tests), and a 7-day
+MVP cut: the watcher fs-integration harness landed (10 tests), and a 2-day
 recency horizon was added (stale transcripts are skipped entirely; any CLI
 activity on an old session resurrects it within a second — the intended
 resume-ancient-sessions path).

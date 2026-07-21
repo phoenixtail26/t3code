@@ -32,12 +32,35 @@ const EXTERNAL_SESSION_IDLE_PILL: ThreadStatusPill = {
   pulse: false,
 };
 
+// Best-effort "blocked on a permission prompt" (a long-running approved
+// tool can look the same — see the contracts doc comment), hence the
+// attention treatment without a stronger claim in the label.
+const EXTERNAL_SESSION_WAITING_PILL: ThreadStatusPill = {
+  label: "Waiting" as ThreadStatusPill["label"],
+  colorClass: "text-amber-600 dark:text-amber-300/90",
+  dotClass: "bg-amber-500 dark:bg-amber-300/90",
+  pulse: true,
+};
+
+const EXTERNAL_SESSION_STATE_PILLS: Record<ExternalSessionShell["state"], ThreadStatusPill> = {
+  waiting: EXTERNAL_SESSION_WAITING_PILL,
+  working: EXTERNAL_SESSION_WORKING_PILL,
+  idle: EXTERNAL_SESSION_IDLE_PILL,
+};
+
+/** Waiting sessions are the whole point of the radar — always on top. */
+const EXTERNAL_SESSION_STATE_ORDER: Record<ExternalSessionShell["state"], number> = {
+  waiting: 0,
+  working: 1,
+  idle: 2,
+};
+
 function sortExternalSessions(
   sessions: ReadonlyArray<ExternalSessionShell>,
 ): ReadonlyArray<ExternalSessionShell> {
   return [...sessions].sort((a, b) => {
     if (a.state !== b.state) {
-      return a.state === "working" ? -1 : 1;
+      return EXTERNAL_SESSION_STATE_ORDER[a.state] - EXTERNAL_SESSION_STATE_ORDER[b.state];
     }
     return new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime();
   });
@@ -89,14 +112,7 @@ export function ExternalSessionsSection({
                 title={tooltip}
                 className="flex h-6 w-full items-center gap-1.5 px-2 text-left sm:h-7"
               >
-                <ThreadStatusLabel
-                  status={
-                    session.state === "working"
-                      ? EXTERNAL_SESSION_WORKING_PILL
-                      : EXTERNAL_SESSION_IDLE_PILL
-                  }
-                  compact
-                />
+                <ThreadStatusLabel status={EXTERNAL_SESSION_STATE_PILLS[session.state]} compact />
                 <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                   {title}
                 </span>

@@ -15,8 +15,11 @@ export const EXTERNAL_SESSIONS_WS_METHODS = {
   subscribe: "externalSessions.subscribe",
 } as const;
 
-/** MVP ladder: liveness derived from file mtime only (DESIGN.md). */
-export const ExternalSessionState = Schema.Literals(["working", "idle"]);
+/** State ladder (DESIGN.md): `working`/`idle` from file mtime; `waiting`
+ * is the best-effort "blocked on a permission prompt" heuristic — a
+ * dangling `tool_use` gone quiet in a session that can prompt. A
+ * long-running approved tool is an accepted false positive. */
+export const ExternalSessionState = Schema.Literals(["working", "idle", "waiting"]);
 export type ExternalSessionState = typeof ExternalSessionState.Type;
 
 export const ExternalSessionShell = Schema.Struct({

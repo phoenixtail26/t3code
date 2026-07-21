@@ -67,7 +67,8 @@ extended toward the orchestrator role.
    unpatched, and its codex-default bug re-mints broken bindings.
 5. **External session radar (MVP)** — sidebar "External" section per project
    showing Claude Code sessions started outside t3code (CLI, IDE terminals):
-   title, working/idle state, last activity; 7-day recency horizon; off-switch
+   title, working/idle/waiting state, last activity; 2-day recency horizon;
+   off-switch
    in Settings (`showExternalSessions`). Server watches
    `~/.claude/projects/<slug>/*.jsonl` with a lenient parser (format is
    undocumented — see `apps/server/src/externalSessions/DESIGN.md`).
