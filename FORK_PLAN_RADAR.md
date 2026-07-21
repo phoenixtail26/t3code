@@ -1,12 +1,29 @@
 # Implementation plan: External session pickup (roadmap #1, "the radar")
 
-Status: MVP (phases 1–3) implemented AND browser-verified 2026-07-20 on this
-branch — 61 focused tests + package typechecks green; test-t3-app pass
-confirmed live discovery, ai-title extraction, working→idle decay, and the
-settings toggle against a scratch CLI session. Watcher test harness (1.5b)
-still queued. Known MVP limitation confirmed in the flesh: subscription
-captures project roots at subscribe time, so a newly added project needs a
-page reload before its external sessions appear. Companion to `FORK_ROADMAP.md` #1;
+Status (2026-07-21): **MVP (phases 1–3) SHIPPED** — merged to `g3code`,
+browser-verified (test-t3-app: live discovery, ai-title extraction,
+working→idle decay, settings toggle), built into the daily driver. Since the
+MVP cut: the watcher fs-integration harness landed (10 tests), and a 7-day
+recency horizon was added (stale transcripts are skipped entirely; any CLI
+activity on an old session resurrects it within a second — the intended
+resume-ancient-sessions path).
+
+**Next steps, in order:**
+
+1. Waiting-on-permission state detection (trailing-records heuristic — see
+   DESIGN.md "state ladder"; extends the parser, no new architecture).
+2. Phase 4 — read-only transcript view (tasks 4.1–4.5 below).
+3. Phase 5 — adopt-as-thread (5.1–5.4). **Gated on `/sync-upstream`** (owner
+   approval needed): it edits `ClaudeAdapter.ts`, which currently has pending
+   upstream conflicts. Do not start 5.x on stale contact files.
+
+Known MVP limitations (accepted, documented): subscription captures project
+roots at subscribe time (new project ⇒ reload before its sessions appear);
+custom `CLAUDE_CONFIG_DIR`/homePath instances not consulted (matches the
+usage-meter precedent); recency horizon is a server constant, not a setting.
+File:line touchpoints in the tables below predate the implementation — the
+landed code in `apps/server/src/externalSessions/` and its DESIGN.md are now
+the better reference for phases 4–5 seams. Companion to `FORK_ROADMAP.md` #1;
 grounded in a codebase survey run the same day (file:line references below are
 from that survey — re-verify before editing, upstream moves).
 
@@ -48,7 +65,7 @@ after MVP, in order: waiting-state detection → transcript route → adopt.
 
 ---
 
-## Phase 1 — Discovery service (server)
+## Phase 1 — Discovery service (server) — DONE
 
 New module `apps/server/src/externalSessions/`. Keep everything fork-local;
 upstream files get one-line insertion points only.
@@ -64,7 +81,7 @@ upstream files get one-line insertion points only.
 
 Phase-exit: focused vitest green (`vp test run` on the new module only).
 
-## Phase 2 — Transport (server → client)
+## Phase 2 — Transport (server → client) — DONE
 
 Standalone WS subscription — external FS state, NOT the event store.
 
@@ -74,7 +91,7 @@ Standalone WS subscription — external FS state, NOT the event store.
 | 2.2 | **WS subscription** `subscribeExternalSessions`: snapshot-then-live per the `subscribeShell` pattern (`ws.ts:1064`), fed by the Phase-1 watcher stream | sonnet | Pattern-following with a precise spec; main reviews the scope/queue handling. One insertion point in `ws.ts`. |
 | 2.3 | **Client atom** `useExternalSessionsForProject`, mirroring `useThreadShellsForProjectRefs` (`apps/web/src/state/entities.ts:121`)                      | sonnet | Pattern-following.                                                                                            |
 
-## Phase 3 — Sidebar UI (MVP completes here)
+## Phase 3 — Sidebar UI (MVP completes here) — DONE
 
 | #   | Task                                                                                                                                                                                                                                                                                       | Owner  | Notes                                                                                                                    |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------ |
@@ -82,7 +99,7 @@ Standalone WS subscription — external FS state, NOT the event store.
 | 3.2 | **Integration**: sibling of `SidebarProjectThreadList` inside `SidebarProjectItem` (`Sidebar.tsx:1088`); client setting to disable the radar entirely                                                                                                                                      | main   | `Sidebar.tsx` is ~3800 upstream lines and the fork's biggest merge surface — keep the diff to a few lines, main owns it. |
 | 3.3 | Focused lint/typecheck on touched packages; then **`test-t3-app`** pass: see a scratch CLI session appear, change state, and disappear when the setting is off                                                                                                                             | main   | Skill mandates the primary agent; one isolated env.                                                                      |
 
-## Phase 4 — Read-only transcript view
+## Phase 4 — Read-only transcript view — NOT STARTED (next up)
 
 | #   | Task                                                                                                                                                                                             | Owner  | Notes                                                  |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------ |
@@ -92,7 +109,7 @@ Standalone WS subscription — external FS state, NOT the event store.
 | 4.4 | **Route** `_chat.external.$sessionId.tsx` from the draft-route template; `kind: "external"` in `threadRoutes.ts:5`; own active-highlight logic (route params won't match `activeRouteThreadKey`) | sonnet | Pattern-following.                                     |
 | 4.5 | `test-t3-app` pass on the transcript view                                                                                                                                                        | main   |                                                        |
 
-## Phase 5 — Adopt as thread (shared groundwork for roadmap #8)
+## Phase 5 — Adopt as thread (shared groundwork for roadmap #8) — NOT STARTED, gated on /sync-upstream
 
 High blast radius: event-sourced contracts + adapter core. All main-model.
 

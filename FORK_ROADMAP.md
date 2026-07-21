@@ -4,14 +4,21 @@ Where this fork is going. Read `FORK_ORCHESTRATOR.md` first for why the fork
 exists and what has already changed; companion docs: `FORK_REMOTES.md` (remotes,
 branch model, upstream sync), `RUN_FORK_WINDOWS.md` (how to run/build here).
 
-## 1. External session pickup (next major feature — the "radar")
+## 1. External session pickup (the "radar") — MVP SHIPPED 2026-07-21
 
 **Goal:** t3code shows ALL Claude Code sessions on the machine — including ones
 started in Rider terminals or plain CLI — not just threads it spawned, with at
 minimum read visibility and ideally one-click resume.
 
-Full implementation plan with phase/task/delegation breakdown:
-`FORK_PLAN_RADAR.md` (2026-07-20). Sketch below kept for context:
+**Status:** the read-only sidebar radar (phases 1–3 of the plan, plus a 7-day
+recency horizon and an fs-integration test harness) is merged to `g3code`,
+browser-verified, and built into the daily driver. **Remaining: Phase 4
+(read-only transcript view) and Phase 5 (adopt-as-thread, which doubles as
+roadmap #8's groundwork).** Plan, per-task delegation, and current status
+line: `FORK_PLAN_RADAR.md`; module internals:
+`apps/server/src/externalSessions/DESIGN.md`. Gate before Phase 5: it edits
+`ClaudeAdapter.ts`, which has pending upstream-merge conflicts — run the
+owner-approved `/sync-upstream` first. Original sketch kept below for context:
 
 - **Discovery:** watch `~/.claude/projects/<project-slug>/*.jsonl` (every
   surface writes there; slug maps to cwd). Tail the newest entries for state:
