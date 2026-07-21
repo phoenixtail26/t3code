@@ -192,11 +192,44 @@ preferring a stale "live" projection over newer `initialConfig`.
 
 ## 6. Web Push from the PWA (drops the ntfy dependency)
 
-Now unblocked by real HTTPS on the tailnet. A service worker plus VAPID keys
-would let the server push straight to the installed PWA, removing the ntfy app
-and the public relay from the path entirely — the fully self-hosted endpoint of
-this line of work. Keep ntfy until this is proven; it is the fallback for
-platforms where Web Push is unreliable.
+**Implemented 2026-07-21** (branch `t3code/webpush`); awaiting live phone
+verification on the tailnet before ntfy can be considered retired. Keep ntfy
+until then — both channels run in parallel and share the phase/toggle/presence
+gating, so nothing double-fires differently.
+
+How it works:
+
+- **Server** (`apps/server/src/notifications/`): `WebPushStore` keeps the
+  VAPID keypair (generated on first use) and the per-device subscriptions in
+  the `ServerSecretStore` secrets dir (`web-push-store.bin`) — deliberately
+  NOT in `settings.json`, so the private key and the endpoint capabilities
+  never ride the settings RPCs or `getConfig`. `WebPushSender` uses the
+  `web-push` npm package for crypto only (VAPID JWT + aes128gcm via
+  `generateRequestDetails`) and posts through the same Effect `HttpClient`
+  stack as ntfy, so tests intercept it with a local HTTP stub. 404/410
+  responses prune the subscription. `resolvePushNotification` is now
+  channel-agnostic; `PushNotifierService.deliver` fans out to ntfy (if
+  `topicUrl`) and all Web Push subscriptions.
+- **RPCs**: `server.webPushGetPublicKey` / `server.webPushSubscribe` (upsert
+  by endpoint) / `server.webPushUnsubscribe`, registered at all four points
+  (contracts group, ws handler, `RPC_REQUIRED_SCOPE`, client-runtime
+  commands). `server.sendTestPushNotification` now tests every configured
+  channel and reports per-channel detail inline.
+- **Web** (`apps/web`): `public/sw.js` renders pushes and deep-links on tap
+  (payload shape: `WebPushMessagePayload` in contracts — kept in sync by
+  hand, the SW cannot import workspace code); registered at bootstrap
+  (browser/PWA only, never Electron). Settings → Phone push gained a
+  "Web Push on this device" row (`useWebPushDevice`): permission →
+  `pushManager.subscribe` with the server key → register RPC, with rollback
+  if the server rejects.
+
+Verified in an isolated env: SW registration, key generation + persistence,
+subscribe/test-send/unsubscribe round-trips over the live WS, and the inline
+error path (the Electron preview webview has no push service — real browsers
+do). Real delivery needs a real push service: enable it from the phone PWA at
+`https://viki.tailae8de0.ts.net` → Settings → "Web Push on this device", then
+"Send test". Unit tests cover the sender against a local stub with real
+crypto (delivery, 410 pruning) and the store roundtrip.
 
 ## 7. Default base branch for new threads
 

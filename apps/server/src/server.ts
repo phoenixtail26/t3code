@@ -52,6 +52,7 @@ import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor.
 import { ThreadDeletionReactorLive } from "./orchestration/Layers/ThreadDeletionReactor.ts";
 import * as AgentAwarenessRelay from "./relay/AgentAwarenessRelay.ts";
 import * as PushNotifierService from "./notifications/PushNotifierService.ts";
+import * as WebPushStore from "./notifications/WebPushStore.ts";
 import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
 import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry.ts";
 import * as ServerSettings from "./serverSettings.ts";
@@ -318,7 +319,15 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   // no longer transitively provides it. Exposing it at the runtime level
   // keeps a single Live for all opencode consumers.
   Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
-  Layer.provideMerge(ServerSettings.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+  // Web Push (fork, roadmap #6) rides in the settings provide to keep this
+  // pipe under the 20-argument overload cap: VAPID keys + device
+  // subscriptions, consumed by the push notifier above and the ws handlers.
+  Layer.provideMerge(
+    Layer.mergeAll(
+      ServerSettings.layer.pipe(Layer.provide(ServerSecretStore.layer)),
+      WebPushStore.layer.pipe(Layer.provide(ServerSecretStore.layer)),
+    ),
+  ),
   Layer.provideMerge(WorkspaceLayerLive),
   Layer.provideMerge(ProjectFaviconResolverLayerLive),
   Layer.provideMerge(RepositoryIdentityResolver.layer),

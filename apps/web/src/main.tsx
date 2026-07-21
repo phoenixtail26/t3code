@@ -12,6 +12,7 @@ import "@xterm/xterm/css/xterm.css";
 import "./index.css";
 
 import { isElectron } from "./env";
+import { registerPushServiceWorker } from "./lib/webPush";
 import { ManagedRelayAuthProvider } from "./cloud/managedAuth";
 import { hasCloudPublicConfig } from "./cloud/publicConfig";
 import { getRouter } from "./router";
@@ -30,6 +31,11 @@ if (isElectron) {
   syncDocumentElectronPlatformClasses(navigator.platform);
   syncDocumentWindowControlsOverlayClass();
 }
+
+// Web Push (fork, roadmap #6): keep the push service worker registered so
+// subscribed devices receive notifications with the app closed. No-ops in
+// Electron and on insecure origins.
+void registerPushServiceWorker();
 
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 

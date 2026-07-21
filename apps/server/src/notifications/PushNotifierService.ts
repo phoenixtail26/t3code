@@ -22,6 +22,8 @@ import {
   resolvePushNotification,
 } from "./PushNotifier.ts";
 import { isUserPresent, readLastPresenceMs } from "./UserPresence.ts";
+import { sendWebPushNotifications, vapidSubjectFor } from "./WebPushSender.ts";
+import * as WebPushStore from "./WebPushStore.ts";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -32,10 +34,10 @@ export class PushNotifier extends Context.Service<
   }
 >()("t3/notifications/PushNotifierService/PushNotifier") {}
 
-const sendNotification = (notification: PushNotification) =>
+const sendNtfyNotification = (topicUrl: string, notification: PushNotification) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
-    const request = HttpClientRequest.post(notification.topicUrl).pipe(
+    const request = HttpClientRequest.post(topicUrl).pipe(
       HttpClientRequest.setHeader("title", notification.title),
       HttpClientRequest.setHeader("priority", notification.priority),
       HttpClientRequest.setHeader("tags", notification.tags),
@@ -55,19 +57,100 @@ const sendNotification = (notification: PushNotification) =>
     }
   }).pipe(Effect.provide(FetchHttpClient.layer));
 
+const sendWebPushToSnapshot = (input: {
+  readonly settings: PushNotificationSettings;
+  readonly webPush: WebPushStore.WebPushSnapshot;
+  readonly notification: PushNotification;
+}) =>
+  Effect.gen(function* () {
+    const vapidKeys = input.webPush.vapidKeys;
+    if (Option.isNone(vapidKeys) || input.webPush.subscriptions.length === 0) {
+      return [];
+    }
+    return yield* sendWebPushNotifications({
+      vapidKeys: vapidKeys.value,
+      vapidSubject: vapidSubjectFor(input.settings.publicBaseUrl),
+      payload: {
+        title: input.notification.title,
+        body: input.notification.body,
+        url: input.notification.clickUrl ?? "",
+        tag: input.notification.threadTag,
+      },
+      urgency: input.notification.priority === "high" ? "high" : "normal",
+      subscriptions: input.webPush.subscriptions,
+    });
+  });
+
 /**
- * Fire a test push with the given settings so the user can verify a topic URL
- * from the settings UI. Deliberately bypasses presence suppression — the user
- * is at the machine clicking the button. Failures are returned as values, not
- * errors, so the UI can show them inline.
+ * Fire a test push over every configured channel so the user can verify the
+ * setup from the settings UI. Deliberately bypasses presence suppression —
+ * the user is at the machine clicking the button. Failures are returned as
+ * values, not errors, so the UI can show them inline. `goneEndpoints` lists
+ * Web Push subscriptions the push service reported dead; the caller prunes
+ * them (this function has no store access by design, so it stays trivially
+ * testable).
  */
 export const sendTestPushNotification = (
   settings: PushNotificationSettings,
+  webPush: WebPushStore.WebPushSnapshot,
+): Effect.Effect<{
+  readonly sent: boolean;
+  readonly detail: string;
+  readonly goneEndpoints: ReadonlyArray<string>;
+}> =>
+  Effect.gen(function* () {
+    const hasNtfy = settings.topicUrl.length > 0;
+    const webPushReady = Option.isSome(webPush.vapidKeys) && webPush.subscriptions.length > 0;
+    if (!hasNtfy && !webPushReady) {
+      return {
+        sent: false,
+        detail: "No topic URL configured and no Web Push devices registered.",
+        goneEndpoints: [],
+      };
+    }
+
+    const parts: Array<string> = [];
+    let sent = false;
+    let goneEndpoints: ReadonlyArray<string> = [];
+
+    if (hasNtfy) {
+      const ntfy = yield* sendTestNtfyNotification(settings);
+      sent = sent || ntfy.sent;
+      parts.push(`ntfy: ${ntfy.detail}`);
+    }
+
+    if (webPushReady) {
+      const results = yield* sendWebPushToSnapshot({
+        settings,
+        webPush,
+        notification: {
+          title: "Test notification",
+          body: "T3 Code push is configured correctly.",
+          priority: "default",
+          tags: "bell",
+          threadTag: "t3code-test",
+          ...(settings.publicBaseUrl.length > 0 ? { clickUrl: settings.publicBaseUrl } : {}),
+        },
+      });
+      const delivered = results.filter((result) => result.outcome === "delivered").length;
+      goneEndpoints = results.filter((result) => result.gone).map((result) => result.endpoint);
+      sent = sent || delivered > 0;
+      const bits = [`${delivered}/${results.length} delivered`];
+      if (goneEndpoints.length > 0) {
+        bits.push(
+          `${goneEndpoints.length} stale ${goneEndpoints.length === 1 ? "device" : "devices"} removed`,
+        );
+      }
+      parts.push(`Web Push: ${bits.join(", ")}.`);
+    }
+
+    return { sent, detail: parts.join(" · "), goneEndpoints };
+  });
+
+const sendTestNtfyNotification = (
+  settings: PushNotificationSettings,
 ): Effect.Effect<{ readonly sent: boolean; readonly detail: string }> =>
   Effect.gen(function* () {
-    if (settings.topicUrl.length === 0) {
-      return { sent: false, detail: "No topic URL configured." };
-    }
     const client = yield* HttpClient.HttpClient;
     const request = HttpClientRequest.post(settings.topicUrl).pipe(
       HttpClientRequest.setHeader("title", "Test notification"),
@@ -104,15 +187,50 @@ export const make = Effect.gen(function* () {
   const snapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
   const orchestrationEngine = yield* OrchestrationEngine.OrchestrationEngineService;
   const serverSettings = yield* ServerSettingsService;
+  const webPushStore = yield* WebPushStore.WebPushStore;
   const observedPhases = new ObservedPhaseTracker();
+
+  const deliver = Effect.fn("pushNotifier.deliver")(function* (
+    settings: PushNotificationSettings,
+    notification: PushNotification,
+  ) {
+    if (settings.topicUrl.length > 0) {
+      yield* sendNtfyNotification(settings.topicUrl, notification);
+    }
+    const webPush = yield* webPushStore.snapshot.pipe(
+      Effect.orElseSucceed(
+        (): WebPushStore.WebPushSnapshot => ({ vapidKeys: Option.none(), subscriptions: [] }),
+      ),
+    );
+    const results = yield* sendWebPushToSnapshot({ settings, webPush, notification });
+    const failed = results.filter((result) => result.outcome !== "delivered");
+    if (failed.length > 0) {
+      // Endpoints are capabilities; log outcomes only.
+      yield* Effect.logWarning("web push delivery incomplete", {
+        outcomes: failed.map(
+          (result) => `${result.outcome}${result.status ? ` (${result.status})` : ""}`,
+        ),
+      });
+    }
+    const gone = results.filter((result) => result.gone).map((result) => result.endpoint);
+    yield* webPushStore
+      .prune(gone)
+      .pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("failed to prune dead web push subscriptions", { cause }),
+        ),
+      );
+  });
 
   const handleThread = Effect.fn("pushNotifier.handleThread")(function* (threadId: ThreadId) {
     const settings = yield* serverSettings.getSettings.pipe(
       Effect.map((current) => current.pushNotifications),
       Effect.orElseSucceed(() => undefined),
     );
+    if (settings === undefined) return;
+    const hasWebPush = yield* webPushStore.hasSubscriptions.pipe(Effect.orElseSucceed(() => false));
     // Disabled is the default; skip all projection work in that case.
-    if (settings === undefined || settings.topicUrl.length === 0) return;
+    if (settings.topicUrl.length === 0 && !hasWebPush) return;
 
     const environmentId = yield* serverEnvironment.getEnvironmentId;
     const thread = yield* snapshotQuery.getThreadShellById(threadId);
@@ -157,7 +275,7 @@ export const make = Effect.gen(function* () {
       threadId,
       phase: state?.phase ?? null,
     });
-    yield* sendNotification(notification);
+    yield* deliver(settings, notification);
   });
 
   const start = () =>

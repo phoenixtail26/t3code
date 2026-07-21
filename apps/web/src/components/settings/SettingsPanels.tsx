@@ -41,6 +41,7 @@ import { isElectron } from "../../env";
 import { buildHostedChannelSelectionUrl, type HostedAppChannel } from "../../hostedPairing";
 import { useTheme } from "../../hooks/useTheme";
 import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
+import { useWebPushDevice } from "../../hooks/useWebPush";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import {
@@ -505,10 +506,11 @@ export function useSettingsRestore(onRestored?: () => void) {
 }
 
 /**
- * Server-side phone push (ntfy) configuration. Unlike the per-device desktop
- * notification toggles above it, these live in ServerSettings — one config for
- * the machine, edited from any client. Previously hand-edited in
- * settings.json with the app stopped.
+ * Server-side phone push configuration (ntfy + Web Push). Unlike the
+ * per-device desktop notification toggles above it, most of these live in
+ * ServerSettings — one config for the machine, edited from any client. The
+ * "Web Push on this device" row is the exception: it registers THIS
+ * browser/PWA with the server so pushes arrive without the ntfy app.
  */
 function PushNotificationSettingsSection() {
   const settings = usePrimarySettings();
@@ -518,12 +520,15 @@ function PushNotificationSettingsSection() {
     serverEnvironment.sendTestPushNotification,
     "send test push notification",
   );
+  const webPushDevice = useWebPushDevice(primaryEnvironmentId);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ sent: boolean; detail: string } | null>(null);
 
   const push = settings.pushNotifications;
   const pushDefaults = DEFAULT_UNIFIED_SETTINGS.pushNotifications;
-  const disabled = push.topicUrl.length === 0;
+  // Approximate: another device may be registered for Web Push, but this
+  // client cannot see that; the toggles still gate delivery server-side.
+  const disabled = push.topicUrl.length === 0 && webPushDevice.status.state !== "registered";
   const updatePush = (patch: Partial<PushNotificationSettings>) =>
     updateSettings({ pushNotifications: { ...push, ...patch } });
 
@@ -576,7 +581,7 @@ function PushNotificationSettingsSection() {
     <SettingsSection title="Phone push">
       <SettingsRow
         title="ntfy topic URL"
-        description="Full topic URL, e.g. https://ntfy.sh/your-secret-topic. Empty disables phone push entirely. The topic name is the only credential — treat it like a secret."
+        description="Full topic URL, e.g. https://ntfy.sh/your-secret-topic. Empty disables the ntfy channel; Web Push devices keep working. The topic name is the only credential — treat it like a secret."
         resetAction={
           push.topicUrl !== pushDefaults.topicUrl ? (
             <SettingResetButton
@@ -618,6 +623,47 @@ function PushNotificationSettingsSection() {
           />
         }
       />
+      {webPushDevice.status.state !== "unsupported" ? (
+        <SettingsRow
+          title="Web Push on this device"
+          description={
+            webPushDevice.error !== null
+              ? webPushDevice.error
+              : webPushDevice.status.state === "registered"
+                ? "This device receives pushes directly from the server — no ntfy app needed."
+                : webPushDevice.status.state === "permission-denied"
+                  ? "Notifications are blocked for this site. Allow them in the browser settings, then retry."
+                  : "Deliver pushes straight to this browser or installed PWA, without the ntfy app."
+          }
+          control={
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={
+                primaryEnvironmentId === null ||
+                webPushDevice.status.state === "busy" ||
+                webPushDevice.status.state === "permission-denied"
+              }
+              onClick={
+                webPushDevice.status.state === "registered"
+                  ? webPushDevice.disable
+                  : webPushDevice.enable
+              }
+            >
+              {webPushDevice.status.state === "busy" ? (
+                <LoaderIcon className="size-3.5 animate-spin" />
+              ) : null}
+              {webPushDevice.status.state === "busy"
+                ? webPushDevice.status.operation === "enabling"
+                  ? "Enabling…"
+                  : "Disabling…"
+                : webPushDevice.status.state === "registered"
+                  ? "Disable"
+                  : "Enable"}
+            </Button>
+          }
+        />
+      ) : null}
       {phaseToggle(
         "notifyOnApproval",
         "Push on approval",
@@ -662,7 +708,7 @@ function PushNotificationSettingsSection() {
         title="Send a test notification"
         description={
           testResult === null
-            ? "Verify the topic URL by sending a test push right now. Ignores the presence suppression above."
+            ? "Send a test push over every configured channel right now. Ignores the presence suppression above."
             : testResult.detail
         }
         control={

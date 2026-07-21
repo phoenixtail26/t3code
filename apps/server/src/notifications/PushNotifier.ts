@@ -2,15 +2,20 @@ import type { PushNotificationSettings, ThreadId } from "@t3tools/contracts";
 import type { AgentAwarenessPhase, AgentAwarenessState } from "@t3tools/shared/agentAwareness";
 
 /**
- * Phone notifications for thread events over ntfy (https://ntfy.sh or a
- * private ntfy server), so the owner learns a thread needs them without
- * watching the UI.
+ * Phone notifications for thread events, delivered over ntfy (https://ntfy.sh
+ * or a private ntfy server) and/or Web Push to the installed PWA, so the
+ * owner learns a thread needs them without watching the UI.
  *
  * Why ntfy rather than T3 Connect's relay push: this fork is driven from a
  * tailnet with no cloud account, and ntfy is a single POST with a
  * first-class mobile app. The awareness phase ladder
  * (`@t3tools/shared/agentAwareness`) is shared with the relay path, so both
- * transports agree on what "needs attention" means.
+ * transports agree on what "needs attention" means. Web Push (roadmap #6)
+ * removes even the ntfy hop for devices that register a subscription.
+ *
+ * This module decides WHETHER a notification fires and renders it; it is
+ * channel-agnostic. Delivery — to which channels, with what transport —
+ * lives in `PushNotifierService`.
  *
  * Notifications fire on phase TRANSITIONS: a thread sitting at
  * `waiting_for_approval` across many domain events notifies once, and the
@@ -32,11 +37,14 @@ const PHASE_TAGS: Partial<Record<AgentAwarenessPhase, string>> = {
 };
 
 export interface PushNotification {
-  readonly topicUrl: string;
   readonly title: string;
   readonly body: string;
+  /** ntfy priority; Web Push maps "high" to urgency "high". */
   readonly priority: string;
+  /** ntfy emoji tags. */
   readonly tags: string;
+  /** Coalescing key: repeated pushes for one thread replace, not stack. */
+  readonly threadTag: string;
   readonly clickUrl?: string;
 }
 
@@ -68,8 +76,9 @@ export function buildThreadWebUrl(publicBaseUrl: string, state: AgentAwarenessSt
 
 /**
  * Decide whether a thread's new awareness state warrants a notification and
- * render it. Returns null when the feature is off, the phase is unchanged
- * since the last observation, or the phase is uninteresting/disabled.
+ * render it. Returns null when the phase is unchanged since the last
+ * observation or the phase is uninteresting/disabled. Channel enablement
+ * (topic URL, Web Push subscriptions) is the caller's concern.
  */
 export function resolvePushNotification(input: {
   readonly settings: PushNotificationSettings;
@@ -77,17 +86,17 @@ export function resolvePushNotification(input: {
   readonly lastObservedPhase: AgentAwarenessPhase | undefined;
 }): PushNotification | null {
   const { settings, state, lastObservedPhase } = input;
-  if (settings.topicUrl.length === 0 || state === null) return null;
+  if (state === null) return null;
   if (state.phase === lastObservedPhase) return null;
   if (!phaseEnabled(state.phase, settings)) return null;
 
   const detail = state.detail ? `\n${state.detail}` : "";
   return {
-    topicUrl: settings.topicUrl,
     title: `${state.headline}: ${state.threadTitle}`,
     body: `${state.projectTitle} · ${state.modelTitle}${detail}`,
     priority: PHASE_PRIORITY[state.phase] ?? "default",
     tags: PHASE_TAGS[state.phase] ?? "robot",
+    threadTag: state.threadId,
     ...(settings.publicBaseUrl.length > 0
       ? { clickUrl: buildThreadWebUrl(settings.publicBaseUrl, state) }
       : {}),

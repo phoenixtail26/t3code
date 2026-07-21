@@ -109,6 +109,7 @@ import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
+import * as WebPushStore from "./notifications/WebPushStore.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import * as CloudManagedEndpointRuntime from "./cloud/ManagedEndpointRuntime.ts";
 import * as CloudCliTokenManager from "./cloud/CliTokenManager.ts";
@@ -822,6 +823,8 @@ const buildAppUnderTest = (options?: {
         }),
       ),
       Layer.provideMerge(makeAuthTestLayer()),
+      // Real store against the test secrets dir; the ws handlers need it.
+      Layer.provideMerge(WebPushStore.layer),
       Layer.provideMerge(ServerSecretStore.layer),
       Layer.provide(workspaceAndProjectServicesLayer),
       Layer.provideMerge(FetchHttpClient.layer),

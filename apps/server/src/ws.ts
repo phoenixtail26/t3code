@@ -89,6 +89,7 @@ import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerSettings from "./serverSettings.ts";
 import { sendTestPushNotification } from "./notifications/PushNotifierService.ts";
+import * as WebPushStore from "./notifications/WebPushStore.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as PreviewManager from "./preview/Manager.ts";
@@ -304,6 +305,9 @@ export const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.serverGetSettings, AuthOrchestrationReadScope],
   [WS_METHODS.serverUpdateSettings, AuthOrchestrationOperateScope],
   [WS_METHODS.serverSendTestPushNotification, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverWebPushGetPublicKey, AuthOrchestrationReadScope],
+  [WS_METHODS.serverWebPushSubscribe, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverWebPushUnsubscribe, AuthOrchestrationOperateScope],
   [WS_METHODS.serverDiscoverSourceControl, AuthOrchestrationReadScope],
   [WS_METHODS.serverGetTraceDiagnostics, AuthOrchestrationReadScope],
   [WS_METHODS.serverGetProcessDiagnostics, AuthOrchestrationReadScope],
@@ -425,6 +429,7 @@ const makeWsRpcLayer = (
       const config = yield* ServerConfig.ServerConfig;
       const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
+      const webPushStore = yield* WebPushStore.WebPushStore;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
@@ -1453,12 +1458,40 @@ const makeWsRpcLayer = (
         [WS_METHODS.serverSendTestPushNotification]: (_input) =>
           observeRpcEffect(
             WS_METHODS.serverSendTestPushNotification,
-            serverSettings.getSettings.pipe(
-              Effect.flatMap((settings) => sendTestPushNotification(settings.pushNotifications)),
-            ),
+            Effect.gen(function* () {
+              const settings = yield* serverSettings.getSettings;
+              const webPush = yield* webPushStore.snapshot.pipe(
+                Effect.orElseSucceed(
+                  (): WebPushStore.WebPushSnapshot => ({
+                    vapidKeys: Option.none(),
+                    subscriptions: [],
+                  }),
+                ),
+              );
+              const result = yield* sendTestPushNotification(settings.pushNotifications, webPush);
+              // Best-effort: a prune failure must not mask the test result.
+              yield* webPushStore.prune(result.goneEndpoints).pipe(Effect.ignore);
+              return { sent: result.sent, detail: result.detail };
+            }),
             {
               "rpc.aggregate": "server",
             },
+          ),
+        [WS_METHODS.serverWebPushGetPublicKey]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.serverWebPushGetPublicKey,
+            webPushStore.getPublicKey.pipe(Effect.map((publicKey) => ({ publicKey }))),
+            { "rpc.aggregate": "server" },
+          ),
+        [WS_METHODS.serverWebPushSubscribe]: (input) =>
+          observeRpcEffect(WS_METHODS.serverWebPushSubscribe, webPushStore.subscribe(input), {
+            "rpc.aggregate": "server",
+          }),
+        [WS_METHODS.serverWebPushUnsubscribe]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.serverWebPushUnsubscribe,
+            webPushStore.unsubscribe(input.endpoint),
+            { "rpc.aggregate": "server" },
           ),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) =>
           observeRpcEffect(

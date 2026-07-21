@@ -44,23 +44,23 @@ describe("resolvePushNotification", () => {
     });
 
     expect(notification).toEqual({
-      topicUrl: "https://ntfy.sh/secret-topic",
       title: "Approval needed: Fix the worm spawn",
       body: "forsaken · claude-fable-5",
       priority: "high",
       tags: "warning",
+      threadTag: "thread-1",
       clickUrl: "https://machine.tailnet.ts.net/env-1/thread-1",
     });
   });
 
-  it("is disabled when no topic is configured", () => {
+  it("still resolves without a topic URL — channel enablement is the caller's concern", () => {
     expect(
       resolvePushNotification({
         settings: { ...enabledSettings, topicUrl: "" },
         state: makeState(),
         lastObservedPhase: "running",
       }),
-    ).toBeNull();
+    ).not.toBeNull();
   });
 
   it("does not re-notify while the phase is unchanged", () => {
