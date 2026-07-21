@@ -192,10 +192,29 @@ preferring a stale "live" projection over newer `initialConfig`.
 
 ## 6. Web Push from the PWA (drops the ntfy dependency)
 
-**Implemented 2026-07-21** (branch `t3code/webpush`); awaiting live phone
-verification on the tailnet before ntfy can be considered retired. Keep ntfy
-until then — both channels run in parallel and share the phase/toggle/presence
-gating, so nothing double-fires differently.
+**Implemented 2026-07-21** (branch `t3code/webpush`) and **verified live the
+same day**: the owner enabled Web Push from the phone PWA over the tailnet and
+delivery worked. Both channels share the phase/toggle/presence gating, so
+nothing double-fires differently.
+
+**ntfy decision (2026-07-21): retire the usage, keep the code.** Web Push is
+now strictly more private than public ntfy — the payload is end-to-end
+encrypted (aes128gcm), so FCM relays only ciphertext, whereas ntfy.sh saw
+plaintext titles/bodies. Plan: run Web Push–only for a trial week (clear
+`topicUrl` in Settings, which also retires the topic credential; uninstall the
+ntfy app), then delete the topic if nothing goes missing. The ntfy code stays
+as a dormant fallback — inert with an empty `topicUrl`, near-zero upkeep, and
+an escape hatch for devices where Web Push is flaky (iOS Safari). This also
+obsoletes #2's "self-host ntfy" upgrade path.
+
+**Known gap (follow-up): `pushsubscriptionchange` is unhandled.** Chrome/FCM
+can rotate a push subscription; when that happens pushes stop silently until
+the device is re-enabled by hand in Settings. Fixing it properly means the
+service worker re-subscribes and re-registers itself — which needs a plain
+HTTP re-register endpoint, because the RPCs are WebSocket-only and a service
+worker cannot hold the WS session. Watch-signals during the trial week:
+notifications quietly stop arriving, or "Send test" starts reporting a stale
+device being pruned.
 
 How it works:
 
