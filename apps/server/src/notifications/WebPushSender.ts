@@ -17,10 +17,13 @@ import type { StoredWebPushSubscription, VapidKeys } from "./WebPushStore.ts";
  */
 
 const REQUEST_TIMEOUT_MS = 10_000;
-/** How long the push service may hold an undelivered message (seconds). */
-const PUSH_TTL_SECONDS = 3600;
-
-export type WebPushUrgency = "normal" | "high";
+/**
+ * How long the push service may hold an undelivered message (seconds). A
+ * dozing phone can defer delivery for hours; a message that expires in the
+ * meantime is silently dropped, so this must comfortably outlast a night of
+ * Doze. 24 hours.
+ */
+const PUSH_TTL_SECONDS = 86_400;
 
 export interface WebPushDeliveryResult {
   readonly endpoint: string;
@@ -43,7 +46,6 @@ const generateRequestDetails = (input: {
   readonly vapidKeys: VapidKeys;
   readonly vapidSubject: string;
   readonly payloadJson: string;
-  readonly urgency: WebPushUrgency;
 }) =>
   Effect.try({
     try: () =>
@@ -60,7 +62,10 @@ const generateRequestDetails = (input: {
             privateKey: input.vapidKeys.privateKey,
           },
           TTL: PUSH_TTL_SECONDS,
-          urgency: input.urgency,
+          // Always high: FCM only wakes a dozing phone for high-urgency
+          // messages, and presence suppression already guarantees a push
+          // fires only when the user is away — every push is wake-worthy.
+          urgency: "high",
         },
       ),
     catch: (cause) => new WebPushError({ operation: "encode-request", cause }),
@@ -71,7 +76,6 @@ const sendToSubscription = (input: {
   readonly vapidKeys: VapidKeys;
   readonly vapidSubject: string;
   readonly payloadJson: string;
-  readonly urgency: WebPushUrgency;
 }): Effect.Effect<WebPushDeliveryResult, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const endpoint = input.subscription.endpoint;
@@ -119,7 +123,6 @@ export const sendWebPushNotifications = (input: {
   readonly vapidKeys: VapidKeys;
   readonly vapidSubject: string;
   readonly payload: WebPushMessagePayload;
-  readonly urgency: WebPushUrgency;
   readonly subscriptions: ReadonlyArray<StoredWebPushSubscription>;
 }): Effect.Effect<ReadonlyArray<WebPushDeliveryResult>> => {
   const payloadJson = JSON.stringify(input.payload);
@@ -131,7 +134,6 @@ export const sendWebPushNotifications = (input: {
         vapidKeys: input.vapidKeys,
         vapidSubject: input.vapidSubject,
         payloadJson,
-        urgency: input.urgency,
       }),
     { concurrency: 4 },
   ).pipe(Effect.provide(FetchHttpClient.layer));

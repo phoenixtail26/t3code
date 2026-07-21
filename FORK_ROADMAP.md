@@ -200,6 +200,14 @@ as a dormant fallback — inert with an empty `topicUrl`, near-zero upkeep, and
 an escape hatch for devices where Web Push is flaky (iOS Safari). This also
 obsoletes #2's "self-host ntfy" upgrade path.
 
+**Doze fix (2026-07-21), after pushes stopped arriving on an idle phone:**
+FCM only wakes a dozing device for `Urgency: high`, and the original 1-hour
+TTL meant a deferred message was silently dropped before the phone woke — the
+push then never arrived at all. Every push now goes out `high` (presence
+suppression already guarantees a push only fires when the user is away, so
+every push is wake-worthy) with a 24-hour TTL. Chrome does NOT need the
+battery-unrestricted exemption for this.
+
 **Known gap (follow-up): `pushsubscriptionchange` is unhandled.** Chrome/FCM
 can rotate a push subscription; when that happens pushes stop silently until
 the device is re-enabled by hand in Settings. Fixing it properly means the

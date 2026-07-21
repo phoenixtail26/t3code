@@ -171,6 +171,10 @@ describe("sendTestPushNotification", () => {
         expect(stub.received).toHaveLength(1);
         expect(stub.received[0]?.headers["authorization"]).toMatch(/^vapid t=/);
         expect(stub.received[0]?.headers["content-encoding"]).toBe("aes128gcm");
+        // High urgency + a long TTL, or Doze defers the push and then the
+        // push service silently drops it before the phone wakes.
+        expect(stub.received[0]?.headers["urgency"]).toBe("high");
+        expect(Number(stub.received[0]?.headers["ttl"])).toBeGreaterThanOrEqual(86_400);
         // The payload must be ciphertext, not the notification JSON.
         expect(stub.received[0]?.body).not.toContain("Test notification");
       }),
