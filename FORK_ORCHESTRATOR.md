@@ -65,6 +65,16 @@ extended toward the orchestrator role.
    pairing) / `start-t3code.ps1` (headless server + browser). Start Menu
    shortcut "T3 Code (fork)". The winget upstream install was removed —
    unpatched, and its codex-default bug re-mints broken bindings.
+5. **External session radar (MVP)** — sidebar "External" section per project
+   showing Claude Code sessions started outside t3code (CLI, IDE terminals):
+   title, working/idle state, last activity; 7-day recency horizon; off-switch
+   in Settings (`showExternalSessions`). Server watches
+   `~/.claude/projects/<slug>/*.jsonl` with a lenient parser (format is
+   undocumented — see `apps/server/src/externalSessions/DESIGN.md`).
+   Remaining phases (transcript view, adopt-as-thread) and next steps:
+   `FORK_PLAN_RADAR.md`. Fork-local module `apps/server/src/externalSessions/`
+   - `packages/contracts/src/externalSessions.ts`; surgical touches in
+     `ws.ts`/`Sidebar.tsx`/`server.ts`.
 
 Server-side data repairs already performed on the owner's `~\.t3\userdata` store:
 all projects/threads rebound from `codex` to `claudeAgent` + `claude-fable-5`.
