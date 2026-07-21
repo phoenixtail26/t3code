@@ -76,7 +76,6 @@ const sendWebPushToSnapshot = (input: {
         url: input.notification.clickUrl ?? "",
         tag: input.notification.threadTag,
       },
-      urgency: input.notification.priority === "high" ? "high" : "normal",
       subscriptions: input.webPush.subscriptions,
     });
   });
