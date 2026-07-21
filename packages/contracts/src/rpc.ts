@@ -215,6 +215,7 @@ export const WS_METHODS = {
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
   serverSendTestPushNotification: "server.sendTestPushNotification",
+  serverWebPushStatus: "server.webPushStatus",
   serverWebPushGetPublicKey: "server.webPushGetPublicKey",
   serverWebPushSubscribe: "server.webPushSubscribe",
   serverWebPushUnsubscribe: "server.webPushUnsubscribe",
@@ -314,6 +315,21 @@ export const WsServerSendTestPushNotificationRpc = Rpc.make(
  * generated server-side on first request; subscribe upserts by endpoint so
  * re-registering after a push-service rotation is idempotent.
  */
+/**
+ * Server-wide registration status, so a client can tell that OTHER devices
+ * receive Web Push (e.g. the desktop app enabling "Send test" when only the
+ * phone is registered). Endpoints are bearer capabilities and never leave
+ * the server — labels and counts only.
+ */
+export const WsServerWebPushStatusRpc = Rpc.make(WS_METHODS.serverWebPushStatus, {
+  payload: Schema.Struct({}),
+  success: Schema.Struct({
+    subscriptionCount: Schema.Number,
+    deviceLabels: Schema.Array(Schema.String),
+  }),
+  error: Schema.Union([WebPushError, EnvironmentAuthorizationError]),
+});
+
 export const WsServerWebPushGetPublicKeyRpc = Rpc.make(WS_METHODS.serverWebPushGetPublicKey, {
   payload: Schema.Struct({}),
   success: Schema.Struct({ publicKey: Schema.String }),
@@ -751,6 +767,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
   WsServerSendTestPushNotificationRpc,
+  WsServerWebPushStatusRpc,
   WsServerWebPushGetPublicKeyRpc,
   WsServerWebPushSubscribeRpc,
   WsServerWebPushUnsubscribeRpc,
