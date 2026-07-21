@@ -206,6 +206,7 @@ import {
 } from "./Sidebar.logic";
 import { sortThreads } from "../lib/threadSort";
 import { SidebarClaudeUsagePill } from "./sidebar/SidebarClaudeUsagePill";
+import { SidebarNewBuildPill } from "./sidebar/SidebarNewBuildPill";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useIsMobile } from "~/hooks/useMediaQuery";
@@ -2886,6 +2887,7 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
     <SidebarFooter className="p-2">
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
+      <SidebarNewBuildPill />
       <SidebarClaudeUsagePill />
       <SidebarMenu>
         <SidebarMenuItem>

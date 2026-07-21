@@ -5,6 +5,8 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import { defineProject, type TestProjectInlineConfiguration } from "vite-plus/test/config";
 import "vite-plus/test/config";
 import { defineConfig } from "vite-plus";
+import { writeFileSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
 import pkg from "./package.json" with { type: "json" };
 
 import { loadRepoEnv } from "../../scripts/lib/public-config";
@@ -24,6 +26,24 @@ const configuredRelayTracingDataset = repoEnv.VITE_RELAY_OTLP_TRACES_DATASET?.tr
 const configuredRelayTracingToken = repoEnv.VITE_RELAY_OTLP_TRACES_TOKEN?.trim() || "";
 const configuredHostedAppChannel = process.env.VITE_HOSTED_APP_CHANNEL?.trim() || "";
 const configuredAppVersion = process.env.APP_VERSION?.trim() || pkg.version;
+// Per-build id, distinct from APP_VERSION (which only tracks package.json).
+// Changes on every build so a client running an older bundle can detect that a
+// newer build has replaced its on-disk assets. Overridable for reproducible
+// builds; otherwise a build timestamp.
+const buildId = process.env.BUILD_ID?.trim() || String(Date.now());
+
+// Emit a non-fingerprinted version.json alongside the bundle so the running
+// client can poll (no-store) for the current on-disk build id. Written after
+// the bundle so it survives `emptyOutDir`.
+function emitBuildIdPlugin() {
+  return {
+    name: "t3code-emit-build-id",
+    writeBundle(options: { readonly dir?: string }) {
+      const outDir = options.dir ?? "dist";
+      writeFileSync(resolvePath(outDir, "version.json"), `${JSON.stringify({ buildId })}\n`);
+    },
+  };
+}
 const configuredHostedAppUrl = (() => {
   const explicitHostedAppUrl = process.env.VITE_HOSTED_APP_URL?.trim();
   if (explicitHostedAppUrl) {
@@ -102,6 +122,7 @@ export default defineConfig(() => {
         presets: [reactCompilerPreset()],
       }),
       tailwindcss(),
+      emitBuildIdPlugin(),
     ],
     optimizeDeps: {
       include: [
@@ -133,6 +154,7 @@ export default defineConfig(() => {
       "import.meta.env.VITE_HOSTED_APP_URL": JSON.stringify(configuredHostedAppUrl ?? ""),
       "import.meta.env.VITE_HOSTED_APP_CHANNEL": JSON.stringify(configuredHostedAppChannel),
       "import.meta.env.APP_VERSION": JSON.stringify(configuredAppVersion),
+      "import.meta.env.BUILD_ID": JSON.stringify(buildId),
     },
     resolve: {
       tsconfigPaths: true,
