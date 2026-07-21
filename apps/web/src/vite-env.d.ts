@@ -14,6 +14,8 @@ interface ImportMetaEnv {
   readonly VITE_RELAY_OTLP_TRACES_DATASET: string;
   readonly VITE_RELAY_OTLP_TRACES_TOKEN: string;
   readonly APP_VERSION: string;
+  /** Per-build id stamped at build time; compared against /version.json to detect a newer on-disk build. */
+  readonly BUILD_ID: string;
 }
 
 interface ImportMeta {
