@@ -114,14 +114,23 @@ design; delivery problems come back inline as values, not errors). The write
 path needed no new plumbing — `ServerSettingsPatch` already exposed
 `pushNotifications` and `server.updateSettings` deep-merges.
 
-Verification note: in an isolated browser-paired dev environment
-(`vp run dev` + pairing token), server-settings writes from the web UI never
-reached the server — for the new section AND for long-shipped settings like
-"Add project starts in" (optimistic UI updates, no RPC sent, no error
-surfaced). Pre-existing behavior, not a regression; the Electron daily driver
-uses the local bootstrap grant and is the real test. If phone-PWA sessions
-show the same silent read-only behavior, that silent drop deserves its own
-fix — surfacing it belongs with roadmap #5's honesty work.
+Post-ship fixes (2026-07-21), after live testing found "Send test" failing and
+toggles not sticking:
+
+- **Send test defected server-side**: every rpc served over the WebSocket must
+  be registered in `RPC_REQUIRED_SCOPE` (apps/server/src/ws.ts) or
+  `requiredScopeForMethod` throws at request time — a third registration point
+  beyond the contracts group and the handler. Fixed; `wsRpcScopes.test.ts` now
+  asserts the map covers every rpc in `WsRpcGroup`.
+- **Toggles persisted but the UI didn't reflect them**: the config projection
+  stalls after a reconnect (see #5 below for the diagnosis). Settings writes
+  now apply the server's acked response via an overlay in
+  `apps/web/src/hooks/useSettings.ts`, so the UI shows committed state in any
+  connection state; a fresh projection value clears the overlay.
+- Correction to the earlier verification note: the "silent write drop" seen in
+  browser-paired dev environments was a test-harness artifact, not an app
+  behavior — a hidden preview webview never fires focus/blur events, so
+  commit-on-blur inputs never commit. Writes from real browser sessions work.
 
 ## 5. Surface a stale connection instead of rendering old data
 
@@ -141,7 +150,26 @@ undermines every feature built on top of it — usage meter, notifications, the
 session radar — because none of them are worth anything if the view is silently
 frozen.
 
-Sketch:
+Root cause found (2026-07-21, while debugging the #4 toggle bug; reproduced
+deterministically in an isolated env by restarting the dev server under a
+paired browser): after a WebSocket reconnect, **durable RPC subscriptions
+(`subscribeServerConfig`, `subscribeShell`, `subscribeServerLifecycle`) resume
+late or not at all until the next reconnect**, while unary commands recover
+immediately. Observed via a `WebSocket.prototype.send` tap: after one restart
+the client sent only `server.getConfig` and no re-subscribes for the session's
+entire ~74s lifetime; the re-subscribes for all three streams went out together
+only after a _second_ restart. During the stall the projection atom keeps
+serving its last value (`Success`, source `"live"`) with no error anywhere —
+`resolveServerConfigValue` then prefers that stale "live" projection over the
+freshly re-fetched `initialConfig`. Suspect: the durable `subscribe()` in
+`packages/client-runtime/src/rpc/client.ts` switchMaps over
+`SubscriptionRef.changes(supervisor.session)`, and the switch away from the
+dead session's inner stream appears to block (teardown against a dead
+transport?) until the next session churn — `supervisor.session` itself
+transitions correctly (generation bumps, commands work). A page reload always
+heals. Fix belongs here: make the switch non-blocking or watchdog the
+subscription (no event + session generation changed → resubscribe), and stop
+preferring a stale "live" projection over newer `initialConfig`.
 
 - **Connection state in the UI.** The client already knows when its socket
   drops; show it (a subtle banner or sidebar indicator), including a "last

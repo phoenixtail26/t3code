@@ -285,7 +285,9 @@ function isThreadDetailEvent(event: OrchestrationEvent): event is Extract<
 
 const PROVIDER_STATUS_DEBOUNCE_MS = 200;
 
-const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
+// Exported for wsRpcScopes.test.ts: every rpc served over the WebSocket must
+// have an entry here, or requiredScopeForMethod defects at request time.
+export const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [ORCHESTRATION_WS_METHODS.dispatchCommand, AuthOrchestrationOperateScope],
   [ORCHESTRATION_WS_METHODS.getTurnDiff, AuthOrchestrationReadScope],
   [ORCHESTRATION_WS_METHODS.getFullThreadDiff, AuthOrchestrationReadScope],
@@ -301,6 +303,7 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.serverRemoveKeybinding, AuthOrchestrationOperateScope],
   [WS_METHODS.serverGetSettings, AuthOrchestrationReadScope],
   [WS_METHODS.serverUpdateSettings, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverSendTestPushNotification, AuthOrchestrationOperateScope],
   [WS_METHODS.serverDiscoverSourceControl, AuthOrchestrationReadScope],
   [WS_METHODS.serverGetTraceDiagnostics, AuthOrchestrationReadScope],
   [WS_METHODS.serverGetProcessDiagnostics, AuthOrchestrationReadScope],

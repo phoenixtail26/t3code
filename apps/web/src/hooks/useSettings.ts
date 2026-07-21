@@ -9,7 +9,7 @@
  * access is intentionally named as such so environment-sensitive consumers
  * cannot silently read the wrong server's settings.
  */
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import {
   DEFAULT_SERVER_SETTINGS,
@@ -140,6 +140,52 @@ function persistClientSettings(settings: ClientSettings): void {
     });
 }
 
+// ── Acked server settings overlay ────────────────────────────────────
+//
+// The server-config projection can stall after a WebSocket reconnect
+// (durable subscriptions resume late or not at all until the next
+// reconnect — see FORK_ROADMAP.md #5). While it is stalled, atom-backed
+// server settings are frozen, so a successful settings write would not
+// be visible in the UI. To keep the settings UI honest we hold the full
+// settings object the server *returned* from the last update RPC and
+// merge it over the atom value. The overlay is dropped as soon as the
+// projection delivers a fresh authoritative value, which then wins.
+
+const ackedServerSettings = new Map<EnvironmentId, ServerSettings>();
+const ackedServerSettingsListeners = new Set<() => void>();
+
+function emitAckedServerSettingsChange() {
+  for (const listener of ackedServerSettingsListeners) {
+    listener();
+  }
+}
+
+function subscribeAckedServerSettings(listener: () => void): () => void {
+  ackedServerSettingsListeners.add(listener);
+  return () => {
+    ackedServerSettingsListeners.delete(listener);
+  };
+}
+
+function setAckedServerSettings(environmentId: EnvironmentId, settings: ServerSettings): void {
+  ackedServerSettings.set(environmentId, settings);
+  emitAckedServerSettingsChange();
+}
+
+function clearAckedServerSettings(environmentId: EnvironmentId): void {
+  if (ackedServerSettings.delete(environmentId)) {
+    emitAckedServerSettingsChange();
+  }
+}
+
+function useAckedServerSettingsValue(environmentId: EnvironmentId | null): ServerSettings | null {
+  return useSyncExternalStore(
+    subscribeAckedServerSettings,
+    () => (environmentId === null ? null : (ackedServerSettings.get(environmentId) ?? null)),
+    () => null,
+  );
+}
+
 // ── Key sets for routing patches ─────────────────────────────────────
 
 const SERVER_SETTINGS_KEYS = new Set<string>(Struct.keys(ServerSettings.fields));
@@ -198,14 +244,24 @@ export function mergeEnvironmentSettings(
 }
 
 function useMergedSettings<T>(
+  environmentId: EnvironmentId | null,
   serverSettings: ServerSettings,
   selector: ((settings: UnifiedSettings) => T) | undefined,
 ): T {
   const clientSettings = useClientSettingsValue();
+  const acked = useAckedServerSettingsValue(environmentId);
+
+  // A new atom value means the projection delivered fresh authoritative
+  // settings; from then on the overlay would only mask newer server truth.
+  useEffect(() => {
+    if (environmentId !== null) {
+      clearAckedServerSettings(environmentId);
+    }
+  }, [environmentId, serverSettings]);
 
   const merged = useMemo<UnifiedSettings>(
-    () => mergeEnvironmentSettings(serverSettings, clientSettings),
-    [clientSettings, serverSettings],
+    () => mergeEnvironmentSettings(acked ?? serverSettings, clientSettings),
+    [acked, clientSettings, serverSettings],
   );
 
   return useMemo(() => (selector ? selector(merged) : (merged as T)), [merged, selector]);
@@ -224,21 +280,24 @@ export function useEnvironmentSettings<T = UnifiedSettings>(
   selector?: (settings: UnifiedSettings) => T,
 ): T {
   const serverSettings = useAtomValue(serverEnvironment.settingsValueAtom(environmentId));
-  return useMergedSettings(serverSettings ?? DEFAULT_SERVER_SETTINGS, selector);
+  return useMergedSettings(environmentId, serverSettings ?? DEFAULT_SERVER_SETTINGS, selector);
 }
 
 /** Primary-only settings access for the settings UI and other explicitly global surfaces. */
 export function usePrimarySettings<T = UnifiedSettings>(
   selector?: (settings: UnifiedSettings) => T,
 ): T {
-  return useMergedSettings(useAtomValue(primaryServerSettingsAtom), selector);
+  const environmentId = usePrimaryEnvironment()?.environmentId ?? null;
+  return useMergedSettings(environmentId, useAtomValue(primaryServerSettingsAtom), selector);
 }
 
 /**
  * Returns an updater that routes each key to the correct backing store.
  *
- * Server keys are optimistically patched in atom-backed server state, then
- * persisted via RPC. Client keys go through client persistence.
+ * Server keys are persisted via RPC; the settings the server returns are
+ * applied to the acked overlay so the UI reflects the committed write even
+ * while the config projection is stalled. Client keys go through client
+ * persistence.
  */
 function useUpdateSettingsTarget(environmentId: EnvironmentId | null) {
   const persistServerSettings = useAtomCommand(
@@ -254,6 +313,10 @@ function useUpdateSettingsTarget(environmentId: EnvironmentId | null) {
           void persistServerSettings({
             environmentId,
             input: { patch: serverPatch },
+          }).then((result) => {
+            if (result._tag === "Success") {
+              setAckedServerSettings(environmentId, result.value);
+            }
           });
         }
       }
@@ -295,6 +358,8 @@ export function __resetClientSettingsPersistenceForTests(): void {
   clientSettingsHydrationPromise = null;
   clientSettingsListeners.clear();
   clientSettingsHydrationListeners.clear();
+  ackedServerSettings.clear();
+  ackedServerSettingsListeners.clear();
 }
 
 export function __setClientSettingsForTests(settings: ClientSettings): void {
