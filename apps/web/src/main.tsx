@@ -10,6 +10,9 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "@xterm/xterm/css/xterm.css";
 import "./index.css";
+// Fork-owned styles last so they can override upstream rules at equal
+// specificity; kept out of index.css to avoid upstream merge conflicts.
+import "./fork.css";
 
 import { isElectron } from "./env";
 import { registerPushServiceWorker } from "./lib/webPush";

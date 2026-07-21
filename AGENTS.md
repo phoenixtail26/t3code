@@ -72,6 +72,19 @@ from the worktree, which uses a separate database and needs no pairing token.
 The traps that waste the most time (auto-bootstrap defaulting off, dev vs
 userdata stores, pairing token TTL) are all listed there.
 
+**Keep fork code out of upstream files.** Every fork line inside an
+upstream-owned file is future merge-conflict surface. New fork features live in
+fork-owned files (`externalSessions/`, `notifications/`, `settings/fork/`,
+`fork.css`, ...) and touch upstream files only through one-line mounts: an
+import plus a spread or a `<ForkComponent />`. Existing examples to copy:
+`ws.ts` spreads handler factories from `externalSessions/wsHandlers.ts` and
+`notifications/wsHandlers.ts`; `SettingsPanels.tsx` mounts components from
+`settings/fork/ForkSettings.tsx`; `main.tsx` imports `fork.css` instead of
+appending to `index.css`. If a fork edit inside an upstream file grows past
+~10 lines, extract it the same way. Prefer `Schema.optionalKey` for fork
+fields added to shared schemas so upstream code and fixtures never need to
+know about them.
+
 ### Subagent model usage
 
 - **ALWAYS delegate codebase exploration to the `codebase-search-specialist`

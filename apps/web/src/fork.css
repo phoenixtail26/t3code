@@ -1,0 +1,78 @@
+/* ─────────────────────────────────────────────────────────────
+   Fork: mobile (touch) ergonomics
+   ─────────────────────────────────────────────────────────────
+   Everything here is scoped to narrow viewports, so the desktop UI is
+   byte-for-byte unaffected. Kept in a fork-owned stylesheet (imported from
+   main.tsx right after index.css) rather than appended to index.css: this
+   fork tracks upstream, and upstream also appends to index.css, so a
+   separate file removes that merge-conflict hotspot entirely.
+
+   The breakpoint matches Tailwind's `md` (768px), which is what `useIsMobile`
+   uses, so CSS and JS agree on what "mobile" means. */
+@media (max-width: 767px) {
+  /* Tailwind sizes are rem-based, so lifting the root size scales type AND
+     the spacing around it together, instead of leaving bigger text crammed
+     into desktop-sized rows. 19px, arrived at by trying it on-device: the
+     platform default of 16-17px, and even 18px, still read tight at arm's
+     length. */
+  html {
+    font-size: 19px;
+  }
+
+  /* The sidebar still looked disproportionately small after the root bump,
+     because its type is set with `text-xs` and arbitrary pixel classes such
+     as `text-[10px]` — and px values do NOT scale with the root size, only
+     rem ones do. Lift those explicitly, scoped to the sidebar so the density
+     of the rest of the UI is untouched. Both the docked sidebar and the
+     mobile sheet carry `data-sidebar="sidebar"`, so one selector covers both. */
+  [data-sidebar="sidebar"] [class~="text-xs"] {
+    font-size: 0.875rem;
+  }
+
+  [data-sidebar="sidebar"] [class~="text-[10px]"] {
+    font-size: 0.75rem;
+  }
+
+  /* Touch targets. 44px is the long-standing platform minimum; applied as a
+     floor via min-height rather than fixed height so nothing that is already
+     larger gets shrunk, and inline layout is left alone. */
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"],
+  a[href] {
+    min-height: 44px;
+  }
+
+  /* Icon-only controls need width too, or they stay hard to hit sideways. */
+  button:has(> svg:only-child),
+  [role="button"]:has(> svg:only-child) {
+    min-width: 44px;
+  }
+
+  /* Exempt controls whose size is meaningful or that sit inside dense inline
+     runs — badges, chips and the like — so the floor does not distort them. */
+  [data-slot="badge"],
+  [data-slot="tooltip-trigger"] > svg,
+  [role="button"][data-inline="true"] {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  /* Thread list: rows are the primary touch surface on the phone, and the
+     desktop density makes them both hard to hit and hard to scan. */
+  [data-sidebar="menu-button"],
+  [data-sidebar="menu-sub-button"] {
+    min-height: 44px;
+    padding-block: 0.5rem;
+    line-height: 1.4;
+  }
+
+  /* Respect the on-screen keyboard and the home indicator: without this the
+     composer can sit under either. Pairs with the existing
+     `interactive-widget=resizes-content` viewport hint. */
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

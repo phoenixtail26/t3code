@@ -29,7 +29,6 @@ import {
   type GitManagerServiceError,
   OrchestrationDispatchCommandError,
   type OrchestrationEvent,
-  type OrchestrationShellSnapshot,
   type OrchestrationShellStreamEvent,
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
@@ -37,7 +36,7 @@ import {
   OrchestrationGetSnapshotError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_WS_METHODS,
-  ProjectId,
+  type ProjectId,
   type ProjectEntriesFailure,
   type ProjectFileFailure,
   type ProjectFileOperation,
@@ -53,9 +52,6 @@ import {
   AssetWorkspaceContextNotFoundError,
   AssetWorkspaceContextResolutionError,
   EnvironmentAuthorizationError,
-  EXTERNAL_SESSIONS_WS_METHODS,
-  type ExternalSessionShell,
-  type ExternalSessionsStreamItem,
   ThreadId,
   type TerminalAttachStreamEvent,
   type TerminalError,
@@ -70,9 +66,10 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as ServerConfig from "./config.ts";
-import { buildCwdIndex, matchCwdToProject } from "./externalSessions/cwdMatching.ts";
-import * as ExternalSessionsWatcher from "./externalSessions/ExternalSessionsWatcher.ts";
-import { collectOwnSessionIds } from "./externalSessions/ownSessions.ts";
+import {
+  EXTERNAL_SESSIONS_RPC_SCOPES,
+  makeExternalSessionsWsHandlers,
+} from "./externalSessions/wsHandlers.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import { normalizeDispatchCommand } from "./orchestration/Normalizer.ts";
@@ -88,8 +85,7 @@ import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerSettings from "./serverSettings.ts";
-import { sendTestPushNotification } from "./notifications/PushNotifierService.ts";
-import * as WebPushStore from "./notifications/WebPushStore.ts";
+import { WEB_PUSH_RPC_SCOPES, makeWebPushWsHandlers } from "./notifications/wsHandlers.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as PreviewManager from "./preview/Manager.ts";
@@ -303,7 +299,6 @@ export const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [ORCHESTRATION_WS_METHODS.subscribeShell, AuthOrchestrationReadScope],
   [ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot, AuthOrchestrationReadScope],
   [ORCHESTRATION_WS_METHODS.subscribeThread, AuthOrchestrationReadScope],
-  [EXTERNAL_SESSIONS_WS_METHODS.subscribe, AuthOrchestrationReadScope],
   [WS_METHODS.serverProbe, AuthOrchestrationReadScope],
   [WS_METHODS.serverGetConfig, AuthOrchestrationReadScope],
   [WS_METHODS.serverRefreshProviders, AuthOrchestrationOperateScope],
@@ -312,11 +307,6 @@ export const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.serverRemoveKeybinding, AuthOrchestrationOperateScope],
   [WS_METHODS.serverGetSettings, AuthOrchestrationReadScope],
   [WS_METHODS.serverUpdateSettings, AuthOrchestrationOperateScope],
-  [WS_METHODS.serverSendTestPushNotification, AuthOrchestrationOperateScope],
-  [WS_METHODS.serverWebPushStatus, AuthOrchestrationReadScope],
-  [WS_METHODS.serverWebPushGetPublicKey, AuthOrchestrationReadScope],
-  [WS_METHODS.serverWebPushSubscribe, AuthOrchestrationOperateScope],
-  [WS_METHODS.serverWebPushUnsubscribe, AuthOrchestrationOperateScope],
   [WS_METHODS.serverDiscoverSourceControl, AuthOrchestrationReadScope],
   [WS_METHODS.serverGetTraceDiagnostics, AuthOrchestrationReadScope],
   [WS_METHODS.serverGetProcessDiagnostics, AuthOrchestrationReadScope],
@@ -371,6 +361,8 @@ export const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.subscribeServerConfig, AuthOrchestrationReadScope],
   [WS_METHODS.subscribeServerLifecycle, AuthOrchestrationReadScope],
   [WS_METHODS.subscribeAuthAccess, AuthAccessReadScope],
+  ...EXTERNAL_SESSIONS_RPC_SCOPES,
+  ...WEB_PUSH_RPC_SCOPES,
 ]);
 
 function toAuthAccessStreamEvent(
@@ -438,7 +430,6 @@ const makeWsRpcLayer = (
       const config = yield* ServerConfig.ServerConfig;
       const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
-      const webPushStore = yield* WebPushStore.WebPushStore;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
@@ -448,7 +439,6 @@ const makeWsRpcLayer = (
       const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
       const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
       const sourceControlDiscovery = yield* SourceControlDiscovery.SourceControlDiscovery;
-      const externalSessionsWatcher = yield* ExternalSessionsWatcher.ExternalSessionsWatcher;
       const automaticGitFetchInterval = serverSettings.getSettings.pipe(
         Effect.map((settings) => settings.automaticGitFetchInterval),
         Effect.catch((cause) =>
@@ -1346,145 +1336,6 @@ const makeWsRpcLayer = (
             }),
             { "rpc.aggregate": "orchestration" },
           ),
-        [EXTERNAL_SESSIONS_WS_METHODS.subscribe]: (_input) =>
-          observeRpcStreamEffect(
-            EXTERNAL_SESSIONS_WS_METHODS.subscribe,
-            Effect.gen(function* () {
-              // Windows filesystems are case-insensitive; cwd matching must
-              // normalize accordingly (cwdMatching.ts).
-              const caseInsensitive = process.platform === "win32";
-
-              // A snapshot load failure must not fail the subscription: the
-              // radar is best-effort, so degrade to an empty snapshot (no
-              // roots watched, no matches) rather than surfacing an error.
-              const shellSnapshot: OrchestrationShellSnapshot = yield* projectionSnapshotQuery
-                .getShellSnapshot()
-                .pipe(
-                  Effect.catch((cause) =>
-                    Effect.logWarning(
-                      "external sessions: shell snapshot load failed, serving empty snapshot",
-                      { cause },
-                    ).pipe(
-                      Effect.flatMap(() => nowIso),
-                      Effect.map(
-                        (updatedAt): OrchestrationShellSnapshot => ({
-                          snapshotSequence: 0,
-                          projects: [],
-                          threads: [],
-                          updatedAt,
-                        }),
-                      ),
-                    ),
-                  ),
-                );
-
-              // Projects first: buildCwdIndex keeps the first entry for a
-              // given path, so a worktree that equals a workspace root
-              // resolves to the project mapping (cwdMatching.ts).
-              const projectEntries = shellSnapshot.projects.map((project) => ({
-                path: project.workspaceRoot,
-                projectId: project.id,
-              }));
-              const threadEntries = shellSnapshot.threads.flatMap((thread) =>
-                thread.worktreePath === null
-                  ? []
-                  : [{ path: thread.worktreePath, projectId: thread.projectId }],
-              );
-              yield* externalSessionsWatcher.ensureRoots(
-                [...projectEntries, ...threadEntries].map((entry) => entry.path),
-              );
-              const index = buildCwdIndex([...projectEntries, ...threadEntries], caseInsensitive);
-
-              const toShell = (
-                session: ExternalSessionsWatcher.ExternalSessionSnapshot,
-                ownIds: ReadonlySet<string>,
-              ): ExternalSessionShell | null => {
-                if (ownIds.has(session.sessionId)) return null;
-                const projectId = matchCwdToProject(index, session.cwd, caseInsensitive);
-                if (projectId === undefined) return null;
-                return {
-                  sessionId: session.sessionId,
-                  projectId: ProjectId.make(projectId),
-                  title: session.title,
-                  state: session.state,
-                  lastActivityAt: session.lastActivityAt,
-                  cwd: session.cwd,
-                };
-              };
-
-              // Per-subscription state: which sessionIds have already been
-              // sent to this client, so a session that stops matching (own
-              // session created mid-connection, or falls off cwd match) is
-              // reported as removed instead of silently dropped.
-              const sent = new Set<string>();
-
-              const toLiveStreamItem = (event: ExternalSessionsWatcher.ExternalSessionsEvent) => {
-                if (event.kind === "removed") {
-                  if (!sent.has(event.sessionId)) {
-                    return Effect.succeed(Option.none<ExternalSessionsStreamItem>());
-                  }
-                  sent.delete(event.sessionId);
-                  return Effect.succeed(
-                    Option.some<ExternalSessionsStreamItem>({
-                      kind: "removed",
-                      sessionId: event.sessionId,
-                    }),
-                  );
-                }
-                // Recomputed per event (cheap: small SQL table + in-memory
-                // list) so a thread created mid-connection is not reported as
-                // an external session.
-                return collectOwnSessionIds().pipe(
-                  Effect.map((ownIds) => {
-                    const shell = toShell(event.session, ownIds);
-                    if (shell !== null) {
-                      sent.add(shell.sessionId);
-                      return Option.some<ExternalSessionsStreamItem>({
-                        kind: "upserted",
-                        session: shell,
-                      });
-                    }
-                    if (sent.has(event.session.sessionId)) {
-                      sent.delete(event.session.sessionId);
-                      return Option.some<ExternalSessionsStreamItem>({
-                        kind: "removed",
-                        sessionId: event.session.sessionId,
-                      });
-                    }
-                    return Option.none();
-                  }),
-                );
-              };
-
-              const liveStream = externalSessionsWatcher.changes.pipe(
-                Stream.mapEffect(toLiveStreamItem),
-                Stream.flatMap((item) =>
-                  Option.isSome(item) ? Stream.succeed(item.value) : Stream.empty,
-                ),
-              );
-
-              // Attach the live subscription before reading the current
-              // snapshot so nothing published while the snapshot loads is
-              // lost (mirrors subscribeShell's live-before-catchup ordering).
-              const liveBuffer = yield* Queue.unbounded<ExternalSessionsStreamItem>();
-              yield* Effect.forkScoped(
-                liveStream.pipe(Stream.runForEach((item) => Queue.offer(liveBuffer, item))),
-              );
-
-              const initialOwnIds = yield* collectOwnSessionIds();
-              const initialSnapshot = yield* externalSessionsWatcher.snapshot;
-              const sessions = initialSnapshot
-                .map((session) => toShell(session, initialOwnIds))
-                .filter((shell): shell is ExternalSessionShell => shell !== null);
-              for (const shell of sessions) sent.add(shell.sessionId);
-
-              return Stream.concat(
-                Stream.make({ kind: "snapshot" as const, sessions }),
-                Stream.fromQueue(liveBuffer),
-              );
-            }),
-            { "rpc.aggregate": "external-sessions" },
-          ),
         [ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot]: (_input) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot,
@@ -1671,57 +1522,6 @@ const makeWsRpcLayer = (
             {
               "rpc.aggregate": "server",
             },
-          ),
-        [WS_METHODS.serverSendTestPushNotification]: (_input) =>
-          observeRpcEffect(
-            WS_METHODS.serverSendTestPushNotification,
-            Effect.gen(function* () {
-              const settings = yield* serverSettings.getSettings;
-              const webPush = yield* webPushStore.snapshot.pipe(
-                Effect.orElseSucceed(
-                  (): WebPushStore.WebPushSnapshot => ({
-                    vapidKeys: Option.none(),
-                    subscriptions: [],
-                  }),
-                ),
-              );
-              const result = yield* sendTestPushNotification(settings.pushNotifications, webPush);
-              // Best-effort: a prune failure must not mask the test result.
-              yield* webPushStore.prune(result.goneEndpoints).pipe(Effect.ignore);
-              return { sent: result.sent, detail: result.detail };
-            }),
-            {
-              "rpc.aggregate": "server",
-            },
-          ),
-        [WS_METHODS.serverWebPushStatus]: (_input) =>
-          observeRpcEffect(
-            WS_METHODS.serverWebPushStatus,
-            webPushStore.snapshot.pipe(
-              Effect.map((snapshot) => ({
-                subscriptionCount: snapshot.subscriptions.length,
-                deviceLabels: snapshot.subscriptions.map(
-                  (subscription) => subscription.deviceLabel ?? "Unknown device",
-                ),
-              })),
-            ),
-            { "rpc.aggregate": "server" },
-          ),
-        [WS_METHODS.serverWebPushGetPublicKey]: (_input) =>
-          observeRpcEffect(
-            WS_METHODS.serverWebPushGetPublicKey,
-            webPushStore.getPublicKey.pipe(Effect.map((publicKey) => ({ publicKey }))),
-            { "rpc.aggregate": "server" },
-          ),
-        [WS_METHODS.serverWebPushSubscribe]: (input) =>
-          observeRpcEffect(WS_METHODS.serverWebPushSubscribe, webPushStore.subscribe(input), {
-            "rpc.aggregate": "server",
-          }),
-        [WS_METHODS.serverWebPushUnsubscribe]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.serverWebPushUnsubscribe,
-            webPushStore.unsubscribe(input.endpoint),
-            { "rpc.aggregate": "server" },
           ),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) =>
           observeRpcEffect(
@@ -2281,6 +2081,8 @@ const makeWsRpcLayer = (
             }),
             { "rpc.aggregate": "auth" },
           ),
+        ...(yield* makeExternalSessionsWsHandlers({ observeRpcStreamEffect })),
+        ...(yield* makeWebPushWsHandlers({ observeRpcEffect })),
       });
     }),
   );
