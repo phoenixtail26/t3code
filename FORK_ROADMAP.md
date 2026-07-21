@@ -10,7 +10,7 @@ branch model, upstream sync), `RUN_FORK_WINDOWS.md` (how to run/build here).
 started in Rider terminals or plain CLI — not just threads it spawned, with at
 minimum read visibility and ideally one-click resume.
 
-**Status:** the read-only sidebar radar (phases 1–3 of the plan, plus a 7-day
+**Status:** the read-only sidebar radar (phases 1–3 of the plan, plus a 2-day
 recency horizon and an fs-integration test harness) is merged to `g3code`,
 browser-verified, and built into the daily driver. **Remaining: Phase 4
 (read-only transcript view) and Phase 5 (adopt-as-thread, which doubles as

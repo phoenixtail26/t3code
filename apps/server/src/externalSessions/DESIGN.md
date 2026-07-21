@@ -84,15 +84,35 @@ No Effect, no IO — plain functions over strings, testable against
 - `ExternalSessionMetadata`: `{ sessionId, cwd, customTitle, aiTitle, summaryTitle, lastTimestamp }` (all nullable).
 - `emptyMetadata()`, `foldRecord(meta, record)` (latest-wins everywhere),
   `resolveTitle(meta)` (the ladder above).
-- `deriveExternalSessionState(nowMs, mtimeMs): "working" | "idle"` —
-  `working` iff `nowMs - mtimeMs < WORKING_THRESHOLD_MS` (120s: long
-  thinking/tool gaps write nothing for a minute-plus; the cost of the wide
-  threshold is only that an ended session shows "working" for ≤2 min).
-  MVP has no other states. Post-MVP: "waiting on permission" needs a
-  trailing-records heuristic (a `tool_use` with no `tool_result` yet /
-  absence of the `last-prompt` + state-restate tail block) — deliberately
-  not in scope here because mtime is the only signal that cannot lie about
-  liveness.
+- `deriveExternalSessionState(nowMs, mtimeMs, meta): "working" | "idle" | "waiting"`
+  — the state ladder:
+  - `waiting` iff the last conversational record leaves a `tool_use`
+    unanswered (`meta.pendingToolUse`), the session's last restated
+    `permission-mode` is not `bypassPermissions`, and the file has been
+    quiet ≥ `WAITING_THRESHOLD_MS` (30s). Outranks the mtime rungs and
+    persists until the tool_use is answered — an overnight-blocked session
+    stays flagged.
+  - otherwise `working` iff `nowMs - mtimeMs < WORKING_THRESHOLD_MS`
+    (120s: long thinking/tool gaps write nothing for a minute-plus; the
+    cost of the wide threshold is only that an ended session shows
+    "working" for ≤2 min); else `idle`.
+
+  The `waiting` rung is a heuristic, and provably cannot be exact: a
+  2026-07-21 survey of 195 recent transcripts (full record-type sweep,
+  including live mid-call files) found **no content-level marker** for a
+  pending permission prompt — blocked-on-approval and running-a-slow-tool
+  are byte-identical tails (assistant `tool_use`, no `tool_result`,
+  nothing in between; no progress records exist). mtime staleness is the
+  only differing axis: dangling `tool_use` essentially never survives at
+  rest in normal operation (1/195, and that one was live mid-call).
+  Accepted false positive: a long-running approved tool in a session whose
+  mode can prompt. The `bypassPermissions` suppression removes the
+  headless/yolo class of long tool runs entirely. Tracking: the parser
+  sets `pendingToolUse` true on non-sidechain `assistant` records carrying
+  `tool_use` content blocks, false on any non-sidechain `user` or
+  toolless-`assistant` record; standalone housekeeping lines have no
+  opinion. `permission-mode` records are restated in every turn-complete
+  housekeeping block, so the head+tail initial scan reliably sees one.
 
 ## Watcher service (task 1.5): `ExternalSessionsWatcher`
 
@@ -135,7 +155,7 @@ Per-file tail state: `{ offset: number, carry: string, meta: ExternalSessionMeta
   mtime aged past the threshold without new FS events (mtime never fires an
   event by itself).
 - Recency horizon: sessions whose mtime is older than `MAX_SESSION_AGE_MS`
-  (7 days) are skipped at scan time and aged out by the tick — long-lived
+  (2 days) are skipped at scan time and aged out by the tick — long-lived
   projects accumulate hundreds of transcripts and the radar is for current
   work, not history. Resuming an ancient session is done by touching it
   (any activity in the CLI) — it reappears on the next dir event.

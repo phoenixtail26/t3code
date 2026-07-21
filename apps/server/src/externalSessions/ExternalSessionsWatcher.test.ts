@@ -466,7 +466,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("ExternalSessionsWat
       NodeFS.mkdirSync(slugDirFor(root, FAKE_SLUG), { recursive: true });
       const filePath = sessionFilePath(root, FAKE_SLUG, sessionId);
       NodeFS.writeFileSync(filePath, minimalSessionContent(sessionId));
-      // 8 days old — past MAX_SESSION_AGE_MS (7 days) — set before the
+      // 8 days old — past MAX_SESSION_AGE_MS (2 days) — set before the
       // watcher ever sees the file, so refreshFile's age check on the
       // initial scan is what's under test, not the decay tick.
       const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
@@ -531,8 +531,64 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("ExternalSessionsWat
     10_000,
   );
 
-  // Deliberately out of scope: the 30s working->idle decay tick needs 120s+
-  // of wall time (WORKING_THRESHOLD_MS) to observe end-to-end through the
-  // watcher. deriveExternalSessionState itself is already unit-tested in
+  it.effect(
+    "11. a stale dangling tool_use is discovered as waiting and recovers to working on its tool_result",
+    () => {
+      const root = useTempSessionsRoot();
+      // Baked into the dangling-tool-use fixture (which ends on an
+      // unanswered Bash tool_use in permission-mode "default").
+      const sessionId = "b10cced0-aaaa-4b7f-9716-327cdc3b1f92";
+      NodeFS.mkdirSync(slugDirFor(root, FAKE_SLUG), { recursive: true });
+      const filePath = sessionFilePath(root, FAKE_SLUG, sessionId);
+      NodeFS.writeFileSync(filePath, readFixture("dangling-tool-use.jsonl"));
+      // Quiet for 40s: past WAITING_THRESHOLD_MS (30s), well inside the
+      // working threshold and the recency horizon.
+      const fortySecondsAgo = new Date(Date.now() - 40_000);
+      NodeFS.utimesSync(filePath, fortySecondsAgo, fortySecondsAgo);
+
+      return Effect.gen(function* () {
+        const watcher = yield* ExternalSessionsWatcherModule.ExternalSessionsWatcher;
+        yield* watcher.start;
+        yield* watcher.ensureRoots([FAKE_WORKSPACE_ROOT]);
+
+        const sessions = yield* waitFor(
+          watcher.snapshot,
+          (snapshot) => findSession(snapshot, sessionId) !== undefined,
+        );
+        assert.equal(findSession(sessions, sessionId)?.state, "waiting");
+
+        // The blocking tool_use gets its result (user approved): the append
+        // both clears pendingToolUse and bumps mtime to now.
+        NodeFS.appendFileSync(
+          filePath,
+          line({
+            type: "user",
+            isSidechain: false,
+            message: {
+              role: "user",
+              content: [
+                { type: "tool_result", tool_use_id: "toolu_01FAKE000000000000003", content: "ok" },
+              ],
+            },
+            cwd: FAKE_WORKSPACE_ROOT,
+            sessionId,
+            timestamp: "2026-07-18T11:01:00.000Z",
+          }),
+        );
+
+        const recovered = yield* waitFor(
+          watcher.snapshot,
+          (snapshot) => findSession(snapshot, sessionId)?.state === "working",
+        );
+        assert.equal(findSession(recovered, sessionId)?.state, "working");
+      }).pipe(Effect.provide(ExternalSessionsWatcherModule.layer));
+    },
+    10_000,
+  );
+
+  // Deliberately out of scope: the 30s decay tick needs 30-120s+ of wall
+  // time to observe its time-driven transitions (working->waiting,
+  // working->idle) end-to-end through the watcher.
+  // deriveExternalSessionState itself is already unit-tested in
   // sessionMetadata.test.ts.
 });

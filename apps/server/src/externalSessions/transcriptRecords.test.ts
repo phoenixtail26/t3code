@@ -99,6 +99,57 @@ describe("parseTranscriptLine", () => {
     ).toBeUndefined();
   });
 
+  it("extracts permissionMode from a permission-mode record", () => {
+    const record = parseTranscriptLine(
+      '{"type":"permission-mode","permissionMode":"bypassPermissions","sessionId":"abc"}',
+    );
+    expect(record?.permissionMode).toBe("bypassPermissions");
+  });
+
+  it("sets pendingToolUse=true for an assistant record with a tool_use block", () => {
+    const record = parseTranscriptLine(
+      '{"type":"assistant","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"running"},{"type":"tool_use","id":"toolu_x","name":"Bash","input":{}}]}}',
+    );
+    expect(record?.pendingToolUse).toBe(true);
+  });
+
+  it("sets pendingToolUse=false for a toolless assistant record", () => {
+    const record = parseTranscriptLine(
+      '{"type":"assistant","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}',
+    );
+    expect(record?.pendingToolUse).toBe(false);
+  });
+
+  it("sets pendingToolUse=false for any user record (tool_result or fresh prompt)", () => {
+    const toolResult = parseTranscriptLine(
+      '{"type":"user","isSidechain":false,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_x","content":"ok"}]}}',
+    );
+    expect(toolResult?.pendingToolUse).toBe(false);
+    const prompt = parseTranscriptLine(
+      '{"type":"user","isSidechain":false,"message":{"role":"user","content":"next question"}}',
+    );
+    expect(prompt?.pendingToolUse).toBe(false);
+  });
+
+  it("leaves pendingToolUse undefined for sidechain and standalone records", () => {
+    const sidechain = parseTranscriptLine(
+      '{"type":"assistant","isSidechain":true,"message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_x","name":"Read","input":{}}]}}',
+    );
+    expect(sidechain?.pendingToolUse).toBeUndefined();
+    const standalone = parseTranscriptLine('{"type":"last-prompt","lastPrompt":"p"}');
+    expect(standalone?.pendingToolUse).toBeUndefined();
+  });
+
+  it("treats an assistant record with a malformed message as toolless, not pending", () => {
+    expect(
+      parseTranscriptLine('{"type":"assistant","message":"not an object"}')?.pendingToolUse,
+    ).toBe(false);
+    expect(
+      parseTranscriptLine('{"type":"assistant","message":{"content":"not an array"}}')
+        ?.pendingToolUse,
+    ).toBe(false);
+  });
+
   it("parses every complete line of the truncated-tail fixture without throwing, and null on the truncated final line", () => {
     const raw = readFixture("truncated-tail.jsonl");
     const lines = raw.split("\n");
@@ -123,6 +174,7 @@ describe("parseTranscriptLine", () => {
     "tool-use.jsonl",
     "title-records.jsonl",
     "sidechain-main.jsonl",
+    "dangling-tool-use.jsonl",
   ])("fixture %s", (fixtureName) => {
     it("parses every line without throwing", () => {
       const lines = readFixture(fixtureName)
