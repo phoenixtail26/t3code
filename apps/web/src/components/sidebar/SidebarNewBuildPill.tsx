@@ -9,9 +9,11 @@ const POLL_INTERVAL_MS = 60_000;
 /**
  * Sidebar pill that appears when a newer build has been written to disk under
  * the running app (see newBuildAvailable.logic.ts for why this happens). Click
- * to do a full reload, which loads the fresh shell and chunks so toast
- * navigation and lazy routes resolve again. Nothing auto-reloads — in-progress
- * threads run on the server and keep going until the user chooses to reload.
+ * to fully restart the desktop app, which loads the rebuilt server/main code
+ * and re-authorizes internal MCP servers as well as the renderer bundle — a
+ * plain page reload would only refresh the renderer. Outside the desktop app
+ * (browser) it degrades to a page reload. Nothing auto-restarts — in-progress
+ * threads are persisted and resume after the restart, on the user's timing.
  */
 export function SidebarNewBuildPill() {
   const [newBuildAvailable, setNewBuildAvailable] = useState(false);
@@ -42,7 +44,15 @@ export function SidebarNewBuildPill() {
     };
   }, []);
 
-  const handleReload = useCallback(() => {
+  const handleRestart = useCallback(() => {
+    // Prefer a full process restart via the desktop bridge so rebuilt
+    // server/main code and internal MCP re-auth are picked up. Fall back to a
+    // renderer reload in the browser, where no such bridge exists.
+    const bridge = window.desktopBridge;
+    if (bridge?.relaunchApp) {
+      void bridge.relaunchApp();
+      return;
+    }
     window.location.reload();
   }, []);
 
@@ -55,9 +65,9 @@ export function SidebarNewBuildPill() {
           render={
             <button
               type="button"
-              aria-label="Reload to load the new build"
+              aria-label="Restart to load the new build"
               className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-lg bg-primary/15 px-2 text-xs font-medium text-primary transition-colors hover:bg-primary/22"
-              onClick={handleReload}
+              onClick={handleRestart}
             >
               <RotateCwIcon className="size-3.5" />
               <span>New build available</span>
@@ -66,8 +76,9 @@ export function SidebarNewBuildPill() {
         />
         <TooltipPopup align="start" side="top">
           <div className="w-56 text-left text-xs leading-4">
-            A newer build is on disk (the app was rebuilt). Reload to load it — running threads keep
-            going on the server.
+            A newer build is on disk (the app was rebuilt). Restart to load it fully — server and
+            MCP changes too, not just the UI. In-progress threads are saved and resume after the
+            restart.
           </div>
         </TooltipPopup>
       </Tooltip>

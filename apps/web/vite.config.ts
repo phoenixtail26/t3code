@@ -5,8 +5,6 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import { defineProject, type TestProjectInlineConfiguration } from "vite-plus/test/config";
 import "vite-plus/test/config";
 import { defineConfig } from "vite-plus";
-import { writeFileSync } from "node:fs";
-import { resolve as resolvePath } from "node:path";
 import pkg from "./package.json" with { type: "json" };
 
 import { loadRepoEnv } from "../../scripts/lib/public-config";
@@ -33,14 +31,24 @@ const configuredAppVersion = process.env.APP_VERSION?.trim() || pkg.version;
 const buildId = process.env.BUILD_ID?.trim() || String(Date.now());
 
 // Emit a non-fingerprinted version.json alongside the bundle so the running
-// client can poll (no-store) for the current on-disk build id. Written after
-// the bundle so it survives `emptyOutDir`.
+// client can poll (no-store) for the current on-disk build id. The explicit
+// fileName is kept as-is (not content-hashed), and the emit runs during bundle
+// generation so it lands in the freshly-emptied outDir.
 function emitBuildIdPlugin() {
   return {
     name: "t3code-emit-build-id",
-    writeBundle(options: { readonly dir?: string }) {
-      const outDir = options.dir ?? "dist";
-      writeFileSync(resolvePath(outDir, "version.json"), `${JSON.stringify({ buildId })}\n`);
+    generateBundle(this: {
+      readonly emitFile: (file: {
+        readonly type: "asset";
+        readonly fileName: string;
+        readonly source: string;
+      }) => void;
+    }) {
+      this.emitFile({
+        type: "asset",
+        fileName: "version.json",
+        source: `${JSON.stringify({ buildId })}\n`,
+      });
     },
   };
 }
