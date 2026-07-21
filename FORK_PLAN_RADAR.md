@@ -1,21 +1,21 @@
 # Implementation plan: External session pickup (roadmap #1, "the radar")
 
-Status (2026-07-21): **MVP (phases 1–3) SHIPPED** — merged to `g3code`,
-browser-verified (test-t3-app: live discovery, ai-title extraction,
-working→idle decay, settings toggle), built into the daily driver. Since the
-MVP cut: the watcher fs-integration harness landed (10 tests), and a 2-day
-recency horizon was added (stale transcripts are skipped entirely; any CLI
-activity on an old session resurrects it within a second — the intended
-resume-ancient-sessions path).
+Status (2026-07-21): **Phases 1–4 + waiting-state detection SHIPPED** — MVP
+(phases 1–3) merged to `g3code` and browser-verified; since the MVP cut:
+watcher fs-integration harness (10 tests), 2-day recency horizon,
+waiting-on-permission state (amber pill, DESIGN.md "state ladder"), and the
+**Phase 4 read-only transcript view** (browser-verified end to end: clickable
+radar rows, transcript rendered via `MessagesTimeline` with inert props,
+work-entry folds, live refetch on file activity, not-found aging state).
+Phase 4 needed zero new upstream contact: the RPC lives in fork-local
+`externalSessions/wsHandlers.ts` + `transcriptView.ts`, the view in
+`ExternalSessionView.tsx` + its route file; `threadRoutes.ts` and
+`MessagesTimeline.tsx` were NOT touched (all mutating affordances are
+data-gated, so inert props suffice).
 
-**Next steps, in order:**
-
-1. Waiting-on-permission state detection (trailing-records heuristic — see
-   DESIGN.md "state ladder"; extends the parser, no new architecture).
-2. Phase 4 — read-only transcript view (tasks 4.1–4.5 below).
-3. Phase 5 — adopt-as-thread (5.1–5.4). **Gated on `/sync-upstream`** (owner
-   approval needed): it edits `ClaudeAdapter.ts`, which currently has pending
-   upstream conflicts. Do not start 5.x on stale contact files.
+**Next step:** Phase 5 — adopt-as-thread (5.1–5.4). Its `/sync-upstream`
+gate was satisfied 2026-07-21 (owner merged upstream; `ClaudeAdapter.ts`
+conflicts resolved) — re-run the drift check anyway before starting.
 
 Known MVP limitations (accepted, documented): subscription captures project
 roots at subscribe time (new project ⇒ reload before its sessions appear);
@@ -99,7 +99,14 @@ Standalone WS subscription — external FS state, NOT the event store.
 | 3.2 | **Integration**: sibling of `SidebarProjectThreadList` inside `SidebarProjectItem` (`Sidebar.tsx:1088`); client setting to disable the radar entirely                                                                                                                                      | main   | `Sidebar.tsx` is ~3800 upstream lines and the fork's biggest merge surface — keep the diff to a few lines, main owns it. |
 | 3.3 | Focused lint/typecheck on touched packages; then **`test-t3-app`** pass: see a scratch CLI session appear, change state, and disappear when the setting is off                                                                                                                             | main   | Skill mandates the primary agent; one isolated env.                                                                      |
 
-## Phase 4 — Read-only transcript view — NOT STARTED (next up)
+## Phase 4 — Read-only transcript view — DONE
+
+As-built deviations from the table below: 4.3's `readOnly` prop proved
+unnecessary (revert/turn-diff affordances only render when their checkpoint
+maps are populated — an inert-props wrapper gates everything); 4.4 skipped
+`threadRoutes.ts` entirely (active-highlight lives inside
+`ExternalSessionsSection` via `useParams`); the route is
+`_chat.$environmentId.external.$sessionId.tsx`.
 
 | #   | Task                                                                                                                                                                                             | Owner  | Notes                                                  |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------ |

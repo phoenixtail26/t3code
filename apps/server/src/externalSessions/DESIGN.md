@@ -172,6 +172,49 @@ Emissions: `PubSub` carries full per-session snapshots
 markers; subscribers get snapshot-then-live (current map first, then the
 stream) like `subscribeShell` does.
 
+## Transcript view mapping (Phase 4)
+
+Unary RPC `externalSessions.getTranscript` (`wsHandlers.ts`): resolve
+`sessionId` → `filePath` via the watcher snapshot (unknown/aged-out →
+`not-found`), read the file, map with a pure module `transcriptView.ts` —
+separate from the hot-path metadata parser, because this one retains
+`message.content` and only runs on demand.
+
+Mapping rules (lossy by design; ordered entry list, file order preserved —
+the client renders entries in the order given, no re-sorting):
+
+- Skip: `isSidechain: true` records, records with `isMeta: true`,
+  housekeeping/standalone records, attachments, non-JSON lines (same
+  hazards as the metadata parser: >1MB lines, truncated tail, drift).
+- `type:"user"`: `message.content` string → user message; array → concat
+  `text` blocks. Empty text → no entry. A user message opens a turn:
+  `turnId` = its record uuid for it and everything after until the next.
+  `tool_result` blocks: dropped, EXCEPT `is_error: true` → work entry
+  `tone:"error"`, label "Tool error", detail = excerpt.
+- `type:"assistant"` `message.content` blocks, in block order:
+  `text` → assistant message (blocks concatenated); `thinking` → work
+  entry `tone:"thinking"`, label "Thinking", detail = excerpt;
+  `tool_use` → work entry `tone:"tool"`, label = tool name, detail/command
+  from a per-tool input summary (Bash → `command`; file tools →
+  `file_path`; search tools → `pattern`; Agent/Task → `description`;
+  otherwise compact JSON excerpt).
+- Ids: record `uuid`, suffixed per block (`<uuid>#0`) so every entry id is
+  unique; synthesized `line-<n>` when no uuid. Timestamps: record
+  `timestamp`, carried forward for blocks in the same record; entries
+  before the first timestamped record borrow the first seen timestamp.
+- Caps: read at most the last `MAX_TRANSCRIPT_READ_BYTES` (10MB, drop
+  first partial line) and emit at most the last `MAX_TRANSCRIPT_ENTRIES`
+  (2000); either cap trips `truncated: true` in the response.
+
+Client (fork-local `ExternalSessionView`): maps entries 1:1 onto the
+existing timeline model — message → `ChatMessage` (streaming false),
+work → `WorkLogEntry` — and renders `MessagesTimeline` with inert
+live-session props (empty revert/turn-diff maps, no-op handlers,
+`isWorking` false). All mutating affordances in the timeline are
+data-gated, so inert props render nothing to gate; no upstream edit
+needed. Refetch is driven by the already-subscribed shell's
+`lastActivityAt` changing (debounced), not by a second watch channel.
+
 ## Own-session filter (task 1.6)
 
 Exclude sessions t3code itself is driving:

@@ -5,8 +5,11 @@ import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import {
   EXTERNAL_SESSIONS_WS_METHODS,
+  ExternalSessionsGetTranscriptInput,
   ExternalSessionsStreamItem,
   ExternalSessionsSubscribeInput,
+  ExternalSessionTranscript,
+  ExternalSessionTranscriptError,
 } from "./externalSessions.ts";
 import {
   AuthAccessStreamError,
@@ -765,6 +768,15 @@ export const WsExternalSessionsSubscribeRpc = Rpc.make(EXTERNAL_SESSIONS_WS_METH
   stream: true,
 });
 
+export const WsExternalSessionsGetTranscriptRpc = Rpc.make(
+  EXTERNAL_SESSIONS_WS_METHODS.getTranscript,
+  {
+    payload: ExternalSessionsGetTranscriptInput,
+    success: ExternalSessionTranscript,
+    error: Schema.Union([ExternalSessionTranscriptError, EnvironmentAuthorizationError]),
+  },
+);
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerProbeRpc,
   WsServerGetConfigRpc,
@@ -841,4 +853,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
   WsExternalSessionsSubscribeRpc,
+  WsExternalSessionsGetTranscriptRpc,
 );

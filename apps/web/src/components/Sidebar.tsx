@@ -2414,7 +2414,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       />
 
       {projectExpanded && showExternalSessions ? (
-        <ExternalSessionsSection sessions={externalSessions} />
+        <ExternalSessionsSection
+          sessions={externalSessions}
+          environmentId={project.environmentId}
+        />
       ) : null}
 
       <Dialog

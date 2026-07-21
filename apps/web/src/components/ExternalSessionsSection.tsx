@@ -1,8 +1,10 @@
-import type { ExternalSessionShell } from "@t3tools/contracts";
+import type { EnvironmentId, ExternalSessionShell } from "@t3tools/contracts";
+import { Link, useParams } from "@tanstack/react-router";
 import { ChevronRightIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { cn } from "../lib/utils";
 import { formatRelativeTimeLabel } from "../timestampFormat";
+import { SidebarMenuSubButton, SidebarMenuSubItem } from "./ui/sidebar";
 import { ThreadStatusLabel } from "./ThreadStatusIndicators";
 import type { ThreadStatusPill } from "./Sidebar.logic";
 
@@ -42,11 +44,14 @@ const EXTERNAL_SESSION_WAITING_PILL: ThreadStatusPill = {
   pulse: true,
 };
 
-const EXTERNAL_SESSION_STATE_PILLS: Record<ExternalSessionShell["state"], ThreadStatusPill> = {
-  waiting: EXTERNAL_SESSION_WAITING_PILL,
-  working: EXTERNAL_SESSION_WORKING_PILL,
-  idle: EXTERNAL_SESSION_IDLE_PILL,
-};
+// Exported so `ExternalSessionView` (the read-only transcript route) can
+// reuse the same state chrome in its header.
+export const EXTERNAL_SESSION_STATE_PILLS: Record<ExternalSessionShell["state"], ThreadStatusPill> =
+  {
+    waiting: EXTERNAL_SESSION_WAITING_PILL,
+    working: EXTERNAL_SESSION_WORKING_PILL,
+    idle: EXTERNAL_SESSION_IDLE_PILL,
+  };
 
 /** Waiting sessions are the whole point of the radar — always on top. */
 const EXTERNAL_SESSION_STATE_ORDER: Record<ExternalSessionShell["state"], number> = {
@@ -66,17 +71,24 @@ function sortExternalSessions(
   });
 }
 
-function externalSessionTitle(session: ExternalSessionShell): string {
+export function externalSessionTitle(session: ExternalSessionShell): string {
   return session.title ?? session.sessionId.slice(0, 8);
 }
 
 export function ExternalSessionsSection({
   sessions,
+  environmentId,
 }: {
   sessions: ReadonlyArray<ExternalSessionShell>;
+  /** Environment the sessions were matched against — carried into the read-only transcript route link. */
+  environmentId: EnvironmentId;
 }) {
   const [expanded, setExpanded] = useState(false);
   const sortedSessions = useMemo(() => sortExternalSessions(sessions), [sessions]);
+  const activeSessionId = useParams({
+    strict: false,
+    select: (params) => (params as { sessionId?: string }).sessionId ?? null,
+  });
 
   if (sessions.length === 0) {
     return null;
@@ -106,20 +118,30 @@ export function ExternalSessionsSection({
           {sortedSessions.map((session) => {
             const title = externalSessionTitle(session);
             const tooltip = session.cwd ? `${title}\n${session.cwd}` : title;
+            const isActive = activeSessionId === session.sessionId;
             return (
-              <div
-                key={session.sessionId}
-                title={tooltip}
-                className="flex h-6 w-full items-center gap-1.5 px-2 text-left sm:h-7"
-              >
-                <ThreadStatusLabel status={EXTERNAL_SESSION_STATE_PILLS[session.state]} compact />
-                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                  {title}
-                </span>
-                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/40">
-                  {formatRelativeTimeLabel(session.lastActivityAt)}
-                </span>
-              </div>
+              <SidebarMenuSubItem key={session.sessionId} className="w-full px-0">
+                <SidebarMenuSubButton
+                  size="sm"
+                  isActive={isActive}
+                  title={tooltip}
+                  className="mx-0 flex h-6 w-full min-w-0 translate-x-0 items-center gap-1.5 rounded-none px-2 text-left sm:h-7"
+                  render={
+                    <Link
+                      to="/$environmentId/external/$sessionId"
+                      params={{ environmentId, sessionId: session.sessionId }}
+                    />
+                  }
+                >
+                  <ThreadStatusLabel status={EXTERNAL_SESSION_STATE_PILLS[session.state]} compact />
+                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                    {title}
+                  </span>
+                  <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/40">
+                    {formatRelativeTimeLabel(session.lastActivityAt)}
+                  </span>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
             );
           })}
         </div>
