@@ -77,6 +77,7 @@ export const PREVIEW_POINTER_EVENT_CHANNEL = "desktop:preview-pointer-event";
 
 export const SET_ATTENTION_STATE_CHANNEL = "desktop:set-attention-state";
 export const FOCUS_MAIN_WINDOW_CHANNEL = "desktop:focus-main-window";
+export const RELAUNCH_APP_CHANNEL = "desktop:relaunch-app";
 export const GET_SYSTEM_IDLE_SECONDS_CHANNEL = "desktop:get-system-idle-seconds";
 export const LIST_NOTIFICATION_SOUNDS_CHANNEL = "desktop:list-notification-sounds";
 export const READ_NOTIFICATION_SOUND_CHANNEL = "desktop:read-notification-sound";

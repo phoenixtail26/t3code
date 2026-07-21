@@ -9,6 +9,7 @@ import {
   setAttentionState,
 } from "./methods/attention.ts";
 import { getClientSettings, setClientSettings } from "./methods/clientSettings.ts";
+import { relaunchApp } from "./methods/lifecycle.ts";
 import {
   clearConnectionCatalog,
   getConnectionCatalog,
@@ -81,6 +82,7 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(getAdvertisedEndpoints);
   yield* ipc.handle(setAttentionState);
   yield* ipc.handle(focusMainWindow);
+  yield* ipc.handle(relaunchApp);
   yield* ipc.handle(getSystemIdleSeconds);
   yield* ipc.handle(listNotificationSounds);
   yield* ipc.handle(readNotificationSound);
