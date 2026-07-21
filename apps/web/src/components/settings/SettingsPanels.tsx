@@ -1,6 +1,6 @@
 import { ArchiveIcon, ArchiveX, LoaderIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import {
   defaultInstanceIdForDriver,
@@ -521,14 +521,47 @@ function PushNotificationSettingsSection() {
     "send test push notification",
   );
   const webPushDevice = useWebPushDevice(primaryEnvironmentId);
+  const webPushStatus = useAtomCommand(serverEnvironment.webPushStatus, "web push status");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ sent: boolean; detail: string } | null>(null);
+  const [serverWebPush, setServerWebPush] = useState<{
+    subscriptionCount: number;
+    deviceLabels: ReadonlyArray<string>;
+  } | null>(null);
+
+  // The server, not this client, knows whether ANY device receives Web Push —
+  // e.g. the desktop app must not grey out "Send test" when only the phone is
+  // registered. Re-queried when this device's own registration changes, and
+  // retried because a cold navigation straight to settings can fire before
+  // the environment connection is ready.
+  useEffect(() => {
+    if (primaryEnvironmentId === null) return;
+    let cancelled = false;
+    let attempt = 0;
+    const query = () => {
+      void webPushStatus({ environmentId: primaryEnvironmentId, input: {} }).then((result) => {
+        if (cancelled) return;
+        if (result._tag === "Success") {
+          setServerWebPush(result.value);
+          return;
+        }
+        attempt += 1;
+        if (attempt < 5) {
+          setTimeout(query, 2000);
+        }
+      });
+    };
+    query();
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryEnvironmentId, webPushStatus, webPushDevice.status.state]);
 
   const push = settings.pushNotifications;
   const pushDefaults = DEFAULT_UNIFIED_SETTINGS.pushNotifications;
-  // Approximate: another device may be registered for Web Push, but this
-  // client cannot see that; the toggles still gate delivery server-side.
-  const disabled = push.topicUrl.length === 0 && webPushDevice.status.state !== "registered";
+  const webPushActive =
+    webPushDevice.status.state === "registered" || (serverWebPush?.subscriptionCount ?? 0) > 0;
+  const disabled = push.topicUrl.length === 0 && !webPushActive;
   const updatePush = (patch: Partial<PushNotificationSettings>) =>
     updateSettings({ pushNotifications: { ...push, ...patch } });
 
@@ -662,6 +695,12 @@ function PushNotificationSettingsSection() {
                   : "Enable"}
             </Button>
           }
+        />
+      ) : null}
+      {serverWebPush !== null && serverWebPush.subscriptionCount > 0 ? (
+        <SettingsRow
+          title="Registered Web Push devices"
+          description={`${serverWebPush.subscriptionCount === 1 ? "This device receives" : `These ${serverWebPush.subscriptionCount} devices receive`} pushes directly from the server: ${serverWebPush.deviceLabels.join(", ")}. Manage a device's registration from that device.`}
         />
       ) : null}
       {phaseToggle(

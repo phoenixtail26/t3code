@@ -344,6 +344,10 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.serverSendTestPushNotification,
     }),
     // Web Push device registration (fork feature, roadmap #6).
+    webPushStatus: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:web-push-status",
+      tag: WS_METHODS.serverWebPushStatus,
+    }),
     webPushGetPublicKey: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:web-push-get-public-key",
       tag: WS_METHODS.serverWebPushGetPublicKey,

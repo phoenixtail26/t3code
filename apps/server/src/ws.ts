@@ -305,6 +305,7 @@ export const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.serverGetSettings, AuthOrchestrationReadScope],
   [WS_METHODS.serverUpdateSettings, AuthOrchestrationOperateScope],
   [WS_METHODS.serverSendTestPushNotification, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverWebPushStatus, AuthOrchestrationReadScope],
   [WS_METHODS.serverWebPushGetPublicKey, AuthOrchestrationReadScope],
   [WS_METHODS.serverWebPushSubscribe, AuthOrchestrationOperateScope],
   [WS_METHODS.serverWebPushUnsubscribe, AuthOrchestrationOperateScope],
@@ -1476,6 +1477,19 @@ const makeWsRpcLayer = (
             {
               "rpc.aggregate": "server",
             },
+          ),
+        [WS_METHODS.serverWebPushStatus]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.serverWebPushStatus,
+            webPushStore.snapshot.pipe(
+              Effect.map((snapshot) => ({
+                subscriptionCount: snapshot.subscriptions.length,
+                deviceLabels: snapshot.subscriptions.map(
+                  (subscription) => subscription.deviceLabel ?? "Unknown device",
+                ),
+              })),
+            ),
+            { "rpc.aggregate": "server" },
           ),
         [WS_METHODS.serverWebPushGetPublicKey]: (_input) =>
           observeRpcEffect(
