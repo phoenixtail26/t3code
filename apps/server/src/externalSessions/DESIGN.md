@@ -134,6 +134,11 @@ Per-file tail state: `{ offset: number, carry: string, meta: ExternalSessionMeta
 - State decay: a 30s tick re-derives `working`→`idle` for sessions whose
   mtime aged past the threshold without new FS events (mtime never fires an
   event by itself).
+- Recency horizon: sessions whose mtime is older than `MAX_SESSION_AGE_MS`
+  (7 days) are skipped at scan time and aged out by the tick — long-lived
+  projects accumulate hundreds of transcripts and the radar is for current
+  work, not history. Resuming an ancient session is done by touching it
+  (any activity in the CLI) — it reappears on the next dir event.
 - Known edge (surfaced by the test harness): `start`/`watchDir` fork the
   `fs.watch` reader and return before it has attached, and the watcher is
   purely event-driven with no reconciliation pass — a change landing in that

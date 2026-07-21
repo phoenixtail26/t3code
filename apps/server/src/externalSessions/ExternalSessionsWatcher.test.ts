@@ -1,4 +1,10 @@
 // @effect-diagnostics nodeBuiltinImport:off
+// @effect-diagnostics globalDate:off -- this harness deliberately runs on the
+// real clock (excludeTestServices: true, real fs.watch events); mtime
+// backdating for recency tests measures real wall time, not Effect Clock time.
+// @effect-diagnostics preferSchemaOverJson:off -- tests hand-build raw JSONL
+// transcript lines on purpose; the parser under test must not share a codec
+// with its own fixtures.
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -6,6 +12,7 @@ import * as NodeURL from "node:url";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { afterEach, assert, it } from "@effect/vitest";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
@@ -125,11 +132,29 @@ const waitFor = <A>(
   timeoutMs = 8000,
 ): Effect.Effect<A> =>
   Effect.gen(function* () {
-    const deadline = Date.now() + timeoutMs;
+    const deadline = DateTime.toEpochMillis(yield* DateTime.now) + timeoutMs;
     while (true) {
       const value = yield* effect;
       if (predicate(value)) return value;
-      if (Date.now() >= deadline) return value;
+      if (DateTime.toEpochMillis(yield* DateTime.now) >= deadline) return value;
+      yield* Effect.sleep(Duration.millis(POLL_INTERVAL_MS));
+    }
+  });
+
+/** Polls `effect` repeatedly across `durationMs`, asserting `predicate` holds
+ *  every time — the inverse of `waitFor`'s "wait for true" semantics, for
+ *  "stays false" assertions where waiting out a full timeout would be
+ *  needlessly slow. */
+const assertStaysTrue = <A>(
+  effect: Effect.Effect<A>,
+  predicate: (value: A) => boolean,
+  durationMs: number,
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const deadline = DateTime.toEpochMillis(yield* DateTime.now) + durationMs;
+    while (DateTime.toEpochMillis(yield* DateTime.now) < deadline) {
+      const value = yield* effect;
+      assert.isTrue(predicate(value));
       yield* Effect.sleep(Duration.millis(POLL_INTERVAL_MS));
     }
   });
@@ -432,6 +457,79 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("ExternalSessionsWat
       assert.equal(sessions.length, 0);
     }).pipe(Effect.provide(ExternalSessionsWatcherModule.layer));
   });
+
+  it.effect(
+    "9. a session file older than the recency horizon is skipped at initial scan",
+    () => {
+      const root = useTempSessionsRoot();
+      const sessionId = "99999999-9999-9999-9999-999999999999";
+      NodeFS.mkdirSync(slugDirFor(root, FAKE_SLUG), { recursive: true });
+      const filePath = sessionFilePath(root, FAKE_SLUG, sessionId);
+      NodeFS.writeFileSync(filePath, minimalSessionContent(sessionId));
+      // 8 days old — past MAX_SESSION_AGE_MS (7 days) — set before the
+      // watcher ever sees the file, so refreshFile's age check on the
+      // initial scan is what's under test, not the decay tick.
+      const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+      NodeFS.utimesSync(filePath, eightDaysAgo, eightDaysAgo);
+
+      return Effect.gen(function* () {
+        const watcher = yield* ExternalSessionsWatcherModule.ExternalSessionsWatcher;
+        yield* watcher.start;
+        yield* watcher.ensureRoots([FAKE_WORKSPACE_ROOT]);
+
+        yield* assertStaysTrue(
+          watcher.snapshot,
+          (snapshot) => findSession(snapshot, sessionId) === undefined,
+          1500,
+        );
+      }).pipe(Effect.provide(ExternalSessionsWatcherModule.layer));
+    },
+    10_000,
+  );
+
+  it.effect(
+    "10. appending to a stale session file resurrects it with the fresh title",
+    () => {
+      const root = useTempSessionsRoot();
+      const sessionId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+      NodeFS.mkdirSync(slugDirFor(root, FAKE_SLUG), { recursive: true });
+      const filePath = sessionFilePath(root, FAKE_SLUG, sessionId);
+      NodeFS.writeFileSync(filePath, minimalSessionContent(sessionId));
+      const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+      NodeFS.utimesSync(filePath, eightDaysAgo, eightDaysAgo);
+
+      return Effect.gen(function* () {
+        const watcher = yield* ExternalSessionsWatcherModule.ExternalSessionsWatcher;
+        yield* watcher.start;
+        yield* watcher.ensureRoots([FAKE_WORKSPACE_ROOT]);
+
+        yield* assertStaysTrue(
+          watcher.snapshot,
+          (snapshot) => findSession(snapshot, sessionId) === undefined,
+          1500,
+        );
+
+        // The documented "resume an ancient session" workflow: appending a
+        // line also bumps mtime to now, bringing the file back within the
+        // recency horizon on the next dir refresh. Because the file was
+        // never tracked (skipped at initial scan), this re-discovery runs
+        // through `initialScan` again — asserting on the appended title
+        // proves the file was actually rescanned, not served from stale
+        // in-memory state.
+        NodeFS.appendFileSync(
+          filePath,
+          line({ type: "custom-title", customTitle: "Resumed after a week", sessionId }),
+        );
+
+        const sessions = yield* waitFor(
+          watcher.snapshot,
+          (snapshot) => findSession(snapshot, sessionId) !== undefined,
+        );
+        assert.equal(findSession(sessions, sessionId)?.title, "Resumed after a week");
+      }).pipe(Effect.provide(ExternalSessionsWatcherModule.layer));
+    },
+    10_000,
+  );
 
   // Deliberately out of scope: the 30s working->idle decay tick needs 120s+
   // of wall time (WORKING_THRESHOLD_MS) to observe end-to-end through the
