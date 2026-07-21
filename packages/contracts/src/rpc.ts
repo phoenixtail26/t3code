@@ -137,6 +137,7 @@ import {
   ServerUpsertKeybindingResult,
 } from "./server.ts";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
+import { WebPushError, WebPushSubscriptionInput } from "./webPush.ts";
 import {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
@@ -214,6 +215,9 @@ export const WS_METHODS = {
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
   serverSendTestPushNotification: "server.sendTestPushNotification",
+  serverWebPushGetPublicKey: "server.webPushGetPublicKey",
+  serverWebPushSubscribe: "server.webPushSubscribe",
+  serverWebPushUnsubscribe: "server.webPushUnsubscribe",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverGetTraceDiagnostics: "server.getTraceDiagnostics",
   serverGetProcessDiagnostics: "server.getProcessDiagnostics",
@@ -304,6 +308,33 @@ export const WsServerSendTestPushNotificationRpc = Rpc.make(
     error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
   },
 );
+
+/**
+ * Web Push device registration (fork feature, roadmap #6). The public key is
+ * generated server-side on first request; subscribe upserts by endpoint so
+ * re-registering after a push-service rotation is idempotent.
+ */
+export const WsServerWebPushGetPublicKeyRpc = Rpc.make(WS_METHODS.serverWebPushGetPublicKey, {
+  payload: Schema.Struct({}),
+  success: Schema.Struct({ publicKey: Schema.String }),
+  error: Schema.Union([WebPushError, EnvironmentAuthorizationError]),
+});
+
+export const WsServerWebPushSubscribeRpc = Rpc.make(WS_METHODS.serverWebPushSubscribe, {
+  payload: Schema.Struct({
+    subscription: WebPushSubscriptionInput,
+    /** Human label for the device, e.g. derived from the user agent. */
+    deviceLabel: Schema.optional(Schema.String),
+  }),
+  success: Schema.Struct({ subscriptionCount: Schema.Number }),
+  error: Schema.Union([WebPushError, EnvironmentAuthorizationError]),
+});
+
+export const WsServerWebPushUnsubscribeRpc = Rpc.make(WS_METHODS.serverWebPushUnsubscribe, {
+  payload: Schema.Struct({ endpoint: Schema.String }),
+  success: Schema.Struct({ removed: Schema.Boolean, subscriptionCount: Schema.Number }),
+  error: Schema.Union([WebPushError, EnvironmentAuthorizationError]),
+});
 
 export const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
   payload: Schema.Struct({}),
@@ -720,6 +751,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
   WsServerSendTestPushNotificationRpc,
+  WsServerWebPushGetPublicKeyRpc,
+  WsServerWebPushSubscribeRpc,
+  WsServerWebPushUnsubscribeRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerGetTraceDiagnosticsRpc,
   WsServerGetProcessDiagnosticsRpc,
