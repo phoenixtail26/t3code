@@ -64,6 +64,11 @@ const MAX_TAIL_READ_BYTES = 256 * 1024;
 const MAX_WATCHED_DIRS = 64;
 /** `working` decays to `idle` without an FS event; re-derive on a tick. */
 const STATE_DECAY_TICK_MS = 30_000;
+/** Sessions idle longer than this are ignored entirely — the radar is for
+ * current work, not history (long-lived projects accumulate hundreds of
+ * transcripts). Any new activity on an old session (a single appended line)
+ * brings it back within one dir event. */
+const MAX_SESSION_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const textDecoder = new TextDecoder();
 
@@ -230,6 +235,17 @@ const make = Effect.gen(function* () {
     });
 
     const known = tails.get(filePath);
+
+    if (nowMs - mtimeMs > MAX_SESSION_AGE_MS) {
+      if (known !== undefined) {
+        tails.delete(filePath);
+        if (sessions.delete(known.sessionId)) {
+          yield* PubSub.publish(eventsPubSub, { kind: "removed", sessionId: known.sessionId });
+        }
+      }
+      return;
+    }
+
     if (known === undefined) {
       yield* initialScan(slug, filePath, fileName, size, mtimeMs, nowMs);
       return;
@@ -324,7 +340,15 @@ const make = Effect.gen(function* () {
   const decayStates = mutex.withPermits(1)(
     Effect.gen(function* () {
       const nowMs = yield* nowMillis;
-      for (const tail of tails.values()) {
+      for (const tail of Array.from(tails.values())) {
+        if (nowMs - tail.mtimeMs > MAX_SESSION_AGE_MS) {
+          // Crossed the recency horizon while watched: age out entirely.
+          tails.delete(tail.filePath);
+          if (sessions.delete(tail.sessionId)) {
+            yield* PubSub.publish(eventsPubSub, { kind: "removed", sessionId: tail.sessionId });
+          }
+          continue;
+        }
         const prev = sessions.get(tail.sessionId);
         if (prev === undefined || prev.state === "idle") continue;
         yield* applyUpsert(snapshotOf(tail, nowMs));
