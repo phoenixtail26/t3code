@@ -343,7 +343,69 @@ Scope note: Claude-first. The Codex/Cursor/Grok adapters keep their own
 `resumeCursor` shapes and have no equivalent fork primitive, so the action
 should be gated on provider capability rather than assumed universal.
 
-## 9. Smaller candidates
+## 9. Click a file mention in chat to view it (auto-link bare paths)
+
+**Goal:** when an agent names a file in the conversation — `.claude/docs/foo.md`,
+`apps/server/src/ws.ts:840`, a bare relative path in prose — clicking it opens
+the file's contents in t3code, both as an in-app read-only view (rendered
+markdown / syntax-highlighted source) and via "open in external editor"
+(Rider/VS Code). Today the only way to see a mentioned file is to track it down
+in Explorer and open it by hand — the exact manual step this fork exists to
+kill.
+
+**The machinery already exists; the trigger is too narrow.** A file mention is
+fully clickable _only when it arrives as markdown-link syntax_ `[text](path)`
+(or a `file://` URI). In that case `ChatMarkdown`'s `a` override resolves it
+(`apps/web/src/markdown-links.ts:191`, `resolveMarkdownFileLinkMeta`) and
+renders a `MarkdownFileLink` chip (`ChatMarkdown.tsx:1013`) with icon, full-path
+tooltip, click-to-open, and a right-click menu (Open in editor / Open in
+integrated browser / Copy relative/full path). Click →
+`rightPanelStore.openFile(threadRef, relativePath, line)`
+(`rightPanelStore.ts:262`) → `FilePreviewPanel.tsx` fetches contents over the
+`projects.readFile` RPC (`contracts/src/rpc.ts:162`, served by
+`WorkspaceFileSystem.readFile`, 1MB-capped and path-escape-guarded) and renders
+with syntax highlighting, a rendered-vs-source markdown toggle, and
+scroll-to-line. "Open in preferred editor" is already wired
+(`editorPreferences.ts`, `useOpenInPreferredEditor`). This is the "properly
+rendered markdown in a readable format" the owner has reached before but can't
+summon on demand.
+
+**The gap:** agents almost never emit markdown links — they write bare paths or
+wrap them in single backticks (`` `.claude/docs/foo.md` ``). `ChatMarkdown` has
+**no inline-`code` override and no bare-path autolinker** (only `p`, `li`,
+`input`, `a`, `table`, `details`, `pre` are customized; remark plugins are
+gfm/normalize/preserve-meta only), so those mentions render as inert text. The
+fix feeds the existing chip → panel pipeline from two new entry points:
+
+- **Inline code spans (the feature).** Add a `code` component override in
+  `ChatMarkdown.tsx` that runs the span's text through
+  `resolveMarkdownFileLinkMeta`; on a hit, render a `MarkdownFileLink` instead
+  of a plain `<code>`. Cheap and bounded — code spans are already delimited AST
+  nodes, so this only touches text the author explicitly backticked (a regex
+  per span, nothing new scanned), and agents habitually backtick paths. Low
+  false-positive risk. This alone covers the common case.
+- **Bare paths in prose (speculative, must justify its cost).** A remark/text
+  pass that autolinks path-like tokens (optional `:line[:col]` / `#L123`
+  suffix, which the resolver already parses) is where the perf cost lives, and
+  it's real: (1) chat messages re-parse on every streaming token delta, so a
+  text-node visitor is O(text length) per tick across a live conversation, and
+  (2) a path-_shaped_ token isn't a real file — validating it to avoid dead
+  chips means a stat/`readFile` per candidate on the render path, exactly the
+  kind of per-token fs/RPC work to keep off a hot render loop. Do NOT ship this
+  by default. If attempted: match only high-confidence shapes (contains `/`,
+  has a known extension), memoize resolver results by token string, and never
+  block render on existence — render the chip optimistically and let the click
+  fail soft, or resolve out-of-band and upgrade the node after. Likely not
+  worth it once inline-code covers the habit; kept here so the tradeoff is on
+  record, not rediscovered.
+
+Scope note: resolution must stay workspace-relative to the thread's worktree
+and reuse the existing path-escape guard — never widen `projects.readFile`.
+Since both the in-app viewer and the "open in editor" action already hang off
+`MarkdownFileLink`, wiring the inline-code trigger into that one component
+delivers both surfaces the owner asked for at once.
+
+## 10. Smaller candidates
 
 - Usage meter: per-model breakdown when upstream adds more scoped limits;
   optional statusline-style compact mode.

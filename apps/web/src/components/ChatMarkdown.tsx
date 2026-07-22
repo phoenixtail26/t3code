@@ -62,7 +62,9 @@ import {
 } from "../markdown-clipboard";
 import { remarkNormalizeListItemIndentation } from "../markdown-list-indentation";
 import {
+  type MarkdownFileLinkMeta,
   normalizeMarkdownLinkDestination,
+  resolveInlineFileMentionMeta,
   resolveMarkdownFileLinkMeta,
   rewriteMarkdownFileUriHref,
 } from "../markdown-links";
@@ -1345,6 +1347,53 @@ function ChatMarkdown({
     },
     [createAssetUrl, openPreview, preparedConnection, threadRef],
   );
+  const renderMarkdownFileLink = useCallback(
+    (
+      meta: MarkdownFileLinkMeta,
+      options: {
+        parentSuffix?: string | undefined;
+        copyMarkdown: string;
+        className?: string | undefined;
+      },
+    ) => {
+      const labelParts = [meta.basename];
+      if (options.parentSuffix && options.parentSuffix.length > 0) {
+        labelParts.push(options.parentSuffix);
+      }
+      if (meta.line) {
+        labelParts.push(`L${meta.line}${meta.column ? `:C${meta.column}` : ""}`);
+      }
+      return (
+        <MarkdownFileLink
+          href={meta.targetPath}
+          targetPath={meta.targetPath}
+          iconPath={meta.filePath}
+          displayPath={meta.displayPath}
+          workspaceRelativePath={meta.workspaceRelativePath}
+          line={meta.line}
+          label={labelParts.join(" · ")}
+          copyMarkdown={options.copyMarkdown}
+          theme={resolvedTheme}
+          threadRef={threadRef}
+          onOpen={openInPreferredEditor}
+          onOpenInBrowser={
+            threadRef && isPreviewSupportedInRuntime() && isBrowserPreviewFile(meta.filePath)
+              ? () => openMarkdownFileInPreview(meta.filePath)
+              : undefined
+          }
+          className={options.className}
+        />
+      );
+    },
+    [openInPreferredEditor, openMarkdownFileInPreview, resolvedTheme, threadRef],
+  );
+  // Inline code spans re-render often (every streaming tick); cache resolution
+  // by span text so per-render work is a map lookup, not a regex pass. Keyed on
+  // cwd so relative-path resolution stays correct when the thread's cwd changes.
+  const inlineFileMentionCache = useMemo(
+    () => new Map<string, MarkdownFileLinkMeta | null>(),
+    [cwd],
+  );
   const markdownComponents = useMemo<Components>(
     () => ({
       p({ node: _node, children, ...props }) {
@@ -1468,39 +1517,35 @@ function ChatMarkdown({
           );
         }
 
-        const parentSuffix = fileLinkParentSuffixByPath.get(fileLinkMeta.filePath);
-        const labelParts = [fileLinkMeta.basename];
-        if (typeof parentSuffix === "string" && parentSuffix.length > 0) {
-          labelParts.push(parentSuffix);
+        return renderMarkdownFileLink(fileLinkMeta, {
+          parentSuffix: fileLinkParentSuffixByPath.get(fileLinkMeta.filePath),
+          copyMarkdown: `[${fileLinkMeta.basename}](${normalizedHref})`,
+          className: props.className,
+        });
+      },
+      code({ node, className, children, ...props }) {
+        // Fenced code blocks carry a `language-` class and are rendered whole by
+        // the `pre` handler — only inline code spans are candidate file mentions.
+        // Read the span text from the hast node: the p/li skill-token pass may
+        // rewrap React children, but the source text stays on the node.
+        if (!className?.includes("language-")) {
+          const codeText = plainHastText(node) ?? nodeToPlainText(children);
+          let meta = inlineFileMentionCache.get(codeText);
+          if (meta === undefined) {
+            meta = resolveInlineFileMentionMeta(codeText, cwd);
+            inlineFileMentionCache.set(codeText, meta);
+          }
+          if (meta) {
+            return renderMarkdownFileLink(meta, {
+              copyMarkdown: `\`${codeText}\``,
+              className,
+            });
+          }
         }
-        if (fileLinkMeta.line) {
-          labelParts.push(
-            `L${fileLinkMeta.line}${fileLinkMeta.column ? `:C${fileLinkMeta.column}` : ""}`,
-          );
-        }
-
         return (
-          <MarkdownFileLink
-            href={fileLinkMeta.targetPath}
-            targetPath={fileLinkMeta.targetPath}
-            iconPath={fileLinkMeta.filePath}
-            displayPath={fileLinkMeta.displayPath}
-            workspaceRelativePath={fileLinkMeta.workspaceRelativePath}
-            line={fileLinkMeta.line}
-            label={labelParts.join(" · ")}
-            copyMarkdown={`[${fileLinkMeta.basename}](${normalizedHref})`}
-            theme={resolvedTheme}
-            threadRef={threadRef}
-            onOpen={openInPreferredEditor}
-            onOpenInBrowser={
-              threadRef &&
-              isPreviewSupportedInRuntime() &&
-              isBrowserPreviewFile(fileLinkMeta.filePath)
-                ? () => openMarkdownFileInPreview(fileLinkMeta.filePath)
-                : undefined
-            }
-            className={props.className}
-          />
+          <code className={className} {...props}>
+            {children}
+          </code>
         );
       },
       table({ node: _node, ...props }) {
@@ -1539,14 +1584,15 @@ function ChatMarkdown({
       },
     }),
     [
+      cwd,
       diffThemeName,
       fileLinkParentSuffixByPath,
+      inlineFileMentionCache,
       isStreaming,
       markdownFileLinkMetaByHref,
       onTaskListChange,
-      openInPreferredEditor,
       openExternalLinkInPreview,
-      openMarkdownFileInPreview,
+      renderMarkdownFileLink,
       resolvedTheme,
       skills,
       text,
