@@ -5,7 +5,13 @@ import {
   normalizeFileCommentRange,
   remapFileCommentAnnotations,
 } from "./fileCommentAnnotations";
-import { isMarkdownPreviewFile, setMarkdownTaskChecked } from "./filePreviewMode";
+import {
+  isMarkdownPreviewFile,
+  resolveRenderMarkdown,
+  setMarkdownTaskChecked,
+} from "./filePreviewMode";
+
+const NO_OVERRIDE = { path: null, revealRequestId: null, rendered: false };
 
 describe("file comment annotations", () => {
   it("normalizes and formats selected line ranges", () => {
@@ -63,6 +69,91 @@ describe("isMarkdownPreviewFile", () => {
   it("does not treat other text files as markdown", () => {
     expect(isMarkdownPreviewFile("docs/guide.txt")).toBe(false);
     expect(isMarkdownPreviewFile("docs/markdown.ts")).toBe(false);
+  });
+});
+
+describe("resolveRenderMarkdown", () => {
+  it("defaults a markdown file with no reveal line to the rendered view", () => {
+    expect(
+      resolveRenderMarkdown({
+        isMarkdown: true,
+        relativePath: "docs/guide.md",
+        revealLine: null,
+        revealRequestId: null,
+        override: NO_OVERRIDE,
+      }),
+    ).toBe(true);
+  });
+
+  it("defaults to source when opening at a specific line so the line is visible", () => {
+    expect(
+      resolveRenderMarkdown({
+        isMarkdown: true,
+        relativePath: "docs/guide.md",
+        revealLine: 42,
+        revealRequestId: 1,
+        override: NO_OVERRIDE,
+      }),
+    ).toBe(false);
+  });
+
+  it("never renders a non-markdown file", () => {
+    expect(
+      resolveRenderMarkdown({
+        isMarkdown: false,
+        relativePath: "src/main.ts",
+        revealLine: null,
+        revealRequestId: null,
+        override: NO_OVERRIDE,
+      }),
+    ).toBe(false);
+  });
+
+  it("honors an explicit toggle to source for the current path", () => {
+    expect(
+      resolveRenderMarkdown({
+        isMarkdown: true,
+        relativePath: "docs/guide.md",
+        revealLine: null,
+        revealRequestId: null,
+        override: { path: "docs/guide.md", revealRequestId: null, rendered: false },
+      }),
+    ).toBe(false);
+  });
+
+  it("honors an explicit toggle to rendered even when a line is revealed", () => {
+    expect(
+      resolveRenderMarkdown({
+        isMarkdown: true,
+        relativePath: "docs/guide.md",
+        revealLine: 42,
+        revealRequestId: 7,
+        override: { path: "docs/guide.md", revealRequestId: 7, rendered: true },
+      }),
+    ).toBe(true);
+  });
+
+  it("ignores an override recorded for a different path or stale line-jump", () => {
+    // Override belongs to another file → default applies (rendered, no line).
+    expect(
+      resolveRenderMarkdown({
+        isMarkdown: true,
+        relativePath: "docs/guide.md",
+        revealLine: null,
+        revealRequestId: null,
+        override: { path: "docs/other.md", revealRequestId: null, rendered: false },
+      }),
+    ).toBe(true);
+    // A fresh line-jump (new revealRequestId) re-evaluates the default → source.
+    expect(
+      resolveRenderMarkdown({
+        isMarkdown: true,
+        relativePath: "docs/guide.md",
+        revealLine: 99,
+        revealRequestId: 2,
+        override: { path: "docs/guide.md", revealRequestId: 1, rendered: true },
+      }),
+    ).toBe(false);
   });
 });
 

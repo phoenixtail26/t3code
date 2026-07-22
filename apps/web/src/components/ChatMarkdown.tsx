@@ -69,7 +69,7 @@ import {
   rewriteMarkdownFileUriHref,
 } from "../markdown-links";
 import { readLocalApi } from "../localApi";
-import { cn } from "../lib/utils";
+import { cn, isMacPlatform } from "../lib/utils";
 import { useRightPanelStore } from "../rightPanelStore";
 import { useActiveEnvironmentId } from "../state/entities";
 import { serverEnvironment } from "../state/server";
@@ -749,6 +749,9 @@ interface MarkdownFileLinkProps {
   className?: string | undefined;
 }
 
+const OPEN_IN_EDITOR_MODIFIER_LABEL =
+  typeof navigator !== "undefined" && isMacPlatform(navigator.platform) ? "⌘" : "Ctrl";
+
 const MARKDOWN_LINK_HREF_PATTERN = /\[[^\]]*]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
 const MARKDOWN_FILE_LINK_CLASS_NAME =
   "chat-markdown-file-link cursor-pointer transition-colors hover:bg-accent/70";
@@ -1204,6 +1207,12 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
+              // Ctrl-click (⌘-click on macOS) opens in the external editor,
+              // mirroring the "Open in editor" context-menu action.
+              if (event.ctrlKey || event.metaKey) {
+                handleOpenInEditor();
+                return;
+              }
               if (onOpenInBrowser) {
                 handleOpenInBrowser();
                 return;
@@ -1222,6 +1231,9 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
       >
         <div className="markdown-file-link-tooltip-scroll overflow-x-auto whitespace-nowrap">
           {displayPath}
+        </div>
+        <div className="mt-1 text-[10px] text-muted-foreground">
+          {`${OPEN_IN_EDITOR_MODIFIER_LABEL}-click to open in editor`}
         </div>
       </TooltipPopup>
     </Tooltip>
