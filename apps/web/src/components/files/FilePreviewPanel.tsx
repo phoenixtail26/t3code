@@ -54,7 +54,12 @@ import { installFileEditorDismissal } from "./fileEditorDismissal";
 import { LocalCommentAnnotation } from "./LocalCommentAnnotation";
 import { projectFileCacheKey } from "./fileContentRevision";
 import { fileBreadcrumbs } from "./filePath";
-import { isMarkdownPreviewFile, setMarkdownTaskChecked } from "./filePreviewMode";
+import {
+  isMarkdownPreviewFile,
+  resolveRenderMarkdown,
+  setMarkdownTaskChecked,
+  type MarkdownViewOverride,
+} from "./filePreviewMode";
 import { FileSaveCoordinator } from "./fileSaveCoordinator";
 import {
   confirmProjectFileQueryData,
@@ -672,16 +677,20 @@ export default function FilePreviewPanel({
   const isImage = relativePath !== null && isWorkspaceImagePreviewPath(relativePath);
   const file = useProjectFileQuery(environmentId, cwd, relativePath, !isImage);
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
-  const [markdownView, setMarkdownView] = useState<{
-    path: string | null;
-    revealRequestId: number | null;
-  }>({ path: null, revealRequestId: null });
+  const [markdownView, setMarkdownView] = useState<MarkdownViewOverride>({
+    path: null,
+    revealRequestId: null,
+    rendered: false,
+  });
   const breadcrumbRef = useRef<HTMLDivElement>(null);
   const isMarkdown = relativePath ? isMarkdownPreviewFile(relativePath) : false;
-  const renderMarkdown =
-    isMarkdown &&
-    markdownView.path === relativePath &&
-    (revealLine === null || markdownView.revealRequestId === revealRequestId);
+  const renderMarkdown = resolveRenderMarkdown({
+    isMarkdown,
+    relativePath,
+    revealLine,
+    revealRequestId,
+    override: markdownView,
+  });
   const canOpenInBrowser =
     relativePath !== null && isPreviewSupportedInRuntime() && isBrowserPreviewFile(relativePath);
   const absolutePath = relativePath ? resolvePathLinkTarget(relativePath, cwd) : null;
@@ -789,8 +798,9 @@ export default function FilePreviewPanel({
                     pressed={renderMarkdown}
                     onPressedChange={(pressed) => {
                       setMarkdownView({
-                        path: pressed ? relativePath : null,
-                        revealRequestId: pressed ? revealRequestId : null,
+                        path: relativePath,
+                        revealRequestId,
+                        rendered: pressed,
                       });
                     }}
                     aria-label={renderMarkdown ? "Show markdown source" : "Show rendered markdown"}
