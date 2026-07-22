@@ -188,6 +188,112 @@ function workspaceRelativePath(path: string, workspaceRoot: string | undefined):
   return normalizedPath.slice(normalizedRoot.length + 1);
 }
 
+/**
+ * File extensions that mark a bare filename (no separator, no line suffix) as a
+ * file mention when it appears in an inline code span. Deliberately excludes
+ * extensions that collide with common property/method access so ordinary inline
+ * code is never linked: `map` (Array.map / source maps), `log` (console.log),
+ * `env` (process.env). Paths with a separator or a `:line` suffix don't consult
+ * this set — they're unambiguous on their own.
+ */
+const INLINE_FILE_MENTION_EXTENSIONS = new Set([
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "mts",
+  "cts",
+  "py",
+  "rb",
+  "go",
+  "rs",
+  "java",
+  "kt",
+  "kts",
+  "cpp",
+  "hpp",
+  "cs",
+  "php",
+  "swift",
+  "vue",
+  "svelte",
+  "astro",
+  "json",
+  "jsonc",
+  "yaml",
+  "yml",
+  "toml",
+  "ini",
+  "cfg",
+  "conf",
+  "lock",
+  "xml",
+  "sql",
+  "graphql",
+  "gql",
+  "proto",
+  "prisma",
+  "csv",
+  "tsv",
+  "md",
+  "mdx",
+  "txt",
+  "rst",
+  "css",
+  "scss",
+  "sass",
+  "less",
+  "html",
+  "htm",
+  "sh",
+  "bash",
+  "zsh",
+  "ps1",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "svg",
+  "webp",
+  "ico",
+  "pdf",
+  "wasm",
+]);
+
+const INLINE_FILE_MENTION_EXTENSION_PATTERN = /\.([A-Za-z0-9]+)$/;
+
+/**
+ * Whether an inline code span's text should be treated as a candidate file
+ * mention. Stricter than the markdown-link href path: an inline code span
+ * carries no explicit "this is a link" signal, so bare `word.word` tokens
+ * (property access) must not be linked. High-confidence shapes — a path
+ * separator or a `:line[:col]` suffix — are accepted outright; a bare filename
+ * must carry a known file extension (see {@link INLINE_FILE_MENTION_EXTENSIONS}).
+ */
+export function isInlineFileMentionCandidate(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || /\s/.test(trimmed)) return false;
+  if (/[\\/]/.test(trimmed)) return true;
+  if (POSITION_SUFFIX_PATTERN.test(trimmed)) return true;
+  const extension = INLINE_FILE_MENTION_EXTENSION_PATTERN.exec(trimmed)?.[1]?.toLowerCase();
+  return extension !== undefined && INLINE_FILE_MENTION_EXTENSIONS.has(extension);
+}
+
+/**
+ * Resolve an inline code span's text into file-link metadata, or null when it
+ * doesn't look like a file mention. Applies {@link isInlineFileMentionCandidate}
+ * as a stricter pre-filter, then reuses the shared href resolution.
+ */
+export function resolveInlineFileMentionMeta(
+  value: string,
+  cwd?: string,
+): MarkdownFileLinkMeta | null {
+  if (!isInlineFileMentionCandidate(value)) return null;
+  return resolveMarkdownFileLinkMeta(value.trim(), cwd);
+}
+
 export function resolveMarkdownFileLinkMeta(
   href: string | undefined,
   cwd?: string,

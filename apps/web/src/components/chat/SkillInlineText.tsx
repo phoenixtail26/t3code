@@ -44,6 +44,17 @@ export function SkillInlineText(props: { text: string; skills: ReadonlyArray<Inl
   return <>{nodes}</>;
 }
 
+/**
+ * Whether a rendered markdown element stands for the given source tag. When a
+ * tag has a component override in ChatMarkdown, `child.type` is the component
+ * function rather than the tag string — the hast node's tagName still names it.
+ */
+function isMarkdownTagElement(child: { type: unknown; props: unknown }, tag: string): boolean {
+  if (child.type === tag) return true;
+  const node = (child.props as { node?: { tagName?: unknown } } | null)?.node;
+  return node?.tagName === tag;
+}
+
 export function renderSkillInlineMarkdownChildren(
   children: ReactNode,
   skills: ReadonlyArray<InlineSkill>,
@@ -55,7 +66,7 @@ export function renderSkillInlineMarkdownChildren(
     if (!isValidElement<{ children?: ReactNode }>(child)) {
       return child;
     }
-    if (child.type === "code" || child.type === "a") {
+    if (isMarkdownTagElement(child, "code") || isMarkdownTagElement(child, "a")) {
       return child;
     }
     if (!("children" in child.props)) {

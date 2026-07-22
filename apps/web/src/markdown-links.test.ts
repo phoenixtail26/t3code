@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  isInlineFileMentionCandidate,
+  resolveInlineFileMentionMeta,
   resolveMarkdownFileLinkMeta,
   resolveMarkdownFileLinkTarget,
   rewriteMarkdownFileUriHref,
@@ -125,5 +127,64 @@ describe("resolveMarkdownFileLinkTarget", () => {
 
   it("does not treat app routes as file links", () => {
     expect(resolveMarkdownFileLinkTarget("/chat/settings")).toBeNull();
+  });
+});
+
+describe("isInlineFileMentionCandidate", () => {
+  it("accepts multi-segment paths", () => {
+    expect(isInlineFileMentionCandidate("apps/server/src/ws.ts")).toBe(true);
+    expect(isInlineFileMentionCandidate("D:/Programme/t3code/apps/web/main.tsx")).toBe(true);
+  });
+
+  it("accepts paths with a line/column suffix", () => {
+    expect(isInlineFileMentionCandidate("ws.ts:840")).toBe(true);
+    expect(isInlineFileMentionCandidate("ws.ts:840:12")).toBe(true);
+  });
+
+  it("accepts bare filenames with a known extension", () => {
+    expect(isInlineFileMentionCandidate("README.md")).toBe(true);
+    expect(isInlineFileMentionCandidate("package.json")).toBe(true);
+    expect(isInlineFileMentionCandidate("styles.css")).toBe(true);
+  });
+
+  it("rejects property/method access that collides with extensions", () => {
+    // `map`/`log`/`env` are deliberately excluded so ordinary inline code stays code.
+    expect(isInlineFileMentionCandidate("arr.map")).toBe(false);
+    expect(isInlineFileMentionCandidate("console.log")).toBe(false);
+    expect(isInlineFileMentionCandidate("process.env")).toBe(false);
+  });
+
+  it("rejects bare tokens without a recognized file extension", () => {
+    expect(isInlineFileMentionCandidate("user.name")).toBe(false);
+    expect(isInlineFileMentionCandidate("foo.bar")).toBe(false);
+    expect(isInlineFileMentionCandidate("useState")).toBe(false);
+    expect(isInlineFileMentionCandidate("v1.2")).toBe(false);
+  });
+
+  it("rejects multi-word or whitespace-containing spans", () => {
+    expect(isInlineFileMentionCandidate("see foo.ts")).toBe(false);
+    expect(isInlineFileMentionCandidate("const x = 1")).toBe(false);
+    expect(isInlineFileMentionCandidate("")).toBe(false);
+  });
+});
+
+describe("resolveInlineFileMentionMeta", () => {
+  it("resolves a candidate inline path against the cwd", () => {
+    expect(resolveInlineFileMentionMeta("apps/web/src/main.tsx", "/repo/project")).toMatchObject({
+      workspaceRelativePath: "apps/web/src/main.tsx",
+      basename: "main.tsx",
+    });
+  });
+
+  it("resolves a bare filename with a line suffix", () => {
+    expect(resolveInlineFileMentionMeta("ws.ts:840", "/repo/project")).toMatchObject({
+      basename: "ws.ts",
+      line: 840,
+    });
+  });
+
+  it("returns null for non-file inline code", () => {
+    expect(resolveInlineFileMentionMeta("console.log", "/repo/project")).toBeNull();
+    expect(resolveInlineFileMentionMeta("useState", "/repo/project")).toBeNull();
   });
 });
