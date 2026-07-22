@@ -131,38 +131,31 @@ describe("resolveMarkdownFileLinkTarget", () => {
 });
 
 describe("isInlineFileMentionCandidate", () => {
-  it("accepts multi-segment paths", () => {
+  it("accepts paths that carry a directory (forward or back slash)", () => {
     expect(isInlineFileMentionCandidate("apps/server/src/ws.ts")).toBe(true);
+    expect(isInlineFileMentionCandidate("apps/server/src/ws.ts:840")).toBe(true);
     expect(isInlineFileMentionCandidate("D:/Programme/t3code/apps/web/main.tsx")).toBe(true);
+    expect(isInlineFileMentionCandidate(".idea\\shelf\\knockdown_fix\\shelved.patch")).toBe(true);
   });
 
-  it("accepts paths with a line/column suffix", () => {
-    expect(isInlineFileMentionCandidate("ws.ts:840")).toBe(true);
-    expect(isInlineFileMentionCandidate("ws.ts:840:12")).toBe(true);
+  it("rejects bare filenames — they cannot be located without a directory", () => {
+    // Would (mis)resolve to the workspace root and render a chip that fails to
+    // open; e.g. claudeUsage.ts really lives under apps/server/src/provider/.
+    expect(isInlineFileMentionCandidate("claudeUsage.ts")).toBe(false);
+    expect(isInlineFileMentionCandidate("README.md")).toBe(false);
+    expect(isInlineFileMentionCandidate("package.json")).toBe(false);
+    expect(isInlineFileMentionCandidate("ws.ts:840")).toBe(false);
   });
 
-  it("accepts bare filenames with a known extension", () => {
-    expect(isInlineFileMentionCandidate("README.md")).toBe(true);
-    expect(isInlineFileMentionCandidate("package.json")).toBe(true);
-    expect(isInlineFileMentionCandidate("styles.css")).toBe(true);
-  });
-
-  it("rejects property/method access that collides with extensions", () => {
-    // `map`/`log`/`env` are deliberately excluded so ordinary inline code stays code.
+  it("rejects ordinary property/method access and identifiers", () => {
     expect(isInlineFileMentionCandidate("arr.map")).toBe(false);
     expect(isInlineFileMentionCandidate("console.log")).toBe(false);
     expect(isInlineFileMentionCandidate("process.env")).toBe(false);
-  });
-
-  it("rejects bare tokens without a recognized file extension", () => {
-    expect(isInlineFileMentionCandidate("user.name")).toBe(false);
-    expect(isInlineFileMentionCandidate("foo.bar")).toBe(false);
     expect(isInlineFileMentionCandidate("useState")).toBe(false);
-    expect(isInlineFileMentionCandidate("v1.2")).toBe(false);
   });
 
   it("rejects multi-word or whitespace-containing spans", () => {
-    expect(isInlineFileMentionCandidate("see foo.ts")).toBe(false);
+    expect(isInlineFileMentionCandidate("see apps/foo.ts")).toBe(false);
     expect(isInlineFileMentionCandidate("const x = 1")).toBe(false);
     expect(isInlineFileMentionCandidate("")).toBe(false);
   });
@@ -176,11 +169,18 @@ describe("resolveInlineFileMentionMeta", () => {
     });
   });
 
-  it("resolves a bare filename with a line suffix", () => {
-    expect(resolveInlineFileMentionMeta("ws.ts:840", "/repo/project")).toMatchObject({
+  it("resolves a directory-bearing path with a line suffix", () => {
+    expect(
+      resolveInlineFileMentionMeta("apps/server/src/ws.ts:840", "/repo/project"),
+    ).toMatchObject({
       basename: "ws.ts",
       line: 840,
     });
+  });
+
+  it("returns null for a bare filename (no directory to resolve)", () => {
+    expect(resolveInlineFileMentionMeta("claudeUsage.ts", "/repo/project")).toBeNull();
+    expect(resolveInlineFileMentionMeta("README.md", "/repo/project")).toBeNull();
   });
 
   it("returns null for non-file inline code", () => {

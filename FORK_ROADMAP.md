@@ -343,7 +343,32 @@ Scope note: Claude-first. The Codex/Cursor/Grok adapters keep their own
 `resumeCursor` shapes and have no equivalent fork primitive, so the action
 should be gated on provider capability rather than assumed universal.
 
-## 9. Click a file mention in chat to view it (auto-link bare paths)
+## 9. Click a file mention in chat to view it — SHIPPED 2026-07-22 (`g3code`)
+
+**Status:** inline-code file mentions render as clickable `MarkdownFileLink`
+chips (in-app preview on click, Ctrl/⌘-click and right-click → open in editor).
+Shipped decisions that diverge from the sketch below:
+
+- **Inline-code auto-linking requires a path separator** (`/` or `\`), not just
+  a known extension. A bare filename (`claudeUsage.ts`) has no directory, so it
+  can only (mis)resolve to the workspace root and render a chip that fails to
+  open — the file usually lives in a subtree, and may be ambiguous (two
+  `claudeUsage.ts`). Bare names stay plain code; explicit markdown links keep
+  the liberal href path. See `isInlineFileMentionCandidate` in `markdown-links.ts`.
+- **Bug found + fixed during impl:** `renderSkillInlineMarkdownChildren`'s
+  skip-guard matched overridden tags by `child.type` string, so the new
+  component-overridden `code`/`a` elements had their children rewrapped —
+  breaking text extraction (the chip silently never rendered) and letting skill
+  tokens render inside code spans. Now matches `props.node.tagName`; the `code`
+  override reads span text via `plainHastText(node)`. Regression-tested in
+  `ChatMarkdown.inlineFileMentions.test.tsx`.
+- **Chip weight** tuned in `fork.css` (solid `--muted` fill, full border,
+  monospace label) so a chip reads as a distinct token, not faded prose.
+- **Related follow-ups shipped same day:** markdown preview defaults to the
+  rendered view (`resolveRenderMarkdown`), and Ctrl/⌘-click on a chip opens the
+  external editor.
+
+The bare-paths-in-prose scanner (below) remains deliberately unshipped.
 
 **Goal:** when an agent names a file in the conversation — `.claude/docs/foo.md`,
 `apps/server/src/ws.ts:840`, a bare relative path in prose — clicking it opens

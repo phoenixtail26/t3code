@@ -17,10 +17,19 @@ describe("ChatMarkdown inline code file mentions", () => {
     expect(html).not.toContain("<code>apps/web/src/main.tsx</code>");
   });
 
-  it("renders an inline code filename with line suffix as a chip with the line label", () => {
-    const html = renderMarkdown("The handler lives in `ws.ts:840`.");
+  it("renders an inline code path with line suffix as a chip with the line label", () => {
+    const html = renderMarkdown("The handler lives in `apps/server/src/ws.ts:840`.");
     expect(html).toContain("chat-markdown-file-link");
     expect(html).toContain("L840");
+  });
+
+  it("leaves a bare filename (no directory) as plain code, not a broken chip", () => {
+    // A bare name can't be located, so it must not auto-link — see the
+    // claudeUsage.ts "failed to read workspace file" regression.
+    const html = renderMarkdown("Look at `claudeUsage.ts` and `README.md`.");
+    expect(html).not.toContain("chat-markdown-file-link");
+    expect(html).toContain("<code>claudeUsage.ts</code>");
+    expect(html).toContain("<code>README.md</code>");
   });
 
   it("leaves non-file inline code as plain code", () => {
