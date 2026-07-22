@@ -9,14 +9,17 @@
 
    Compromise: keep the chip shape + icon + click affordance, but give it the
    same visual weight as an inline-`code` token (solid --muted fill, full-opacity
-   border) so it reads as a distinct thing to click. Matches
-   `.chat-markdown :not(pre) > code` in index.css. Same selector specificity as
-   upstream's `.chat-markdown a.chat-markdown-file-link` rule; fork.css loads
-   after index.css, so it wins the tie. Applies to both inline-code and
-   markdown-link file chips — they're the same kind of reference. */
+   border, monospace label) so it reads as a distinct thing to click. Matches
+   `.chat-markdown :not(pre) > code` in index.css. The icon is an SVG, so
+   font-family on the anchor only restyles the label text. Same selector
+   specificity as upstream's `.chat-markdown a.chat-markdown-file-link` rule;
+   fork.css loads after index.css, so it wins the tie. Applies to both
+   inline-code and markdown-link file chips — they're the same kind of
+   reference. */
 .chat-markdown a.chat-markdown-file-link {
   background-color: var(--muted);
   border-color: var(--border);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
 }
 
 .chat-markdown a.chat-markdown-file-link:hover {
