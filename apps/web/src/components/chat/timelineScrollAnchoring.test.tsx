@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { getAnchoredTurnMetrics, getRowBottom } from "./timelineScrollAnchoring";
+import {
+  getAnchoredTurnMetrics,
+  getRowBottom,
+  isViewportAtRealContentEnd,
+} from "./timelineScrollAnchoring";
 
 function buildState({
   positions,
@@ -110,6 +114,67 @@ describe("timeline scroll anchoring", () => {
     expect(metrics?.lastBottom).toBe(1540);
     expect(metrics?.visibleUsableBottom).toBe(1464);
     expect(metrics?.scrollDeltaToRevealEnd).toBe(76);
+  });
+
+  it("reports at real content end when the last row bottom is visible", () => {
+    // lastBottom = 2000; usable viewport = 760 - 180 - 16 = 564.
+    const state = buildState({
+      positions: [0, 1720, 1880],
+      sizes: [1600, 80, 120],
+      scroll: 1436,
+      scrollLength: 760,
+    });
+
+    expect(
+      isViewportAtRealContentEnd({ state, composerOverlayHeight: 180, anchorOffset: 16 }),
+    ).toBe(true);
+  });
+
+  it("tolerates being within the jitter threshold of the real end", () => {
+    const state = buildState({
+      positions: [0, 1720, 1880],
+      sizes: [1600, 80, 120],
+      scroll: 1390,
+      scrollLength: 760,
+    });
+
+    expect(
+      isViewportAtRealContentEnd({ state, composerOverlayHeight: 180, anchorOffset: 16 }),
+    ).toBe(true);
+  });
+
+  it("rejects a viewport scrolled up beyond the jitter threshold", () => {
+    const state = buildState({
+      positions: [0, 1720, 1880],
+      sizes: [1600, 80, 120],
+      scroll: 1387,
+      scrollLength: 760,
+    });
+
+    expect(
+      isViewportAtRealContentEnd({ state, composerOverlayHeight: 180, anchorOffset: 16 }),
+    ).toBe(false);
+  });
+
+  it("is not at the real end for an empty or unmeasured list", () => {
+    const empty = buildState({ positions: [], sizes: [] });
+    const unmeasured = buildState({
+      positions: [0, 300],
+      sizes: [240, Number.NaN],
+      scroll: 0,
+      scrollLength: 760,
+    });
+
+    expect(
+      isViewportAtRealContentEnd({ state: empty, composerOverlayHeight: 180, anchorOffset: 16 }),
+    ).toBe(false);
+    expect(
+      isViewportAtRealContentEnd({
+        state: unmeasured,
+        composerOverlayHeight: 180,
+        anchorOffset: 16,
+      }),
+    ).toBe(false);
   });
 
   it("subtracts composer height from usable viewport height", () => {

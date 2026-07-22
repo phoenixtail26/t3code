@@ -34,6 +34,36 @@ export function getRowBottom(state: TimelineListMeasurementState, index: number)
   return top + Math.max(1, height);
 }
 
+// Roughly two text lines: enough to absorb sub-row measurement jitter while
+// still rejecting a viewport that is genuinely scrolled up.
+export const REAL_CONTENT_END_TOLERANCE_PX = 48;
+
+export function isViewportAtRealContentEnd({
+  state,
+  composerOverlayHeight,
+  anchorOffset,
+}: {
+  readonly state: TimelineListMeasurementState;
+  readonly composerOverlayHeight: number;
+  readonly anchorOffset: number;
+}): boolean {
+  if (state.data.length === 0) {
+    return false;
+  }
+
+  const realContentBottom = getRowBottom(state, state.data.length - 1);
+  if (realContentBottom === null) {
+    return false;
+  }
+
+  const usableViewportHeight = Math.max(
+    0,
+    state.scrollLength - composerOverlayHeight - anchorOffset,
+  );
+  const visibleBottom = state.scroll + usableViewportHeight;
+  return realContentBottom - visibleBottom <= REAL_CONTENT_END_TOLERANCE_PX;
+}
+
 export function getAnchoredTurnMetrics({
   state,
   anchorIndex,
