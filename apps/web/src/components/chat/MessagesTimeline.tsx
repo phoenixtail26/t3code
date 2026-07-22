@@ -184,6 +184,12 @@ interface MessagesTimelineProps {
   contentInsetEndAdjustment: number;
   onIsAtEndChange: (isAtEnd: boolean) => void;
   onManualNavigation: () => void;
+  /**
+   * When false, the list's library-level stick-to-bottom is switched off so a
+   * streaming turn can't snap the viewport back to the live edge after the user
+   * has scrolled away. Defaults to true for consumers without follow state.
+   */
+  followActive?: boolean;
   hideEmptyPlaceholder?: boolean;
 }
 
@@ -218,6 +224,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   contentInsetEndAdjustment,
   onIsAtEndChange,
   onManualNavigation,
+  followActive = true,
   hideEmptyPlaceholder = false,
 }: MessagesTimelineProps) {
   const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
@@ -494,7 +501,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             {...(anchoredEndSpace ? { anchoredEndSpace } : {})}
             contentInsetEndAdjustment={contentInsetEndAdjustment}
             maintainScrollAtEnd={
-              anchoredEndSpace
+              anchoredEndSpace || !followActive
                 ? false
                 : {
                     animated: false,
