@@ -6,12 +6,13 @@ import * as NodePath from "node:path";
 import {
   type ClaudeUsageLimit,
   type ClaudeUsageSeverity,
-  type ClaudeUsageSummary,
+  ClaudeUsageSummary,
   type ClaudeUsageUnavailableReason,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
 
 /**
@@ -33,11 +34,12 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/
 const USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage";
 const REQUEST_TIMEOUT_MS = 10_000;
 // Upstream usage counters move slowly; one refresh a minute keeps the meter
-// current without hammering the endpoint from every connected client.
-// Filled by fetches, invalidated by TTL expiry, cleared on server restart.
+// current without hammering the endpoint from every connected client. The TTL
+// is enforced through both an in-process map (fast path) and a shared on-disk
+// entry (below) so it holds across processes, not just within one.
 const CACHE_TTL_MS = 60_000;
 // The endpoint rate-limits per account, and this server is not the only
-// consumer (every Claude Code session polls it, plus any second T3 instance).
+// consumer (every Claude Code session polls it, plus any sibling T3 instance).
 // Once a 429 arrives, retrying on the normal cadence just prolongs the
 // blackout for every consumer — back off much further.
 const RATE_LIMITED_TTL_MS = 5 * 60_000;
@@ -48,7 +50,69 @@ interface CacheEntry {
   readonly summary: ClaudeUsageSummary;
 }
 
+// In-process fast path. Reset on restart; the on-disk entry survives it and is
+// shared across every T3 server running under the same credentials.
 const cacheByCredentialsPath = new Map<string, CacheEntry>();
+
+const SharedUsageCacheEntry = Schema.Struct({
+  fetchedAtMs: Schema.Number,
+  ttlMs: Schema.Number,
+  summary: ClaudeUsageSummary,
+});
+const decodeSharedUsageCacheEntryJson = Schema.decodeUnknownOption(
+  Schema.fromJsonString(SharedUsageCacheEntry),
+);
+
+/**
+ * Path of the cross-process usage cache — a sibling of the credentials file it
+ * is keyed by, so each account (config dir) gets its own shared entry. Every
+ * T3 server on the machine (the daily driver, a second desktop window, the
+ * phone's paired server, a thread's spawned dev instance) reads and writes
+ * this file, collapsing what would otherwise be one independent poller per
+ * process into ~one upstream fetch per minute for the whole account. Without
+ * it the shared per-account rate limit is trivially tripped during dogfooding.
+ */
+export function resolveUsageCacheFilePath(credentialsPath: string): string {
+  return NodePath.join(NodePath.dirname(credentialsPath), ".t3-usage-cache.json");
+}
+
+/** Read the shared entry, tolerating a missing, unreadable, or stale-shape file. */
+export function readSharedCacheEntry(cacheFilePath: string): CacheEntry | undefined {
+  let raw: string;
+  try {
+    raw = NodeFS.readFileSync(cacheFilePath, "utf8");
+  } catch {
+    return undefined;
+  }
+  // Schema-decode rather than trust the JSON: a file left by an older/newer
+  // instance with a drifted shape is ignored, not served to clients.
+  return Option.getOrUndefined(decodeSharedUsageCacheEntryJson(raw));
+}
+
+/**
+ * Write the shared entry atomically (temp file + rename) so concurrent readers
+ * never see a torn write. Best-effort: a failure just drops this instance back
+ * to its in-memory entry rather than failing the usage request.
+ */
+export function writeSharedCacheEntry(cacheFilePath: string, entry: CacheEntry): void {
+  try {
+    const tempPath = `${cacheFilePath}.${process.pid}.tmp`;
+    NodeFS.writeFileSync(tempPath, JSON.stringify(entry), "utf8");
+    NodeFS.renameSync(tempPath, cacheFilePath);
+  } catch {
+    // Shared cache is an optimization; never let it break the request.
+  }
+}
+
+/** The fresher of two cache entries (by fetch time), undefined-safe. */
+export function newerEntry(
+  a: CacheEntry | undefined,
+  b: CacheEntry | undefined,
+): CacheEntry | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return a.fetchedAtMs >= b.fetchedAtMs ? a : b;
+}
 
 function expandHomePath(value: string): string {
   if (value === "~") return NodeOS.homedir();
@@ -147,9 +211,18 @@ export const getClaudeUsageSummary = Effect.fn("getClaudeUsageSummary")(function
   homePath: string,
 ): Effect.fn.Return<ClaudeUsageSummary> {
   const credentialsPath = resolveClaudeCredentialsPath(homePath);
+  const cacheFilePath = resolveUsageCacheFilePath(credentialsPath);
   const nowMs = DateTime.toEpochMillis(yield* DateTime.now);
-  const cached = cacheByCredentialsPath.get(credentialsPath);
+  // Freshness is decided against the newer of this process's entry and the
+  // shared on-disk entry, so a warm fetch by any sibling instance satisfies
+  // this poll (and a freshly spawned dev server starts warm instead of
+  // immediately hitting the endpoint on mount).
+  const cached = newerEntry(
+    cacheByCredentialsPath.get(credentialsPath),
+    readSharedCacheEntry(cacheFilePath),
+  );
   if (cached && nowMs - cached.fetchedAtMs < cached.ttlMs) {
+    cacheByCredentialsPath.set(credentialsPath, cached);
     return cached.summary;
   }
 
@@ -201,15 +274,16 @@ export const getClaudeUsageSummary = Effect.fn("getClaudeUsageSummary")(function
   if (summary.status === "unavailable" && cached?.summary.status === "ok") {
     // Stale-while-error: a transient upstream failure keeps serving the last
     // good numbers (and re-arms the TTL so the retry is paced) instead of
-    // blanking every client's meter for a cycle.
-    cacheByCredentialsPath.set(credentialsPath, {
-      fetchedAtMs: nowMs,
-      ttlMs,
-      summary: cached.summary,
-    });
+    // blanking every client's meter for a cycle. Re-arming on disk too means a
+    // 429's 5-minute back-off is honored account-wide, not just here.
+    const staleEntry: CacheEntry = { fetchedAtMs: nowMs, ttlMs, summary: cached.summary };
+    cacheByCredentialsPath.set(credentialsPath, staleEntry);
+    writeSharedCacheEntry(cacheFilePath, staleEntry);
     return cached.summary;
   }
 
-  cacheByCredentialsPath.set(credentialsPath, { fetchedAtMs: nowMs, ttlMs, summary });
+  const entry: CacheEntry = { fetchedAtMs: nowMs, ttlMs, summary };
+  cacheByCredentialsPath.set(credentialsPath, entry);
+  writeSharedCacheEntry(cacheFilePath, entry);
   return summary;
 });
