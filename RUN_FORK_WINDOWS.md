@@ -162,12 +162,30 @@ instance and that state dir as off-limits:
 - **Never restart the daily driver to test a branch** — the agent session you are
   talking to lives in that database. Restarting kills it mid-task.
 
-Run the branch as a **second instance** instead, from the worktree:
+Run the branch as a **second instance** instead, from the worktree (or from
+`D:\Dev\t3code` itself to test uncommitted working-tree changes):
 
 ```powershell
 cd C:\Users\ghayl\.t3\worktrees\t3code\<worktree>
+$env:PATH = "D:\Dev\tools\node-v24.18.0-win-x64;$env:USERPROFILE\.t3-bin;$env:USERPROFILE\.vite-plus\bin;$env:PATH"
+$env:VP_NODE_MANAGER = 'no'
 pnpm dev:desktop
 ```
+
+**The PATH line is load-bearing — this fails SILENTLY without it.** With system
+Node (24.1.0) first on PATH, `pnpm dev:desktop` prints the engine warning and
+returns to the prompt in ~2s with exit 0, having done nothing: the dev-runner's
+`if (import.meta.main)` guard (see "Node >= 24.13" above) is `undefined` on
+Node < 24.2, so the entire CLI is skipped — no error, no ports, no window. This
+exact trap has burned multiple agent sessions because exit 0 + no output reads
+as "spawned fine" or gets misdiagnosed as a sandbox/stdin problem. **Success
+looks like:** a `[dev-runner] mode=dev:desktop ... serverPort=... webPort=...`
+INFO line within seconds, then Vite+ output, then an Electron window. If you
+get your prompt back instantly with no `[dev-runner]` line, it was the Node
+version.
+
+Agents: this works from a non-interactive/background shell too — the same PATH
+prepend is the difference between the silent no-op and a running instance.
 
 That is the short path, and it sidesteps the pairing dance entirely:
 

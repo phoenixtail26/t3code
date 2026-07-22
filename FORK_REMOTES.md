@@ -93,8 +93,16 @@ git push -u origin fix/<topic>
 gh pr create --repo pingdotgg/t3code
 ```
 
-Upstream currently says "not accepting contributions yet", so keep candidates
-small and cherry-pickable and expect them to wait. Fixes #1 (Windows Claude
+Upstream's `CONTRIBUTING.md`/`README.md` say they are "not accepting
+contributions yet" and reserve the right to close or ignore any PR — but that is
+their _stance_, not their _practice_. As of 2026-07-22, roughly half of recent
+merges (14 of the last 30) came from external forks, and they explicitly welcome
+"small performance improvements" and "tightly scoped maintenance work that
+clearly improves the project without changing its direction." PRs are
+auto-labelled `vouch:*` (trust) and `size:*` (diff size); external contributors
+stay `vouch:unvouched` until added to `.github/VOUCHED.td`, so an unvouched fix
+lands slower or sits. Net: keep candidates small and cherry-pickable and file
+them — the realistic risk is delay, not rejection. Fixes #1 (Windows Claude
 binary resolution) and #2 (Codex-default binding) are the standing candidates.
 
 ## Gotchas
