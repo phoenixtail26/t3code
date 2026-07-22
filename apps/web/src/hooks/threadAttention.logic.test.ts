@@ -70,6 +70,43 @@ describe("classifyThreadTransitions", () => {
     expect(result.completedExitedKeys).toEqual([]);
   });
 
+  it("does not notify a thread first observed already completed (booting with old threads)", () => {
+    const result = classifyThreadTransitions({
+      previousPhases: seededEmpty,
+      snapshots: [snapshot("a", "completed"), snapshot("b", "completed")],
+      seeded: true,
+    });
+    expect(result.completedEntered).toEqual([]);
+    expect(result.immediate).toEqual([]);
+    expect(result.completedExitedKeys).toEqual([]);
+    expect(result.nextPhases.get("a")).toBe("completed");
+  });
+
+  it("does not notify a thread first observed already blocked", () => {
+    const result = classifyThreadTransitions({
+      previousPhases: seededEmpty,
+      snapshots: [snapshot("a", "waiting_for_approval")],
+      seeded: true,
+    });
+    expect(result.immediate).toEqual([]);
+  });
+
+  it("still notifies a known thread that later completes", () => {
+    // First sight running (adopted silently), then a witnessed completion.
+    const first = classifyThreadTransitions({
+      previousPhases: seededEmpty,
+      snapshots: [snapshot("a", "running")],
+      seeded: true,
+    });
+    expect(first.completedEntered).toEqual([]);
+    const second = classifyThreadTransitions({
+      previousPhases: first.nextPhases,
+      snapshots: [snapshot("a", "completed")],
+      seeded: true,
+    });
+    expect(second.completedEntered.map((n) => n.key)).toEqual(["a"]);
+  });
+
   it("cancels a pending completion when the thread resumes work (a step boundary)", () => {
     const result = classifyThreadTransitions({
       previousPhases: new Map([["a", "completed"]]),
