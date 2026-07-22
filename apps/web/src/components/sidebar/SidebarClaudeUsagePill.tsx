@@ -11,6 +11,11 @@ import { toastManager } from "../ui/toast";
 // Upstream summary is cached server-side for 60s; polling faster only reheats
 // the cache. Focus refresh covers the "came back after lunch" glance.
 const POLL_INTERVAL_MS = 60_000;
+// ...but rapid tab-switching would otherwise fire a refetch on every focus.
+// Skip the focus refresh unless the last refresh (poll or focus) is at least
+// this old, so flicking between windows can't stack up round-trips on the
+// shared, rate-limited account endpoint.
+const FOCUS_REFRESH_MIN_INTERVAL_MS = 30_000;
 
 const SEVERITY_RANK = { normal: 0, warning: 1, error: 2 } as const;
 
@@ -179,8 +184,11 @@ export function SidebarClaudeUsagePill() {
   const [summary, setSummary] = useState<ClaudeUsageSummary | null>(null);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const knownSeveritiesRef = useRef<Map<string, ClaudeUsageSeverity> | null>(null);
+  const lastRefreshAtRef = useRef(0);
 
   const refresh = useCallback(async () => {
+    // Stamp before awaiting so a focus event mid-flight is gated too.
+    lastRefreshAtRef.current = Date.now();
     try {
       const next = await runPrimaryHttp(
         PrimaryEnvironmentHttpClient.pipe(
@@ -204,7 +212,10 @@ export function SidebarClaudeUsagePill() {
   useEffect(() => {
     void refresh();
     const interval = setInterval(() => void refresh(), POLL_INTERVAL_MS);
-    const handleFocus = () => void refresh();
+    const handleFocus = () => {
+      if (Date.now() - lastRefreshAtRef.current < FOCUS_REFRESH_MIN_INTERVAL_MS) return;
+      void refresh();
+    };
     window.addEventListener("focus", handleFocus);
     return () => {
       clearInterval(interval);

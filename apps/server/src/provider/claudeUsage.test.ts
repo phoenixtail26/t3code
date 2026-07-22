@@ -1,10 +1,19 @@
 // @effect-diagnostics nodeBuiltinImport:off
+import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
-import { describe, expect, it } from "@effect/vitest";
+import type { ClaudeUsageSummary } from "@t3tools/contracts";
+import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
 
-import { mapUpstreamLimits, resolveClaudeCredentialsPath } from "./claudeUsage.ts";
+import {
+  mapUpstreamLimits,
+  newerEntry,
+  readSharedCacheEntry,
+  resolveClaudeCredentialsPath,
+  resolveUsageCacheFilePath,
+  writeSharedCacheEntry,
+} from "./claudeUsage.ts";
 
 describe("resolveClaudeCredentialsPath", () => {
   it("uses the default ~/.claude config dir when no homePath is set", () => {
@@ -17,6 +26,90 @@ describe("resolveClaudeCredentialsPath", () => {
     expect(resolveClaudeCredentialsPath("~/claude-work")).toBe(
       NodePath.join(NodeOS.homedir(), "claude-work", ".credentials.json"),
     );
+  });
+});
+
+describe("resolveUsageCacheFilePath", () => {
+  it("places the shared cache next to the credentials it is keyed by", () => {
+    const credentialsPath = resolveClaudeCredentialsPath("");
+    expect(resolveUsageCacheFilePath(credentialsPath)).toBe(
+      NodePath.join(NodeOS.homedir(), ".claude", ".t3-usage-cache.json"),
+    );
+  });
+});
+
+describe("newerEntry", () => {
+  const at = (fetchedAtMs: number) => ({
+    fetchedAtMs,
+    ttlMs: 60_000,
+    summary: { status: "unavailable", checkedAt: "x", limits: [] } as ClaudeUsageSummary,
+  });
+
+  it("returns the defined entry when the other is missing", () => {
+    expect(newerEntry(undefined, undefined)).toBeUndefined();
+    expect(newerEntry(at(5), undefined)?.fetchedAtMs).toBe(5);
+    expect(newerEntry(undefined, at(5))?.fetchedAtMs).toBe(5);
+  });
+
+  it("returns the entry with the later fetch time", () => {
+    expect(newerEntry(at(10), at(20))?.fetchedAtMs).toBe(20);
+    expect(newerEntry(at(30), at(20))?.fetchedAtMs).toBe(30);
+  });
+});
+
+describe("shared cache entry round-trip", () => {
+  let dir: string;
+  let cacheFilePath: string;
+
+  beforeEach(() => {
+    dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-usage-"));
+    cacheFilePath = NodePath.join(dir, ".t3-usage-cache.json");
+  });
+
+  afterEach(() => {
+    NodeFS.rmSync(dir, { recursive: true, force: true });
+  });
+
+  const okEntry = {
+    fetchedAtMs: 1_700_000_000_000,
+    ttlMs: 60_000,
+    summary: {
+      status: "ok",
+      checkedAt: "2026-07-22T00:00:00Z",
+      limits: [
+        {
+          kind: "session",
+          label: "Session",
+          percent: 42,
+          severity: "normal",
+          resetsAt: null,
+          isActive: true,
+        },
+      ],
+    } as ClaudeUsageSummary,
+  };
+
+  it("returns undefined when no file exists yet", () => {
+    expect(readSharedCacheEntry(cacheFilePath)).toBeUndefined();
+  });
+
+  it("round-trips a written entry through the file", () => {
+    writeSharedCacheEntry(cacheFilePath, okEntry);
+    expect(readSharedCacheEntry(cacheFilePath)).toEqual(okEntry);
+  });
+
+  it("ignores a corrupt or drifted-shape file rather than serving it", () => {
+    NodeFS.writeFileSync(cacheFilePath, "{ not valid json", "utf8");
+    expect(readSharedCacheEntry(cacheFilePath)).toBeUndefined();
+
+    NodeFS.writeFileSync(cacheFilePath, JSON.stringify({ fetchedAtMs: 1, summary: {} }), "utf8");
+    expect(readSharedCacheEntry(cacheFilePath)).toBeUndefined();
+  });
+
+  it("does not throw when the target directory is missing", () => {
+    const missing = NodePath.join(dir, "nope", ".t3-usage-cache.json");
+    expect(() => writeSharedCacheEntry(missing, okEntry)).not.toThrow();
+    expect(readSharedCacheEntry(missing)).toBeUndefined();
   });
 });
 
