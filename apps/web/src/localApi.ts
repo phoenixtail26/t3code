@@ -37,6 +37,15 @@ function createBrowserLocalApi(): LocalApi {
 
         window.open(url, "_blank", "noopener,noreferrer");
       },
+      revealPath: async (path) => {
+        if (!window.desktopBridge) {
+          throw new Error("Revealing a path requires the desktop app.");
+        }
+        const revealed = await window.desktopBridge.revealPath(path);
+        if (!revealed) {
+          throw new Error("Unable to reveal this path.");
+        }
+      },
     },
     contextMenu: {
       show: async <T extends string>(

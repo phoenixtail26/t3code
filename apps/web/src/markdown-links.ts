@@ -113,7 +113,13 @@ function isLikelyPathCandidate(path: string): boolean {
   if (WINDOWS_DRIVE_PATH_PATTERN.test(path) || WINDOWS_UNC_PATH_PATTERN.test(path)) return true;
   if (RELATIVE_PATH_PREFIX_PATTERN.test(path)) return true;
   if (path.startsWith("/")) return looksLikePosixFilesystemPath(path);
-  return RELATIVE_FILE_PATH_PATTERN.test(path) || RELATIVE_FILE_NAME_PATTERN.test(path);
+  // A trailing separator marks a directory (`apps/server/src/`); the relative
+  // patterns require a segment after the last slash, so test without it.
+  const withoutTrailingSeparators = path.replace(/[\\/]+$/, "");
+  return (
+    RELATIVE_FILE_PATH_PATTERN.test(withoutTrailingSeparators) ||
+    RELATIVE_FILE_NAME_PATTERN.test(withoutTrailingSeparators)
+  );
 }
 
 function isRelativePath(path: string): boolean {
@@ -171,8 +177,11 @@ export function resolveMarkdownFileLinkTarget(
 }
 
 function basenameOfPath(path: string): string {
-  const separatorIndex = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return separatorIndex >= 0 ? path.slice(separatorIndex + 1) : path;
+  // Trailing separators mark a directory (`logs/138396/`); without trimming them
+  // the basename comes back empty and the chip renders with no label.
+  const trimmed = path.replace(/[\\/]+$/, "");
+  const separatorIndex = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  return separatorIndex >= 0 ? trimmed.slice(separatorIndex + 1) : trimmed;
 }
 
 function workspaceRelativePath(path: string, workspaceRoot: string | undefined): string | null {

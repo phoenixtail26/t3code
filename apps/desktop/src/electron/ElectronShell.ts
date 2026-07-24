@@ -24,6 +24,7 @@ export class ElectronShell extends Context.Service<
   ElectronShell,
   {
     readonly openExternal: (rawUrl: unknown) => Effect.Effect<boolean>;
+    readonly revealPath: (rawPath: unknown) => Effect.Effect<boolean>;
     readonly copyText: (text: string) => Effect.Effect<void>;
   }
 >()("@t3tools/desktop/electron/ElectronShell") {}
@@ -39,6 +40,17 @@ export const make = ElectronShell.of({
             () => false,
           ),
         ),
+    }),
+  revealPath: (rawPath) =>
+    Effect.sync(() => {
+      if (typeof rawPath !== "string" || rawPath.trim().length === 0) {
+        return false;
+      }
+      // Reveals and selects the target in the OS file manager. Deliberately NOT
+      // shell.openPath: that launches the target with its default application,
+      // which would execute an executable or script whose path an agent named.
+      Electron.shell.showItemInFolder(rawPath);
+      return true;
     }),
   copyText: (text) =>
     Effect.sync(() => {

@@ -2,14 +2,16 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { beforeEach, vi } from "vite-plus/test";
 
-const { openExternalMock, writeTextMock } = vi.hoisted(() => ({
+const { openExternalMock, showItemInFolderMock, writeTextMock } = vi.hoisted(() => ({
   openExternalMock: vi.fn(),
+  showItemInFolderMock: vi.fn(),
   writeTextMock: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
   shell: {
     openExternal: openExternalMock,
+    showItemInFolder: showItemInFolderMock,
   },
   clipboard: {
     writeText: writeTextMock,
@@ -21,8 +23,29 @@ import * as ElectronShell from "./ElectronShell.ts";
 describe("ElectronShell", () => {
   beforeEach(() => {
     openExternalMock.mockReset();
+    showItemInFolderMock.mockReset();
     writeTextMock.mockReset();
   });
+
+  it.effect("reveals a path in the OS file manager", () =>
+    Effect.gen(function* () {
+      const electronShell = ElectronShell.make;
+      const result = yield* electronShell.revealPath("C:/Apollo/logs/138396");
+
+      assert.equal(result, true);
+      assert.deepEqual(showItemInFolderMock.mock.calls, [["C:/Apollo/logs/138396"]]);
+    }),
+  );
+
+  it.effect("refuses to reveal a non-string or blank path", () =>
+    Effect.gen(function* () {
+      const electronShell = ElectronShell.make;
+
+      assert.equal(yield* electronShell.revealPath("   "), false);
+      assert.equal(yield* electronShell.revealPath(42), false);
+      assert.equal(showItemInFolderMock.mock.calls.length, 0);
+    }),
+  );
 
   it.effect("opens safe external URLs", () =>
     Effect.gen(function* () {

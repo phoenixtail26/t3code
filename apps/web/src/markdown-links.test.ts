@@ -187,4 +187,22 @@ describe("resolveInlineFileMentionMeta", () => {
     expect(resolveInlineFileMentionMeta("console.log", "/repo/project")).toBeNull();
     expect(resolveInlineFileMentionMeta("useState", "/repo/project")).toBeNull();
   });
+
+  it("names a trailing-slash directory after its last segment", () => {
+    // A trailing separator previously left the basename empty, so the chip
+    // rendered with no label at all.
+    expect(resolveInlineFileMentionMeta("C:/Apollo/logs/138396/", "/repo/project")).toMatchObject({
+      basename: "138396",
+    });
+    expect(resolveInlineFileMentionMeta("apps/server/src/", "/repo/project")).toMatchObject({
+      basename: "src",
+    });
+  });
+
+  it("does not prefix the workspace label onto an absolute windows path", () => {
+    // Previously displayed as "project/C:/Apollo/logs/138396/".
+    expect(resolveInlineFileMentionMeta("C:/Apollo/logs/138396/", "/repo/project")).toMatchObject({
+      displayPath: "C:/Apollo/logs/138396/",
+    });
+  });
 });
