@@ -47,7 +47,7 @@ import {
   inferEntryKindFromPath,
   syntheticFileNameForLanguageId,
 } from "../pierre-icons";
-import { revealInFileExplorerLabel } from "./preview/fileExplorerLabel";
+import { openInFileExplorerLabel } from "./preview/fileExplorerLabel";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "./ui/collapsible";
@@ -1190,7 +1190,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
         const clicked = await api.contextMenu.show(
           [
             ...(isDirectory
-              ? ([{ id: "reveal", label: revealInFileExplorerLabel(navigator.platform) }] as const)
+              ? ([{ id: "reveal", label: openInFileExplorerLabel(navigator.platform) }] as const)
               : ([{ id: "open", label: "Open in editor" }] as const)),
             ...(!isDirectory && onOpenInBrowser
               ? ([{ id: "open-in-browser", label: "Open in integrated browser" }] as const)
@@ -1283,7 +1283,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
         </div>
         <div className="mt-1 text-[10px] text-muted-foreground">
           {isDirectory
-            ? `Click to ${revealInFileExplorerLabel(navigator.platform).toLowerCase()}`
+            ? `Click to ${openInFileExplorerLabel(navigator.platform).toLowerCase()}`
             : `${OPEN_IN_EDITOR_MODIFIER_LABEL}-click to open in editor`}
         </div>
       </TooltipPopup>
