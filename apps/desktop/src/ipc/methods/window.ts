@@ -8,6 +8,7 @@ import {
   type DesktopEnvironmentBootstrap,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
@@ -275,6 +276,19 @@ export const revealPath = DesktopIpc.makeIpcMethod({
   result: Schema.Boolean,
   handler: Effect.fn("desktop.ipc.window.revealPath")(function* (targetPath) {
     const shell = yield* ElectronShell.ElectronShell;
-    return yield* shell.revealPath(targetPath);
+    const fileSystem = yield* FileSystem.FileSystem;
+    const entryType = yield* fileSystem.stat(targetPath).pipe(
+      Effect.map((info) => info.type),
+      // Missing or unreadable — report failure rather than silently no-op.
+      Effect.orElseSucceed(() => null),
+    );
+    if (entryType === null) {
+      return false;
+    }
+    // A directory is opened so the file manager shows its contents; anything
+    // else is revealed selected in its parent, never launched.
+    return entryType === "Directory"
+      ? yield* shell.openPath(targetPath)
+      : yield* shell.revealItemInFolder(targetPath);
   }),
 });

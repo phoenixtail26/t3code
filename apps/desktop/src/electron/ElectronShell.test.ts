@@ -2,8 +2,9 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { beforeEach, vi } from "vite-plus/test";
 
-const { openExternalMock, showItemInFolderMock, writeTextMock } = vi.hoisted(() => ({
+const { openExternalMock, openPathMock, showItemInFolderMock, writeTextMock } = vi.hoisted(() => ({
   openExternalMock: vi.fn(),
+  openPathMock: vi.fn(),
   showItemInFolderMock: vi.fn(),
   writeTextMock: vi.fn(),
 }));
@@ -11,6 +12,7 @@ const { openExternalMock, showItemInFolderMock, writeTextMock } = vi.hoisted(() 
 vi.mock("electron", () => ({
   shell: {
     openExternal: openExternalMock,
+    openPath: openPathMock,
     showItemInFolder: showItemInFolderMock,
   },
   clipboard: {
@@ -23,27 +25,50 @@ import * as ElectronShell from "./ElectronShell.ts";
 describe("ElectronShell", () => {
   beforeEach(() => {
     openExternalMock.mockReset();
+    openPathMock.mockReset();
     showItemInFolderMock.mockReset();
     writeTextMock.mockReset();
   });
 
-  it.effect("reveals a path in the OS file manager", () =>
+  it.effect("opens a path with the OS default handler", () =>
     Effect.gen(function* () {
+      openPathMock.mockResolvedValue("");
       const electronShell = ElectronShell.make;
-      const result = yield* electronShell.revealPath("C:/Apollo/logs/138396");
+      const result = yield* electronShell.openPath("C:/Apollo/svn/unity/forsaken");
 
       assert.equal(result, true);
-      assert.deepEqual(showItemInFolderMock.mock.calls, [["C:/Apollo/logs/138396"]]);
+      assert.deepEqual(openPathMock.mock.calls, [["C:/Apollo/svn/unity/forsaken"]]);
     }),
   );
 
-  it.effect("refuses to reveal a non-string or blank path", () =>
+  it.effect("reports failure when the OS cannot open the path", () =>
+    Effect.gen(function* () {
+      openPathMock.mockResolvedValue("no application associated");
+      const electronShell = ElectronShell.make;
+
+      assert.equal(yield* electronShell.openPath("C:/nope"), false);
+    }),
+  );
+
+  it.effect("reveals an item selected inside its parent", () =>
+    Effect.gen(function* () {
+      const electronShell = ElectronShell.make;
+      const result = yield* electronShell.revealItemInFolder("C:/Apollo/setup.exe");
+
+      assert.equal(result, true);
+      assert.deepEqual(showItemInFolderMock.mock.calls, [["C:/Apollo/setup.exe"]]);
+      assert.equal(openPathMock.mock.calls.length, 0);
+    }),
+  );
+
+  it.effect("refuses a non-string or blank path", () =>
     Effect.gen(function* () {
       const electronShell = ElectronShell.make;
 
-      assert.equal(yield* electronShell.revealPath("   "), false);
-      assert.equal(yield* electronShell.revealPath(42), false);
+      assert.equal(yield* electronShell.revealItemInFolder("   "), false);
+      assert.equal(yield* electronShell.openPath(42), false);
       assert.equal(showItemInFolderMock.mock.calls.length, 0);
+      assert.equal(openPathMock.mock.calls.length, 0);
     }),
   );
 
