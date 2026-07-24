@@ -42,7 +42,12 @@ import remarkGfm from "remark-gfm";
 import { renderSkillInlineMarkdownChildren } from "./chat/SkillInlineText";
 import { CHAT_FILE_TAG_CHIP_CLASS_NAME, FileTagChipContent } from "./chat/FileTagChip";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
-import { hasSpecificPierreIconForFileName, syntheticFileNameForLanguageId } from "../pierre-icons";
+import {
+  hasSpecificPierreIconForFileName,
+  inferEntryKindFromPath,
+  syntheticFileNameForLanguageId,
+} from "../pierre-icons";
+import { revealInFileExplorerLabel } from "./preview/fileExplorerLabel";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "./ui/collapsible";
@@ -742,6 +747,7 @@ interface MarkdownFileLinkProps {
   line?: number | undefined;
   label: string;
   copyMarkdown: string;
+  isDirectory: boolean;
   theme: "light" | "dark";
   threadRef?: ScopedThreadRef | undefined;
   onOpen: (targetPath: string) => Promise<AtomCommandResult<unknown, unknown>>;
@@ -1024,12 +1030,34 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
   line,
   label,
   copyMarkdown,
+  isDirectory,
   theme,
   threadRef,
   onOpen,
   onOpenInBrowser,
   className,
 }: MarkdownFileLinkProps) {
+  const handleRevealPath = useCallback(() => {
+    void (async () => {
+      try {
+        const api = readLocalApi();
+        if (!api) {
+          throw new Error("Revealing a folder requires the desktop app.");
+        }
+        await api.shell.revealPath(iconPath.replace(/[\\/]+$/, ""));
+      } catch (cause) {
+        reportMarkdownActionFailure({ operation: "reveal-path", target: iconPath }, cause);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Unable to reveal folder",
+            description: cause instanceof Error ? cause.message : "An error occurred.",
+          }),
+        );
+      }
+    })();
+  }, [iconPath]);
+
   const handleOpenInEditor = useCallback(() => {
     void (async () => {
       try {
@@ -1161,8 +1189,10 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
       try {
         const clicked = await api.contextMenu.show(
           [
-            { id: "open", label: "Open in editor" },
-            ...(onOpenInBrowser
+            ...(isDirectory
+              ? ([{ id: "reveal", label: revealInFileExplorerLabel(navigator.platform) }] as const)
+              : ([{ id: "open", label: "Open in editor" }] as const)),
+            ...(!isDirectory && onOpenInBrowser
               ? ([{ id: "open-in-browser", label: "Open in integrated browser" }] as const)
               : []),
             { id: "copy-relative", label: "Copy relative path" },
@@ -1171,6 +1201,10 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
           { x: event.clientX, y: event.clientY },
         );
 
+        if (clicked === "reveal") {
+          handleRevealPath();
+          return;
+        }
         if (clicked === "open") {
           handleOpenInEditor();
           return;
@@ -1193,7 +1227,16 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
         );
       }
     },
-    [displayPath, handleCopy, handleOpenInBrowser, handleOpenInEditor, onOpenInBrowser, targetPath],
+    [
+      displayPath,
+      handleCopy,
+      handleOpenInBrowser,
+      handleOpenInEditor,
+      handleRevealPath,
+      isDirectory,
+      onOpenInBrowser,
+      targetPath,
+    ],
   );
 
   return (
@@ -1207,6 +1250,12 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
+              // A directory has nothing to preview or edit — reveal it in the OS
+              // file manager instead, for both plain and modified clicks.
+              if (isDirectory) {
+                handleRevealPath();
+                return;
+              }
               // Ctrl-click (⌘-click on macOS) opens in the external editor,
               // mirroring the "Open in editor" context-menu action.
               if (event.ctrlKey || event.metaKey) {
@@ -1233,7 +1282,9 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
           {displayPath}
         </div>
         <div className="mt-1 text-[10px] text-muted-foreground">
-          {`${OPEN_IN_EDITOR_MODIFIER_LABEL}-click to open in editor`}
+          {isDirectory
+            ? `Click to ${revealInFileExplorerLabel(navigator.platform).toLowerCase()}`
+            : `${OPEN_IN_EDITOR_MODIFIER_LABEL}-click to open in editor`}
         </div>
       </TooltipPopup>
     </Tooltip>
@@ -1253,6 +1304,7 @@ function areMarkdownFileLinkPropsEqual(
     previous.line === next.line &&
     previous.label === next.label &&
     previous.copyMarkdown === next.copyMarkdown &&
+    previous.isDirectory === next.isDirectory &&
     previous.theme === next.theme &&
     previous.threadRef === next.threadRef &&
     previous.onOpen === next.onOpen &&
@@ -1385,6 +1437,7 @@ function ChatMarkdown({
           line={meta.line}
           label={labelParts.join(" · ")}
           copyMarkdown={options.copyMarkdown}
+          isDirectory={inferEntryKindFromPath(meta.filePath) === "directory"}
           theme={resolvedTheme}
           threadRef={threadRef}
           onOpen={openInPreferredEditor}

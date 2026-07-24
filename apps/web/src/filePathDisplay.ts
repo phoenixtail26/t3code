@@ -21,6 +21,16 @@ function stripRelativePrefixes(path: string): string {
   return path.replace(/^\.\/+/, "").replace(/^\/+/, "");
 }
 
+/**
+ * Separators are already normalized to `/` by the caller, so a Windows drive
+ * path reads as `C:/…` and a UNC share as `//server/share`. Without recognizing
+ * those, an absolute path outside the workspace falls through to the relative
+ * branch and gets the workspace label wrongly prefixed (`forsaken/C:/Apollo/…`).
+ */
+function isAbsoluteDisplayPath(path: string): boolean {
+  return path.startsWith("/") || /^[A-Za-z]:\//.test(path);
+}
+
 export function formatWorkspaceRelativePath(
   pathWithPosition: string,
   workspaceRoot: string | undefined,
@@ -44,7 +54,7 @@ export function formatWorkspaceRelativePath(
     } else if (pathForCompare.startsWith(workspaceWithSeparator)) {
       const relativeSuffix = normalizedPath.slice(normalizedWorkspaceRoot.length + 1);
       displayPath = `${workspaceLabel}/${relativeSuffix}`;
-    } else if (!normalizedPath.startsWith("/")) {
+    } else if (!isAbsoluteDisplayPath(normalizedPath)) {
       const relativePath = stripRelativePrefixes(normalizedPath);
       displayPath = pathForCompare.startsWith(workspaceLabelWithSeparator)
         ? normalizedPath
