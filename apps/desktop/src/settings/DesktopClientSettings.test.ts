@@ -22,7 +22,9 @@ const clientSettings: ClientSettings = {
   desktopNotificationSoundPath: "",
   diffIgnoreWhitespace: true,
   favorites: [],
+  glassOpacity: 80,
   providerModelPreferences: {},
+  sidebarAutoSettleAfterDays: 3,
   sidebarProjectGroupingMode: "repository_path",
   sidebarProjectGroupingOverrides: {
     "environment-1:/tmp/project-a": "separate",
@@ -31,6 +33,7 @@ const clientSettings: ClientSettings = {
   sidebarThreadSortOrder: "created_at",
   sidebarThreadPreviewCount: 6,
   showExternalSessions: true,
+  sidebarV2Enabled: false,
   timestampFormat: "24-hour",
   wordWrap: true,
 };
