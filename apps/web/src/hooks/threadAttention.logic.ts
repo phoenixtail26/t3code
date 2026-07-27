@@ -15,6 +15,12 @@ import type { AgentAwarenessPhase } from "@t3tools/shared/agentAwareness";
  * - `completedExitedKeys` — threads that left "completed" (resumed work) or
  *   vanished; the hook cancels their pending completion toast.
  *
+ * Notifications fire only on a transition between phases we actually observed.
+ * The first phase seen for a thread is adopted silently — thread shells stream
+ * in after mount, so a thread already completed/blocked when it first loads
+ * (an instance booting against a store full of old threads) must not read as a
+ * fresh event.
+ *
  * Keeping this pure makes the transition rules unit-testable; the timer
  * plumbing (arm/cancel/fire) lives in the hook.
  */
@@ -93,6 +99,13 @@ export function classifyThreadTransitions(params: {
     if (previous === COMPLETION_PHASE && phase !== COMPLETION_PHASE) {
       completedExitedKeys.push(key);
     }
+    // First time we've observed this thread: adopt its phase silently. Thread
+    // shells stream in asynchronously after mount, so a thread that was already
+    // completed/blocked when it first loaded — an instance booting against a
+    // store full of old threads is the worst case — must not read as a fresh
+    // transition. We only notify for transitions between phases we actually
+    // witnessed (e.g. running -> completed), never for the first phase we see.
+    if (previous === undefined) continue;
     if (!seeded) continue;
     if (IMMEDIATE_ALERT_PHASES.has(phase)) {
       immediate.push(toNotification(snapshot));
