@@ -45,6 +45,16 @@ Grep the output for `CONFLICT`. This is the honest preview of what step 5
 will hit. Report the conflict list to the user **before** merging if there is
 anything beyond the expected contact files (see step 5).
 
+Also snapshot the fork's delta NOW, while `g3code` is still unmerged — step 6
+compares against it to catch silently dropped fork lines:
+
+```sh
+BASE=$(git merge-base g3code upstream/main)
+git diff $BASE g3code -- . ':!pnpm-lock.yaml' ':!*.gen.ts' \
+  | awk '/^\+\+\+ /{f=substr($0,7)} /^\+[^+]/{print f": "substr($0,2)}' \
+  | sort -u > /tmp/fork-lines-before
+```
+
 **3. Fast-forward `main` and back it up.**
 
 `main` is normally not checked out in any worktree, so update the ref directly
@@ -69,11 +79,27 @@ git -C <main-worktree> merge main -m "Merge upstream main into g3code"
 
 **5. Resolve conflicts using the base, not guesswork.**
 
-Expected contact files — the fork's surgical edits inside upstream files:
-`ChatView.tsx`, `ClaudeProvider.ts`, `ClaudeAdapter.ts`, `modelSelection.ts`,
-`Sidebar.tsx`, `CommandPalette.tsx`, `SettingsPanels.tsx`. Conflicts confined
-to these are yours to resolve. Conflicts elsewhere mean the fork's footprint
-grew — resolve if clearly trivial, otherwise stop and report.
+The fork's contact surface is ~60 upstream files — do not trust a hardcoded
+list; derive the current one:
+
+```sh
+BASE=$(git merge-base g3code upstream/main)   # before the merge starts
+for f in $(git diff --name-only $BASE g3code -- apps packages); do
+  git cat-file -e "upstream/main:$f" 2>/dev/null && echo "$f"
+done
+```
+
+Historic conflict hotspots: `ChatView.tsx`, `Sidebar.tsx`, `CommandPalette.tsx`,
+`ChatMarkdown.tsx`, `SettingsPanels.tsx`, `contracts/{index,settings}.ts`, the
+package.jsons, and `pnpm-lock.yaml` (never hand-merge the lockfile — take
+theirs, then `corepack pnpm install --lockfile-only` to reconcile). Conflicts
+in derived contact files are yours to resolve; conflicts in files the fork has
+never touched are unexpected — resolve if clearly trivial, otherwise stop and
+report. Most fork edits are one-line mounts (e.g. `<ForkSidebarPills />` in
+`SidebarChrome.tsx`, handler spreads in `ws.ts`) — when re-applying one after
+an upstream restructure, keep it one line; if a fork edit inside an upstream
+file has grown past ~10 lines, extract it into a fork-owned file per
+CLAUDE.md's fork rules instead of re-applying it inline.
 
 For each conflict, diff all three stages before editing:
 
@@ -89,11 +115,37 @@ historically `ChatView.tsx` resolves to "theirs + re-append the fork's
 `fallbackDefaultModelSelection` memo". Do not keep stale fork copies of code
 upstream has since restructured.
 
-**6. Verify — semantic, not just textual.**
+**6. Tripwire: check no fork line was silently dropped.**
 
-A clean auto-merge is not a correctness guarantee, especially in
-`ClaudeProvider.ts` where upstream changes probe behavior under the fork's
-Windows binary-resolution fix. From the main worktree:
+Auto-merge can discard fork lines without raising a conflict (it happened in
+the 2026-07-27 sync: a cleanly-merged `Sidebar.tsx` region lost a fork import,
+and only typecheck caught it — and typecheck only catches drops that break
+types). With conflicts resolved but BEFORE committing, re-diff and compare
+against the step-2 snapshot:
+
+```sh
+git diff upstream/main -- . ':!pnpm-lock.yaml' ':!*.gen.ts' \
+  | awk '/^\+\+\+ /{f=substr($0,7)} /^\+[^+]/{print f": "substr($0,2)}' \
+  | sort -u > /tmp/fork-lines-after
+comm -23 /tmp/fork-lines-before /tmp/fork-lines-after
+```
+
+Every line printed is a fork addition that no longer survives the merge.
+Each one must be explainable: you consciously adopted upstream's rewrite of
+that region, upstream absorbed the fork change, or the line moved file /
+was reworded during resolution (a rewording shows up here as a "drop" —
+confirm the replacement exists). An unexplained drop means the merge ate a
+fork feature — restore it before committing. Do NOT re-add a line just
+because it appears here: first check the three-stage diff; if the line was
+upstream base code that upstream itself deleted, the drop is correct
+(that exact trap — reflexively re-adding `useServerConfigs` — was nearly
+shipped in the 2026-07-27 sync).
+
+**7. Verify — semantic, not just textual.**
+
+A clean auto-merge is not a correctness guarantee: step 6 only proves fork
+lines still exist, not that they still do the right thing in upstream's
+restructured surroundings. From the main worktree:
 
 ```sh
 export PATH="/d/Dev/tools/node-v24.18.0-win-x64:$HOME/.t3-bin:$HOME/.vite-plus/bin:$PATH"
@@ -107,7 +159,7 @@ If upstream touched Claude provider files, say so in the report and recommend
 a live smoke test (`/build`, then spawn a Claude session after the user
 restarts).
 
-**7. Commit and push.**
+**8. Commit and push.**
 
 Commit via the Bash tool with a heredoc (`git commit --file=- <<'EOF'`), NOT a
 PowerShell here-string — the `@'...'@` delimiters land as literal text in Git

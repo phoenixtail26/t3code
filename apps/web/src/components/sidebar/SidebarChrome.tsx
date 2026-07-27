@@ -19,8 +19,7 @@ import {
 } from "../ui/sidebar";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdatePill } from "./SidebarUpdatePill";
-import { SidebarNewBuildPill } from "./SidebarNewBuildPill";
-import { SidebarClaudeUsagePill } from "./SidebarClaudeUsagePill";
+import { ForkSidebarPills } from "./ForkSidebarPills";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
@@ -113,8 +112,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
     <SidebarFooter className="p-2">
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
-      <SidebarNewBuildPill />
-      <SidebarClaudeUsagePill />
+      <ForkSidebarPills />
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton
