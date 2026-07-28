@@ -48,6 +48,9 @@ export function useThreadAttentionNotifications(): void {
   const lastPhaseByThreadRef = useRef(new Map<string, AgentAwarenessPhase>());
   // Per-thread timers for completions awaiting the debounce window.
   const completionTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  // Delivered notifications still on screen, keyed by thread. Held only to keep
+  // them from being garbage collected while the user can still click them.
+  const liveNotificationsRef = useRef(new Map<string, Notification>());
   // Seeded on the first pass so a client that starts up with threads already
   // waiting/completed does not fire a burst of notifications for pre-existing
   // state.
@@ -64,9 +67,18 @@ export function useThreadAttentionNotifications(): void {
       // window or take foreground on Windows; the main process can.
       void window.desktopBridge?.focusMainWindow?.();
       window.focus();
-      void navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(scopeThreadRef(environmentId as never, threadId as never)),
+      const params = buildThreadRouteParams(
+        scopeThreadRef(environmentId as never, threadId as never),
+      );
+      // Client-side navigation lazily imports the thread route's chunk. If that
+      // chunk is gone (a rebuild replaced dist under the running app) the import
+      // rejects, and an unhandled rejection here would silently swallow the
+      // click — the window foregrounds but never opens the thread. Fall back to
+      // a full page load, which fetches the current shell and its chunks.
+      navigate({ to: "/$environmentId/$threadId", params }).catch(() => {
+        window.location.assign(
+          `/${encodeURIComponent(params.environmentId)}/${encodeURIComponent(params.threadId)}`,
+        );
       });
     },
     [navigate],
@@ -83,6 +95,7 @@ export function useThreadAttentionNotifications(): void {
       if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
 
       let played = false;
+      const live = liveNotificationsRef.current;
       for (const item of items) {
         const notification = new Notification(item.title, {
           body: item.body,
@@ -90,9 +103,22 @@ export function useThreadAttentionNotifications(): void {
           // stacking duplicates.
           tag: item.key,
         });
+        // Hold a reference until the toast is done. A Notification with no
+        // strong JS reference can be garbage collected, and the browser then has
+        // nothing to dispatch "click" to — the toast still shows in the OS but
+        // clicking it does nothing. Delivery happens from a debounce timer, so
+        // there is no other live reference to keep it alive.
+        live.get(item.key)?.close();
+        live.set(item.key, notification);
+        const release = () => {
+          if (live.get(item.key) === notification) live.delete(item.key);
+        };
+        notification.addEventListener("close", release, { once: true });
+        notification.addEventListener("error", release, { once: true });
         notification.addEventListener(
           "click",
           () => {
+            release();
             notification.close();
             openThread(item.environmentId, item.threadId);
           },
@@ -201,9 +227,11 @@ export function useThreadAttentionNotifications(): void {
 
   useEffect(() => {
     const timers = completionTimersRef.current;
+    const live = liveNotificationsRef.current;
     return () => {
       for (const timer of timers.values()) clearTimeout(timer);
       timers.clear();
+      live.clear();
     };
   }, []);
 }
