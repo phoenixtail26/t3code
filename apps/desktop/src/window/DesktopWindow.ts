@@ -268,6 +268,14 @@ export const make = Effect.gen(function* () {
         nodeIntegration: false,
         sandbox: true,
         webviewTag: true,
+        // Chromium throttles — and eventually freezes — timers and task queues
+        // in a backgrounded window. This renderer must keep working precisely
+        // while it is in the background: that is when thread notifications are
+        // raised (they only fire when unfocused), when their debounce timers
+        // run, and when their click handlers have to respond. With throttling
+        // on, a long-backgrounded window delivers toasts late and stops
+        // reacting to clicks on them until it is foregrounded again.
+        backgroundThrottling: false,
       },
     });
 
