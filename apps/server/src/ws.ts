@@ -65,6 +65,7 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as ServerConfig from "./config.ts";
 import { makeExternalSessionsWsHandlers } from "./externalSessions/wsHandlers.ts";
+import { makeThreadForkWsHandlers } from "./threadFork/wsHandlers.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import {
@@ -2086,6 +2087,7 @@ const makeWsRpcLayer = (
           ),
         ...(yield* makeExternalSessionsWsHandlers({ observeRpcStreamEffect, observeRpcEffect })),
         ...(yield* makeWebPushWsHandlers({ observeRpcEffect })),
+        ...(yield* makeThreadForkWsHandlers({ observeRpcEffect })),
       });
     }),
   );

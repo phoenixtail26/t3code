@@ -15,6 +15,7 @@ import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import { EXTERNAL_SESSIONS_RPC_SCOPES } from "../externalSessions/wsHandlers.ts";
 import { WEB_PUSH_RPC_SCOPES } from "../notifications/wsHandlers.ts";
+import { THREAD_FORK_RPC_SCOPES } from "../threadFork/wsHandlers.ts";
 
 type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
 
@@ -103,9 +104,10 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.subscribeServerLifecycle]: AuthOrchestrationReadScope,
   [WS_METHODS.subscribeAuthAccess]: AuthAccessReadScope,
   [WS_METHODS.subscribeBackgroundPolicy]: AuthOrchestrationReadScope,
-  // Fork RPCs (radar + Web Push) — entries live next to their handlers.
+  // Fork RPCs (radar + Web Push + thread fork) — entries live next to their handlers.
   ...EXTERNAL_SESSIONS_RPC_SCOPES,
   ...WEB_PUSH_RPC_SCOPES,
+  ...THREAD_FORK_RPC_SCOPES,
 } as const satisfies Readonly<Record<WsRpcMethod, AuthEnvironmentScope>>;
 
 export function requiredScopeForRpcMethod(method: string): AuthEnvironmentScope {

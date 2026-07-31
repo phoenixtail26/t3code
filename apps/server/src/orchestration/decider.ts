@@ -373,6 +373,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           interactionMode: command.interactionMode,
           branch: command.branch,
           worktreePath: command.worktreePath,
+          // Fork addition: pass-through for fork/adopt session seeding.
+          ...(command.resumeCursor !== undefined && { resumeCursor: command.resumeCursor }),
+          ...(command.forkedFromThreadId !== undefined && {
+            forkedFromThreadId: command.forkedFromThreadId,
+          }),
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
         },

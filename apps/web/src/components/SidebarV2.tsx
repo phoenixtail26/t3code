@@ -83,6 +83,9 @@ import {
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
+import { canForkThread } from "../threadFork/gate";
+import { useForkThread } from "../threadFork/useForkThread";
+import { SidebarV2ExternalSessions } from "./ExternalSessionsSection";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { openCommandPalette } from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
@@ -1081,6 +1084,7 @@ export default function SidebarV2() {
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const { settleThread, unsettleThread, snoozeThread, unsnoozeThread, deleteThread } =
     useThreadActions();
+  const forkThread = useForkThread();
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
@@ -2124,6 +2128,12 @@ export default function SidebarV2() {
         const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
         // Presets resolve at menu-open time (same as the popover).
         const snoozePresets = resolveSnoozePresets(new Date());
+        // Fork is Claude-only (FORK_PLAN_FORKING.md #6) — see threadFork/gate.ts.
+        const canFork = canForkThread(
+          serverConfigs,
+          thread.environmentId,
+          thread.modelSelection.instanceId,
+        );
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             [
@@ -2170,6 +2180,7 @@ export default function SidebarV2() {
               { id: "mark-unread", label: "Mark unread" },
               { id: "copy-path", label: "Copy path", icon: "copy" },
               ...(thread.branch ? [{ id: "copy-branch", label: "Copy branch", icon: "copy" }] : []),
+              ...(canFork ? [{ id: "fork", label: "Fork thread" }] : []),
               { id: "delete", label: "Delete", destructive: true, icon: "trash" },
             ],
             position,
@@ -2258,6 +2269,9 @@ export default function SidebarV2() {
               copyBranchToClipboard(thread.branch, { branch: thread.branch });
             }
             return;
+          case "fork":
+            void forkThread(threadRef, thread.title);
+            return;
           case "delete": {
             if (confirmThreadDelete) {
               const confirmed = await settlePromise(() =>
@@ -2298,6 +2312,7 @@ export default function SidebarV2() {
       copyBranchToClipboard,
       copyPathToClipboard,
       deleteThread,
+      forkThread,
       handleMultiSelectContextMenu,
       markThreadUnread,
       projectCwdByKey,
@@ -2728,6 +2743,8 @@ export default function SidebarV2() {
                 </li>
               ) : null}
             </ul>
+            {/* Fork feature ("the radar") — see ExternalSessionsSection.tsx. */}
+            <SidebarV2ExternalSessions projects={projects} scopedProjectKeys={scopedProjectKeys} />
           </TooltipProvider>
           {activeThreads.length + snoozedThreads.length + settledThreads.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">

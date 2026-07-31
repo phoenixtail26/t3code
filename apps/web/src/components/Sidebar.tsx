@@ -114,8 +114,11 @@ import { useDesktopUpdateState } from "../state/desktopUpdate";
 import { useThreadActions } from "../hooks/useThreadActions";
 import { projectEnvironment } from "../state/projects";
 import { useEnvironmentQuery } from "../state/query";
+import { environmentServerConfigsAtom } from "../state/server";
 import { threadEnvironment, useEnvironmentThread } from "../state/threads";
 import { vcsEnvironment } from "../state/vcs";
+import { canForkThread } from "../threadFork/gate";
+import { useForkThread } from "../threadFork/useForkThread";
 import { useEnvironment, useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import {
   buildThreadRouteParams,
@@ -1109,6 +1112,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     (settings) => settings.showExternalSessions,
   );
   const externalSessions = useExternalSessionsForProject(project.id);
+  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  const forkThread = useForkThread();
   const deleteProject = useAtomCommand(projectEnvironment.delete, {
     reportFailure: false,
   });
@@ -2131,6 +2136,12 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       );
       const threadWorkspacePath =
         thread.worktreePath ?? threadProject?.workspaceRoot ?? project.workspaceRoot ?? null;
+      // Fork is Claude-only (FORK_PLAN_FORKING.md #6) — see threadFork/gate.ts.
+      const canFork = canForkThread(
+        serverConfigs,
+        thread.environmentId,
+        thread.modelSelection.instanceId,
+      );
       const clicked = await api.contextMenu.show(
         [
           ...(thread.branch
@@ -2140,6 +2151,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           { id: "mark-unread", label: "Mark unread" },
           { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
+          ...(canFork ? [{ id: "fork", label: "Fork thread" }] : []),
           { id: "delete", label: "Delete", destructive: true, icon: "trash" },
         ],
         position,
@@ -2196,6 +2208,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         copyThreadIdToClipboard(thread.id, { threadId: thread.id });
         return;
       }
+      if (clicked === "fork") {
+        void forkThread(threadRef, thread.title);
+        return;
+      }
       if (clicked !== "delete") return;
       if (appSettingsConfirmThreadDelete) {
         const confirmed = await api.dialogs.confirm(
@@ -2225,10 +2241,12 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       copyPathToClipboard,
       copyThreadIdToClipboard,
       deleteThread,
+      forkThread,
       handleNewThread,
       markThreadUnread,
       memberProjectByScopedKey,
       project.workspaceRoot,
+      serverConfigs,
       startThreadRename,
     ],
   );

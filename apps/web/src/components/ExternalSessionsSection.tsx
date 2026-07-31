@@ -1,9 +1,17 @@
+import { useAtomValue } from "@effect/atom-react";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ExternalSessionShell } from "@t3tools/contracts";
 import { Link, useParams } from "@tanstack/react-router";
 import { ChevronRightIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useClientSettings } from "~/hooks/useSettings";
 import { cn } from "../lib/utils";
+import { readLocalApi } from "../localApi";
+import { useExternalSessionsForProject } from "../state/entities";
+import { environmentServerConfigsAtom } from "../state/server";
 import { formatRelativeTimeLabel } from "../timestampFormat";
+import { resolveClaudeAgentAdoptModelSelection } from "../threadFork/adoptModelSelection";
+import { useAdoptExternalSession } from "../threadFork/useAdoptExternalSession";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "./ui/sidebar";
 import { ThreadStatusLabel } from "./ThreadStatusIndicators";
 import type { ThreadStatusPill } from "./Sidebar.logic";
@@ -75,6 +83,53 @@ export function externalSessionTitle(session: ExternalSessionShell): string {
   return session.title ?? session.sessionId.slice(0, 8);
 }
 
+/**
+ * SidebarV2 mount for the radar. V2's list is flat (no per-project expandable
+ * groups like the legacy Sidebar), so the radar renders as a tail section:
+ * one collapsed `ExternalSessionsSection` per scope-visible project that has
+ * sessions. Keeps SidebarV2.tsx's fork footprint at an import + one element.
+ */
+export function SidebarV2ExternalSessions({
+  projects,
+  scopedProjectKeys,
+}: {
+  projects: ReadonlyArray<{ readonly id: string; readonly environmentId: EnvironmentId }>;
+  /** `${environmentId}:${projectId}` keys of the active sidebar scope, null = all. */
+  scopedProjectKeys: ReadonlySet<string> | null;
+}) {
+  const showExternalSessions = useClientSettings<boolean>(
+    (settings) => settings.showExternalSessions,
+  );
+  if (!showExternalSessions) return null;
+  const visible = projects.filter(
+    (project) =>
+      scopedProjectKeys === null || scopedProjectKeys.has(`${project.environmentId}:${project.id}`),
+  );
+  return (
+    <>
+      {visible.map((project) => (
+        <SidebarV2ProjectExternalSessions
+          key={`${project.environmentId}:${project.id}`}
+          projectId={project.id}
+          environmentId={project.environmentId}
+        />
+      ))}
+    </>
+  );
+}
+
+function SidebarV2ProjectExternalSessions({
+  projectId,
+  environmentId,
+}: {
+  projectId: string;
+  environmentId: EnvironmentId;
+}) {
+  const sessions = useExternalSessionsForProject(projectId);
+  if (sessions.length === 0) return null;
+  return <ExternalSessionsSection sessions={sessions} environmentId={environmentId} />;
+}
+
 export function ExternalSessionsSection({
   sessions,
   environmentId,
@@ -89,6 +144,37 @@ export function ExternalSessionsSection({
     strict: false,
     select: (params) => (params as { sessionId?: string }).sessionId ?? null,
   });
+
+  // Adopting always continues on a claudeAgent instance (F6) — resolved
+  // once per environment, same for every row, rather than per-session.
+  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  const adoptModelSelection = useMemo(
+    () => resolveClaudeAgentAdoptModelSelection(serverConfigs.get(environmentId)?.providers ?? []),
+    [serverConfigs, environmentId],
+  );
+  const adoptSession = useAdoptExternalSession();
+  const handleSessionContextMenu = useCallback(
+    (session: ExternalSessionShell, position: { x: number; y: number }) => {
+      if (!adoptModelSelection) return;
+      void (async () => {
+        const api = readLocalApi();
+        if (!api) return;
+        const clickedResult = await settlePromise(() =>
+          api.contextMenu.show([{ id: "adopt", label: "Adopt as thread" }], position),
+        );
+        if (clickedResult._tag === "Failure" || clickedResult.value !== "adopt") return;
+        void adoptSession({
+          environmentId,
+          sessionId: session.sessionId,
+          modelSelection: adoptModelSelection,
+          title: externalSessionTitle(session),
+          lastActivityAt: session.lastActivityAt,
+          state: session.state,
+        });
+      })();
+    },
+    [adoptModelSelection, adoptSession, environmentId],
+  );
 
   if (sessions.length === 0) {
     return null;
@@ -126,6 +212,11 @@ export function ExternalSessionsSection({
                   isActive={isActive}
                   title={tooltip}
                   className="mx-0 flex h-6 w-full min-w-0 translate-x-0 items-center gap-1.5 rounded-none px-2 text-left sm:h-7"
+                  onContextMenu={(event: ReactMouseEvent<HTMLAnchorElement>) => {
+                    if (!adoptModelSelection) return;
+                    event.preventDefault();
+                    handleSessionContextMenu(session, { x: event.clientX, y: event.clientY });
+                  }}
                   render={
                     <Link
                       to="/$environmentId/external/$sessionId"

@@ -564,6 +564,11 @@ const ThreadCreateCommand = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  // Fork addition: seeds the new thread's provider-session binding so its first
+  // turn resumes an existing (forked/adopted) CLI session. Provider-specific
+  // shape, kept opaque here. forkedFromThreadId is provenance for the UI.
+  resumeCursor: Schema.optionalKey(Schema.Unknown),
+  forkedFromThreadId: Schema.optionalKey(ThreadId),
   createdAt: IsoDateTime,
 });
 
@@ -974,6 +979,10 @@ export const ThreadCreatedPayload = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  // Fork addition: mirrors ThreadCreateCommand — consumed by the session-seed
+  // reactor (resumeCursor) and thread UI provenance (forkedFromThreadId).
+  resumeCursor: Schema.optionalKey(Schema.Unknown),
+  forkedFromThreadId: Schema.optionalKey(ThreadId),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });

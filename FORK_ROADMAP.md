@@ -14,10 +14,13 @@ minimum read visibility and ideally one-click resume.
 working/idle/waiting states, fs-integration harness) AND the Phase-4
 read-only transcript view (clickable radar rows → fork-local route rendering
 the existing timeline read-only, live-refreshing) are merged to `g3code` and
-browser-verified. **Remaining: Phase 5 (adopt-as-thread, which doubles as
-roadmap #8's groundwork).** Its `/sync-upstream` gate was satisfied
-2026-07-21; re-run the drift check before starting anyway. Plan, per-task
-delegation, and current status line: `FORK_PLAN_RADAR.md`; module internals:
+browser-verified. Phase 5 landed 2026-07-31 as the fork/adopt server stack
+(`FORK_PLAN_FORKING.md`, "How it actually landed"): `threads.forkThread` and
+`threads.adoptExternalSession` RPCs fork the CLI session file (never extend
+it) and create a cursor-seeded thread; adopt derives the project from the
+session cwd. **Remaining: the web UI actions + a live integrated pass.**
+Plan, per-task delegation, and current status line: `FORK_PLAN_RADAR.md` /
+`FORK_PLAN_FORKING.md`; module internals:
 `apps/server/src/externalSessions/DESIGN.md`. Original sketch kept below for
 context:
 
@@ -300,6 +303,13 @@ default can be "always cut from `origin/g3code`", avoiding stale local bases.
 **Goal:** take a thread that has built up real context and branch it into a new
 thread that inherits that context, so a side-task can be split off without
 re-explaining the problem. Prior art: AgentCraft's "fork a hero".
+
+**Status (2026-07-31):** server stack landed — `threads.forkThread` forks the
+whole session via the SDK's standalone `forkSession` and creates a
+cursor-seeded thread sharing the parent's tree (`FORK_PLAN_FORKING.md`).
+Remaining from the sketch below: web UI (in flight), fork-from-message
+(needs a t3-message → transcript-UUID mapping), fresh-worktree-on-fork, and
+the idle-only guard.
 
 The provider side is already solved for Claude. The SDK exposes
 `forkSession(sessionId, { upToMessageId, title })`, which copies the transcript

@@ -1,9 +1,45 @@
 # Implementation plan: fork-a-thread + adopt-external-session (radar Phase 5 + roadmap #8)
 
-Status (2026-07-31): design written from a full seam survey run against the
-freshly synced tree (`e3c733606`, upstream 2026-07-31). NOT STARTED beyond
-this doc. Ordering per owner: **fork-first** — build the shared primitives,
-ship fork-from-message, land adopt-as-thread as the near-free by-product.
+Status (2026-07-31, evening): **F1–F6 IMPLEMENTED** — server stack plus web
+UI ("Fork thread" in both sidebar context menus; "Adopt as thread" on radar
+rows and the transcript view). See "How it actually landed" below for the
+deltas from the original design. 30 focused tests green across contracts /
+server / web. **Remaining: F7's live integrated pass** (isolated dev env,
+throwaway scratch sessions only — see "Dogfooding hazard").
+
+## How it actually landed (deltas from the design below)
+
+- **No reactor.** Decision 2's "reactor step" was dropped after discovering
+  that every reactor has its own DrainableWorker fiber over an independent
+  PubSub subscription — a new reactor would RACE ProviderCommandReactor's
+  turn-start handling with no ordering guarantee (and piggybacking inside
+  ProviderCommandReactor would put fork lines + a new service dependency
+  into an upstream conflict hotspot and break its test harness). Instead the
+  fork RPC handler writes the binding synchronously (thread.create dispatch →
+  `seedThreadSessionBinding` → only then return the new threadId). A turn can
+  only be requested against a threadId the client knows, so the binding
+  always lands before the first `startSession` read — ordering by
+  construction. The `resumeCursor` on `thread.created` is provenance.
+- **No `supportsSessionFork` capability.** The SDK's standalone
+  `forkSession` is an in-process filesystem operation (no CLI spawn), so the
+  wrapper is fully fork-owned (`threadFork/claudeSessionFork.ts`) and needs
+  no adapter/capability plumbing. Gating is the driver-kind check in the
+  handler + client (decision 6's v1 stance anyway).
+- **v1 forks the whole session.** `fromMessageId` needs a t3-message →
+  Claude-transcript-UUID mapping that doesn't exist; deferred to a later
+  increment (an optionalKey field addition when it comes).
+- **Config-dir stance follows the radar**: default `CLAUDE_CONFIG_DIR ??
+~/.claude` only; custom per-instance homePath sessions fail with a clear
+  fork error, same as they're invisible to the radar.
+- **Adopt input is `{ sessionId, modelSelection }`** — the client supplies
+  the model selection like every other thread-creation path; the server
+  derives the project from the session cwd (same matching as the radar) and
+  records the cwd as `worktreePath` when it isn't the project root.
+- Files: `packages/contracts/src/threadFork.ts`,
+  `apps/server/src/threadFork/{sessionSeed,claudeSessionFork,wsHandlers}.ts`
+  (+ tests). Upstream-file mounts: ws.ts (1 import + 1 spread),
+  RpcAuthorization.ts (1 import + 1 spread), rpc.ts (fork RPC block),
+  orchestration.ts/decider.ts (F1 fields + passthrough).
 
 Companion docs: `FORK_PLAN_RADAR.md` (phases 1–4, all shipped),
 `apps/server/src/externalSessions/DESIGN.md` (radar module internals),

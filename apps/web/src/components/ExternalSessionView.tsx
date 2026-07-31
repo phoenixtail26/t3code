@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import type { LegendListRef } from "@legendapp/list/react";
 import type { EnvironmentId, MessageId } from "@t3tools/contracts";
 import { useEffect, useMemo, useRef } from "react";
@@ -5,8 +6,11 @@ import { useEffect, useMemo, useRef } from "react";
 import { useEnvironmentSettings } from "../hooks/useSettings";
 import { useTheme } from "../hooks/useTheme";
 import type { TurnDiffSummary } from "../types";
+import { environmentServerConfigsAtom } from "../state/server";
 import { useExternalSessionShell, useExternalSessionTranscript } from "../state/externalSessions";
 import { formatRelativeTimeLabel } from "../timestampFormat";
+import { resolveClaudeAgentAdoptModelSelection } from "../threadFork/adoptModelSelection";
+import { useAdoptExternalSession } from "../threadFork/useAdoptExternalSession";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { EXTERNAL_SESSION_STATE_PILLS } from "./ExternalSessionsSection";
 import { mapExternalTranscriptEntriesToTimeline } from "./ExternalSessionView.logic";
@@ -49,6 +53,15 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
   const { resolvedTheme } = useTheme();
   const timestampFormat = useEnvironmentSettings(environmentId).timestampFormat;
   const listRef = useRef<LegendListRef | null>(null);
+
+  // Adopting (F6) always continues on a claudeAgent instance — null hides
+  // the button when the environment has none configured.
+  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  const adoptModelSelection = useMemo(
+    () => resolveClaudeAgentAdoptModelSelection(serverConfigs.get(environmentId)?.providers ?? []),
+    [serverConfigs, environmentId],
+  );
+  const adoptSession = useAdoptExternalSession();
 
   // Refetch (debounced) whenever the subscribed session shell reports fresh
   // activity — the transcript query's own key (environmentId + sessionId)
@@ -127,6 +140,24 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
         <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-0.5 text-[10px] tracking-wide text-muted-foreground/70 uppercase">
           Read-only
         </span>
+        {adoptModelSelection && (
+          <button
+            type="button"
+            className="shrink-0 rounded-md border border-border/60 px-2 py-1 text-xs text-foreground hover:bg-accent"
+            onClick={() =>
+              void adoptSession({
+                environmentId,
+                sessionId: data.sessionId,
+                modelSelection: adoptModelSelection,
+                title,
+                lastActivityAt: data.lastActivityAt,
+                state: data.state,
+              })
+            }
+          >
+            Adopt as thread
+          </button>
+        )}
         {data.truncated && (
           <span className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-600 dark:text-amber-300/90">
             Truncated

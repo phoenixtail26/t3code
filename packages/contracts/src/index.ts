@@ -22,6 +22,7 @@ export * from "./sourceControl.ts";
 export * from "./orchestration.ts";
 export * from "./claudeUsage.ts";
 export * from "./externalSessions.ts";
+export * from "./threadFork.ts";
 export * from "./t3ProjectFile.ts";
 export * from "./editor.ts";
 export * from "./project.ts";
