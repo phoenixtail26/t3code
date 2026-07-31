@@ -149,9 +149,6 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
                 environmentId,
                 sessionId: data.sessionId,
                 modelSelection: adoptModelSelection,
-                title,
-                lastActivityAt: data.lastActivityAt,
-                state: data.state,
               })
             }
           >

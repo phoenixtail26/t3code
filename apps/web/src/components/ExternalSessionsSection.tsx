@@ -167,9 +167,6 @@ export function ExternalSessionsSection({
           environmentId,
           sessionId: session.sessionId,
           modelSelection: adoptModelSelection,
-          title: externalSessionTitle(session),
-          lastActivityAt: session.lastActivityAt,
-          state: session.state,
         });
       })();
     },

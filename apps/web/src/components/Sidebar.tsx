@@ -2209,7 +2209,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         return;
       }
       if (clicked === "fork") {
-        void forkThread(threadRef, thread.title);
+        void forkThread(threadRef);
         return;
       }
       if (clicked !== "delete") return;

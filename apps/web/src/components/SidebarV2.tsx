@@ -2270,7 +2270,7 @@ export default function SidebarV2() {
             }
             return;
           case "fork":
-            void forkThread(threadRef, thread.title);
+            void forkThread(threadRef);
             return;
           case "delete": {
             if (confirmThreadDelete) {
