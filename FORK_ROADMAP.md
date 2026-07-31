@@ -4,25 +4,38 @@ Where this fork is going. Read `FORK_ORCHESTRATOR.md` first for why the fork
 exists and what has already changed; companion docs: `FORK_REMOTES.md` (remotes,
 branch model, upstream sync), `RUN_FORK_WINDOWS.md` (how to run/build here).
 
-## 1. External session pickup (the "radar") — PHASES 1–4 SHIPPED 2026-07-21
+## 1. External session pickup (the "radar") — ALL PHASES SHIPPED 2026-07-31
 
 **Goal:** t3code shows ALL Claude Code sessions on the machine — including ones
 started in Rider terminals or plain CLI — not just threads it spawned, with at
 minimum read visibility and ideally one-click resume.
 
-**Status:** the sidebar radar (phases 1–3, 2-day recency horizon,
-working/idle/waiting states, fs-integration harness) AND the Phase-4
-read-only transcript view (clickable radar rows → fork-local route rendering
-the existing timeline read-only, live-refreshing) are merged to `g3code` and
-browser-verified. Phase 5 landed 2026-07-31 as the fork/adopt server stack
-(`FORK_PLAN_FORKING.md`, "How it actually landed"): `threads.forkThread` and
-`threads.adoptExternalSession` RPCs fork the CLI session file (never extend
-it) and create a cursor-seeded thread; adopt derives the project from the
-session cwd. **Remaining: the web UI actions + a live integrated pass.**
-Plan, per-task delegation, and current status line: `FORK_PLAN_RADAR.md` /
-`FORK_PLAN_FORKING.md`; module internals:
-`apps/server/src/externalSessions/DESIGN.md`. Original sketch kept below for
-context:
+**Status: done through v1.** Phases 1–3 (sidebar radar: 2-day recency horizon,
+working/idle/waiting states, fs-integration harness) and Phase 4 (read-only
+transcript view: clickable radar rows → fork-local route rendering the
+existing timeline read-only, live-refreshing) shipped 2026-07-21. Phase 5 —
+adopt-as-thread — shipped 2026-07-31 together with roadmap #8's fork
+machinery, which it shares end to end (`FORK_PLAN_FORKING.md`, "How it
+actually landed"): "Adopt as thread" on radar rows and in the transcript
+header forks the CLI session file (never extends it — the CLI keeps sole
+ownership), derives the project from the session cwd, and opens a
+cursor-seeded thread that carries the full conversation, with the inherited
+history rendered read-only above the live timeline. Verified live against a
+throwaway CLI session in an isolated dev environment.
+
+Also fixed on the way (2026-07-31): the radar section had never been mounted
+in `SidebarV2`, so the default sidebar lost its External section when
+upstream switched to V2 — the sync tripwire couldn't see it because V2
+arrived as a new file rather than a dropped fork line.
+
+Remaining ideas, none blocking: guard adoption of a session another live
+process is actively writing (the two-writers case, shared with #8), and
+surface adopt for sessions outside any known project (today they simply
+don't match a project and can't be adopted).
+
+Plan and per-task history: `FORK_PLAN_RADAR.md` / `FORK_PLAN_FORKING.md`;
+module internals: `apps/server/src/externalSessions/DESIGN.md`. Original
+sketch kept below for context:
 
 - **Discovery:** watch `~/.claude/projects/<project-slug>/*.jsonl` (every
   surface writes there; slug maps to cwd). Tail the newest entries for state:
@@ -298,18 +311,35 @@ base as `input.refName` (`GitVcsDriverCore.ts:2267`) and hardcodes nothing.
 Worth pairing with the existing `startFromOrigin` path (`ws.ts:840`) so the
 default can be "always cut from `origin/g3code`", avoiding stale local bases.
 
-## 8. Fork a thread into a new thread (split work off a big one)
+## 8. Fork a thread into a new thread (split work off a big one) — v1 SHIPPED 2026-07-31
 
 **Goal:** take a thread that has built up real context and branch it into a new
 thread that inherits that context, so a side-task can be split off without
 re-explaining the problem. Prior art: AgentCraft's "fork a hero".
 
-**Status (2026-07-31):** server stack landed — `threads.forkThread` forks the
-whole session via the SDK's standalone `forkSession` and creates a
-cursor-seeded thread sharing the parent's tree (`FORK_PLAN_FORKING.md`).
-Remaining from the sketch below: web UI (in flight), fork-from-message
-(needs a t3-message → transcript-UUID mapping), fresh-worktree-on-fork, and
-the idle-only guard.
+**Status: shipped and dogfooded.** "Fork thread" sits in both sidebar row
+context menus, gated to Claude threads. It copies the whole session with the
+SDK's standalone `forkSession`, creates a cursor-seeded thread sharing the
+parent's tree, and renders the inherited conversation read-only above the new
+thread's live timeline (ending in a "Forked from here" marker). No
+confirmation dialog — forking never touches the source, so it just runs and
+opens the new thread. Live-verified: a forked thread recalled a secret taught
+only to its parent, and the parent's session file was byte-identical after.
+Design and the deltas from the sketch below: `FORK_PLAN_FORKING.md`.
+
+**Deliberately not in v1**, roughly in the order worth doing:
+
+- **Fork from a specific message.** The SDK's `upToMessageId` makes this free
+  on the provider side, but t3 has no mapping from a t3 `MessageId` to the
+  Claude transcript UUID; building one is the real work. The per-message
+  hover action is the natural UI once it exists.
+- **Fresh-worktree-on-fork** and the **idle-only guard** (see the worktree
+  discussion below) — v1 always shares the parent's tree and offers no
+  choice, which is the cheapest correct option but leaves the two-writers
+  hazard open.
+- **Non-Claude providers.** Codex/Cursor/Grok/OpenCode keep their own
+  `resumeCursor` shapes with no equivalent fork primitive, so the action is
+  hidden rather than offered-and-broken.
 
 The provider side is already solved for Claude. The SDK exposes
 `forkSession(sessionId, { upToMessageId, title })`, which copies the transcript
@@ -344,14 +374,15 @@ So the data model needs no change. The options:
 - **New worktree plus carrying the uncommitted changes over** — correct but the
   most work, and needs a story for dirty/conflicting state.
 
-Suggested v1: make it an explicit choice at fork time, defaulting to sharing,
-and only offer the fork when the parent thread is idle. That two-writers guard
-is the same one roadmap #1 flags for adopting external sessions — worth solving
+v1 shipped with the first option and no choice at fork time: sharing keeps the
+inherited context honest, and the confirm dialog that would have explained the
+trade-off was cut for being un-t3-like. The explicit choice and the
+idle-only guard are still the right next step — and that two-writers guard is
+the same one #1 flags for adopting external sessions, so it is worth solving
 once for both rather than twice.
 
-Scope note: Claude-first. The Codex/Cursor/Grok adapters keep their own
-`resumeCursor` shapes and have no equivalent fork primitive, so the action
-should be gated on provider capability rather than assumed universal.
+Scope note: Claude-first, as shipped — the action is gated on the thread's
+provider driver being `claudeAgent` on both the client and the server.
 
 ## 9. Click a file mention in chat to view it — SHIPPED 2026-07-22 (`g3code`)
 
@@ -448,3 +479,9 @@ delivers both surfaces the owner asked for at once.
   (`claudeUsage.ts` documents the limitation), plus macOS keychain credentials.
 - Notification history: a list of recent attention events, so a toast missed
   while the machine was locked is still discoverable in the app.
+- Fork/adopt polish (all from the 2026-07-31 dogfooding pass): re-fetch the
+  inherited prelude when a fork's first turn lands (it is cached per thread
+  and the boundary only settles after that turn); a "forked from" link back
+  to the parent thread; and confirm that post-fork navigation always lands on
+  the new thread rather than a draft, which was seen once under synthetic
+  events and never reproduced by hand.
