@@ -17,6 +17,8 @@ import {
   ThreadForkError,
   ThreadForkInput,
   ThreadForkResult,
+  ThreadInheritedTranscript,
+  ThreadInheritedTranscriptInput,
 } from "./threadFork.ts";
 import {
   AuthAccessStreamError,
@@ -896,6 +898,15 @@ export const WsThreadAdoptExternalSessionRpc = Rpc.make(
   },
 );
 
+export const WsThreadInheritedTranscriptRpc = Rpc.make(
+  THREAD_FORK_WS_METHODS.getInheritedTranscript,
+  {
+    payload: ThreadInheritedTranscriptInput,
+    success: ThreadInheritedTranscript,
+    error: EnvironmentAuthorizationError,
+  },
+);
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerProbeRpc,
   WsServerGetConfigRpc,
@@ -985,4 +996,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsExternalSessionsGetTranscriptRpc,
   WsThreadForkRpc,
   WsThreadAdoptExternalSessionRpc,
+  WsThreadInheritedTranscriptRpc,
 );

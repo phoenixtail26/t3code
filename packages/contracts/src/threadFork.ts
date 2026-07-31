@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 
 import { ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { ExternalTranscriptEntry } from "./externalSessions.ts";
 import { ModelSelection } from "./orchestration.ts";
 
 /**
@@ -16,6 +17,7 @@ import { ModelSelection } from "./orchestration.ts";
 export const THREAD_FORK_WS_METHODS = {
   forkThread: "threads.forkThread",
   adoptExternalSession: "threads.adoptExternalSession",
+  getInheritedTranscript: "threads.getInheritedTranscript",
 } as const;
 
 export const ThreadForkInput = Schema.Struct({
@@ -44,6 +46,26 @@ export const ThreadAdoptExternalSessionInput = Schema.Struct({
   modelSelection: ModelSelection,
 });
 export type ThreadAdoptExternalSessionInput = typeof ThreadAdoptExternalSessionInput.Type;
+
+/**
+ * Inherited history for a forked/adopted thread: the part of its Claude
+ * session transcript that predates the thread's own first turn, mapped with
+ * the same read-only entry shape as the radar transcript view. Empty for
+ * ordinary threads (and on any soft failure — the prelude is best-effort,
+ * never an error surface).
+ */
+export const ThreadInheritedTranscriptInput = Schema.Struct({
+  threadId: ThreadId,
+});
+export type ThreadInheritedTranscriptInput = typeof ThreadInheritedTranscriptInput.Type;
+
+export const ThreadInheritedTranscript = Schema.Struct({
+  threadId: ThreadId,
+  entries: Schema.Array(ExternalTranscriptEntry),
+  /** True when caps dropped the head of the session file (large transcripts). */
+  truncated: Schema.Boolean,
+});
+export type ThreadInheritedTranscript = typeof ThreadInheritedTranscript.Type;
 
 export class ThreadForkError extends Schema.TaggedErrorClass<ThreadForkError>()("ThreadForkError", {
   /**

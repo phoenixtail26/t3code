@@ -1,13 +1,16 @@
-import { createEnvironmentRpcCommand } from "@t3tools/client-runtime/state/runtime";
+import {
+  createEnvironmentRpcCommand,
+  createEnvironmentRpcQueryAtomFamily,
+} from "@t3tools/client-runtime/state/runtime";
 import { THREAD_FORK_WS_METHODS } from "@t3tools/contracts";
 
 import { connectionAtomRuntime } from "../connection/runtime";
 
 /**
- * Thread forking (FORK_PLAN_FORKING.md, increment F5). Mirrors the
- * `state/git.ts` / `state/threads.ts` atom-composition pattern for a single
- * fork-owned RPC command, kept out of `state/threads.ts` (upstream-owned) so
- * the fork's plumbing has no upstream merge-conflict surface.
+ * Thread forking (FORK_PLAN_FORKING.md, increments F5/F8). Mirrors the
+ * `state/git.ts` / `state/threads.ts` atom-composition pattern for the
+ * fork-owned RPCs, kept out of `state/threads.ts` (upstream-owned) so the
+ * fork's plumbing has no upstream merge-conflict surface.
  */
 export const threadForkEnvironment = {
   fork: createEnvironmentRpcCommand(connectionAtomRuntime, {
@@ -17,5 +20,11 @@ export const threadForkEnvironment = {
   adopt: createEnvironmentRpcCommand(connectionAtomRuntime, {
     label: "environment-data:commands:thread:adopt-external-session",
     tag: THREAD_FORK_WS_METHODS.adoptExternalSession,
+  }),
+  /** Inherited-history prelude (F8) — SWR query keyed by {environmentId,
+   * input:{threadId}}; empty entries for ordinary threads. */
+  inheritedTranscript: createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
+    label: "environment-data:thread-fork:inherited-transcript",
+    tag: THREAD_FORK_WS_METHODS.getInheritedTranscript,
   }),
 };

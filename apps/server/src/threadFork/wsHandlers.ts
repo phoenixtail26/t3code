@@ -18,6 +18,7 @@ import * as Option from "effect/Option";
 
 import {
   AuthOrchestrationOperateScope,
+  AuthOrchestrationReadScope,
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -31,6 +32,8 @@ import {
   ThreadForkError,
   type ThreadForkInput,
   type ThreadForkResult,
+  type ThreadInheritedTranscript,
+  type ThreadInheritedTranscriptInput,
   ThreadId,
   TrimmedNonEmptyString,
 } from "@t3tools/contracts";
@@ -49,12 +52,14 @@ import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSn
 import { ProviderService } from "../provider/Services/ProviderService.ts";
 import { ProviderSessionDirectory } from "../provider/Services/ProviderSessionDirectory.ts";
 import { forkClaudeSession } from "./claudeSessionFork.ts";
+import { loadInheritedEntries } from "./inheritedTranscript.ts";
 import { seedThreadSessionBinding } from "./sessionSeed.ts";
 
 /** Scope entries to spread into auth/RpcAuthorization.ts's RPC_REQUIRED_SCOPES map. */
 export const THREAD_FORK_RPC_SCOPES = {
   [THREAD_FORK_WS_METHODS.forkThread]: AuthOrchestrationOperateScope,
   [THREAD_FORK_WS_METHODS.adoptExternalSession]: AuthOrchestrationOperateScope,
+  [THREAD_FORK_WS_METHODS.getInheritedTranscript]: AuthOrchestrationReadScope,
 } as const;
 
 /** Same per-module copy of ws.ts's observe wrapper type as the other fork
@@ -369,6 +374,60 @@ export const makeThreadForkWsHandlers = Effect.fnUntraced(function* (deps: {
     });
   });
 
+  // Best-effort by design: every soft failure (no binding, non-Claude
+  // driver, missing file, unalignable transcript) answers with an empty
+  // slice so the client simply renders no prelude.
+  const getInheritedTranscript = Effect.fn("threadFork.getInheritedTranscript")(function* (
+    input: ThreadInheritedTranscriptInput,
+  ) {
+    const empty = {
+      threadId: input.threadId,
+      entries: [],
+      truncated: false,
+    } satisfies ThreadInheritedTranscript;
+
+    const binding = Option.getOrUndefined(
+      yield* providerSessionDirectory
+        .getBinding(input.threadId)
+        .pipe(Effect.catch(() => Effect.succeed(Option.none()))),
+    );
+    if (binding === undefined || binding.provider !== "claudeAgent") return empty;
+    // Ordinary threads short-circuit on the seed-time provenance marker —
+    // no detail hydration, no filesystem touch (see sessionSeed.ts).
+    const runtimePayload = binding.runtimePayload;
+    if (
+      runtimePayload === null ||
+      runtimePayload === undefined ||
+      typeof runtimePayload !== "object" ||
+      !("threadFork" in runtimePayload)
+    ) {
+      return empty;
+    }
+    const sessionId = readResumeSessionId(binding.resumeCursor);
+    if (sessionId === undefined) return empty;
+
+    const detail = Option.getOrUndefined(
+      yield* projectionSnapshotQuery
+        .getThreadDetailById(input.threadId)
+        .pipe(Effect.catch(() => Effect.succeed(Option.none()))),
+    );
+    if (detail === undefined) return empty;
+    const firstOwn = detail.messages.find((message) => message.role === "user");
+    const project = Option.getOrUndefined(
+      yield* projectionSnapshotQuery
+        .getProjectShellById(detail.projectId)
+        .pipe(Effect.catch(() => Effect.succeed(Option.none()))),
+    );
+
+    const { entries, truncated } = yield* loadInheritedEntries({
+      threadId: input.threadId,
+      sessionId,
+      preferredCwd: detail.worktreePath ?? project?.workspaceRoot ?? null,
+      firstOwnMessage: firstOwn ? { text: firstOwn.text, createdAt: firstOwn.createdAt } : null,
+    });
+    return { threadId: input.threadId, entries, truncated } satisfies ThreadInheritedTranscript;
+  });
+
   return {
     [THREAD_FORK_WS_METHODS.forkThread]: (input: ThreadForkInput) =>
       observeRpcEffect(THREAD_FORK_WS_METHODS.forkThread, forkThread(input), {
@@ -378,5 +437,11 @@ export const makeThreadForkWsHandlers = Effect.fnUntraced(function* (deps: {
       observeRpcEffect(THREAD_FORK_WS_METHODS.adoptExternalSession, adoptExternalSession(input), {
         "rpc.aggregate": "thread-fork",
       }),
+    [THREAD_FORK_WS_METHODS.getInheritedTranscript]: (input: ThreadInheritedTranscriptInput) =>
+      observeRpcEffect(
+        THREAD_FORK_WS_METHODS.getInheritedTranscript,
+        getInheritedTranscript(input),
+        { "rpc.aggregate": "thread-fork" },
+      ),
   };
 });

@@ -39,5 +39,10 @@ export const seedThreadSessionBinding = Effect.fn("seedThreadSessionBinding")(fu
     providerInstanceId: input.modelSelection.instanceId,
     status: "stopped",
     resumeCursor: input.resumeCursor,
+    // Provenance marker for the inherited-history prelude: lets the
+    // getInheritedTranscript RPC answer "no" for ordinary threads from the
+    // binding row alone, without touching the filesystem. Runtime-payload
+    // updates merge shallowly, so the key survives adapter writes.
+    runtimePayload: { threadFork: { inherited: true } },
   });
 });

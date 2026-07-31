@@ -86,6 +86,7 @@ import {
   hasActionableProposedPlan,
   isLatestTurnSettled,
 } from "../session-logic";
+import { useInheritedTimeline } from "../threadFork/useInheritedTimeline";
 import { type LegendListRef } from "@legendapp/list/react";
 import {
   getAnchoredTurnMetrics,
@@ -2379,10 +2380,18 @@ function ChatViewContent(props: ChatViewProps) {
     }
     return [...serverMessagesWithPreviewHandoff, ...pendingMessages];
   }, [attachmentPreviewHandoffByMessageId, displayServerMessages, optimisticUserMessages]);
+  // Fork addition: read-only inherited history for forked/adopted threads
+  // (threadFork/useInheritedTimeline.ts) — empty for ordinary threads.
+  const inheritedTimeline = useInheritedTimeline(
+    activeThread?.environmentId ?? null,
+    activeThread?.id ?? null,
+  );
   const timelineEntries = useMemo(
-    () =>
-      deriveTimelineEntries(timelineMessages, activeThread?.proposedPlans ?? [], workLogEntries),
-    [activeThread?.proposedPlans, timelineMessages, workLogEntries],
+    () => [
+      ...inheritedTimeline,
+      ...deriveTimelineEntries(timelineMessages, activeThread?.proposedPlans ?? [], workLogEntries),
+    ],
+    [activeThread?.proposedPlans, inheritedTimeline, timelineMessages, workLogEntries],
   );
   const [dockedDraftHeroThreadKey, setDockedDraftHeroThreadKey] = useState<string | null>(null);
   const draftHeroDockRequested =
