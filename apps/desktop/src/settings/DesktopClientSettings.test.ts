@@ -21,6 +21,7 @@ const clientSettings: ClientSettings = {
   desktopNotificationSound: false,
   desktopNotificationSoundPath: "",
   diffIgnoreWhitespace: true,
+  environmentIdentificationMode: "artwork",
   favorites: [],
   glassOpacity: 80,
   providerModelPreferences: {},
@@ -34,6 +35,7 @@ const clientSettings: ClientSettings = {
   sidebarThreadPreviewCount: 6,
   showExternalSessions: true,
   sidebarV2Enabled: false,
+  sidebarV2ConfiguredByUser: false,
   timestampFormat: "24-hour",
   wordWrap: true,
 };

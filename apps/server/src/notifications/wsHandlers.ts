@@ -8,7 +8,6 @@ import * as Option from "effect/Option";
 import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
-  type AuthEnvironmentScope,
   type EnvironmentAuthorizationError,
   WS_METHODS,
 } from "@t3tools/contracts";
@@ -17,14 +16,14 @@ import * as ServerSettings from "../serverSettings.ts";
 import { sendTestPushNotification } from "./PushNotifierService.ts";
 import * as WebPushStore from "./WebPushStore.ts";
 
-/** Scope entries to spread into ws.ts's RPC_REQUIRED_SCOPE map. */
-export const WEB_PUSH_RPC_SCOPES: ReadonlyArray<readonly [string, AuthEnvironmentScope]> = [
-  [WS_METHODS.serverSendTestPushNotification, AuthOrchestrationOperateScope],
-  [WS_METHODS.serverWebPushStatus, AuthOrchestrationReadScope],
-  [WS_METHODS.serverWebPushGetPublicKey, AuthOrchestrationReadScope],
-  [WS_METHODS.serverWebPushSubscribe, AuthOrchestrationOperateScope],
-  [WS_METHODS.serverWebPushUnsubscribe, AuthOrchestrationOperateScope],
-];
+/** Scope entries to spread into auth/RpcAuthorization.ts's RPC_REQUIRED_SCOPES map. */
+export const WEB_PUSH_RPC_SCOPES = {
+  [WS_METHODS.serverSendTestPushNotification]: AuthOrchestrationOperateScope,
+  [WS_METHODS.serverWebPushStatus]: AuthOrchestrationReadScope,
+  [WS_METHODS.serverWebPushGetPublicKey]: AuthOrchestrationReadScope,
+  [WS_METHODS.serverWebPushSubscribe]: AuthOrchestrationOperateScope,
+  [WS_METHODS.serverWebPushUnsubscribe]: AuthOrchestrationOperateScope,
+} as const;
 
 /**
  * ws.ts's per-connection instrumentation + authorization wrapper for

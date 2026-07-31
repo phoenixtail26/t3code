@@ -11,7 +11,6 @@ import * as Stream from "effect/Stream";
 
 import {
   AuthOrchestrationReadScope,
-  type AuthEnvironmentScope,
   EXTERNAL_SESSIONS_WS_METHODS,
   type EnvironmentAuthorizationError,
   type ExternalSessionShell,
@@ -22,18 +21,19 @@ import {
   ProjectId,
 } from "@t3tools/contracts";
 
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+
 import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { buildCwdIndex, matchCwdToProject } from "./cwdMatching.ts";
 import * as ExternalSessionsWatcher from "./ExternalSessionsWatcher.ts";
 import { collectOwnSessionIds } from "./ownSessions.ts";
 import { mapTranscriptContent, MAX_TRANSCRIPT_READ_BYTES } from "./transcriptView.ts";
 
-/** Scope entries to spread into ws.ts's RPC_REQUIRED_SCOPE map. */
-export const EXTERNAL_SESSIONS_RPC_SCOPES: ReadonlyArray<readonly [string, AuthEnvironmentScope]> =
-  [
-    [EXTERNAL_SESSIONS_WS_METHODS.subscribe, AuthOrchestrationReadScope],
-    [EXTERNAL_SESSIONS_WS_METHODS.getTranscript, AuthOrchestrationReadScope],
-  ];
+/** Scope entries to spread into auth/RpcAuthorization.ts's RPC_REQUIRED_SCOPES map. */
+export const EXTERNAL_SESSIONS_RPC_SCOPES = {
+  [EXTERNAL_SESSIONS_WS_METHODS.subscribe]: AuthOrchestrationReadScope,
+  [EXTERNAL_SESSIONS_WS_METHODS.getTranscript]: AuthOrchestrationReadScope,
+} as const;
 
 /**
  * ws.ts's per-connection instrumentation + authorization wrapper for
@@ -127,7 +127,7 @@ export const makeExternalSessionsWsHandlers = Effect.fnUntraced(function* (deps:
         Effect.gen(function* () {
           // Windows filesystems are case-insensitive; cwd matching must
           // normalize accordingly (cwdMatching.ts).
-          const caseInsensitive = process.platform === "win32";
+          const caseInsensitive = (yield* HostProcessPlatform) === "win32";
 
           // A snapshot load failure must not fail the subscription: the
           // radar is best-effort, so degrade to an empty snapshot (no
