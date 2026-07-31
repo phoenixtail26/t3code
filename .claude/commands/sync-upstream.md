@@ -73,6 +73,24 @@ The main worktree (first line of `git worktree list` — derive it, don't
 hardcode) holds `g3code`. Verify it is on `g3code` and clean; if not, stop and
 report rather than stashing on the user's behalf.
 
+Also guard against a merge already in progress — another agent thread may be
+mid-`/ship` or mid-sync in the same worktree, and the merge below would
+otherwise fail or interleave with it:
+
+```sh
+git -C <main-worktree> rev-parse -q --verify MERGE_HEAD && echo "STOP: a merge is already in progress in the main worktree"
+test -d "$(git -C <main-worktree> rev-parse --git-dir)/rebase-merge" && echo "STOP: a rebase is in progress"
+```
+
+If either prints STOP, do not proceed and do not abort the in-progress
+operation — report it and let the owner decide. Before you start resolving,
+also record the current `g3code` head (`git -C <main-worktree> rev-parse
+HEAD`); if the head has moved when you get to step 8, another thread committed
+mid-sync — stop and reconcile rather than committing over it. `rerere` is
+enabled repo-wide (`rerere.enabled` + `rerere.autoUpdate`), so resolutions
+you make are recorded and replayed automatically on repeat conflicts — a
+pre-resolved hunk staged by rerere is normal, but still review it.
+
 ```sh
 git -C <main-worktree> merge main -m "Merge upstream main into g3code"
 ```
@@ -165,6 +183,15 @@ Commit via the Bash tool with a heredoc (`git commit --file=- <<'EOF'`), NOT a
 PowerShell here-string — the `@'...'@` delimiters land as literal text in Git
 Bash and mangle the subject. The pre-commit hook reformats staged files
 mid-commit; verify the subject afterwards with `git log -1 --format='%s'`.
+
+Known hook failure on merge-sized commits: with thousands of staged files,
+lint-staged's chunker hands `vp fmt` chunks made entirely of format-ignored
+files and the hook fails with "Expected at least one target file" repeated
+per chunk (observed 2026-07-31, ~12k staged files). The sanctioned path when
+that happens: confirm step 7's `vp check` reported 0 errors (it includes the
+formatting pass over the whole tree), then commit with `--no-verify` and say
+so in the commit body and the report. Do not use `--no-verify` for any other
+hook failure — investigate those.
 
 The message body should name what conflicted and how it was resolved — the
 next sync's agent reads it.

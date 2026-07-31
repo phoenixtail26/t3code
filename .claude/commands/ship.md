@@ -69,16 +69,20 @@ git push origin g3code
 This cannot run in the feature worktree: git refuses to check out `g3code`
 there while the main worktree holds it. Run the merge with `-C <main-worktree>`.
 
-Before merging, verify the main worktree is on `g3code` and clean:
+Before merging, verify the main worktree is on `g3code`, clean, and not
+mid-operation (another agent thread may be running `/ship` or
+`/sync-upstream` in it right now):
 
 ```sh
 git -C <main-worktree> rev-parse --abbrev-ref HEAD   # expect: g3code
 git -C <main-worktree> status --short
+git -C <main-worktree> rev-parse -q --verify MERGE_HEAD && echo "STOP: merge in progress"
 ```
 
-If it is on some other branch, or dirty, **stop and report it**. Do not
-check out or stash on the user's behalf — the main worktree being parked on
-`g3code` is load-bearing for how new threads pick their base branch.
+If it is on some other branch, dirty, or mid-merge, **stop and report it**.
+Do not check out, stash, or `merge --abort` on the user's behalf — the main
+worktree being parked on `g3code` is load-bearing for how new threads pick
+their base branch, and an in-progress merge belongs to whoever started it.
 
 Then merge and push:
 
