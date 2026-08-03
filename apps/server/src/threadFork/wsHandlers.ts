@@ -52,6 +52,7 @@ import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSn
 import { ProviderService } from "../provider/Services/ProviderService.ts";
 import { ProviderSessionDirectory } from "../provider/Services/ProviderSessionDirectory.ts";
 import { forkClaudeSession } from "./claudeSessionFork.ts";
+import { ADOPT_NOTICE_TEXT, appendForkNotice, FORK_NOTICE_TEXT } from "./forkNotice.ts";
 import { loadInheritedEntries } from "./inheritedTranscript.ts";
 import { seedThreadSessionBinding } from "./sessionSeed.ts";
 
@@ -246,6 +247,18 @@ export const makeThreadForkWsHandlers = Effect.fnUntraced(function* (deps: {
       ),
     );
 
+    // Best-effort: without the notice the fork still works, it just keeps
+    // the source's task momentum (see forkNotice.ts).
+    yield* appendForkNotice({
+      sessionId: forked.sessionId,
+      preferredCwd: thread.worktreePath,
+      noticeText: FORK_NOTICE_TEXT,
+    }).pipe(
+      Effect.catch((cause) =>
+        Effect.logWarning("thread fork: notice append failed", { cause }).pipe(Effect.as(false)),
+      ),
+    );
+
     // The new thread must start its first turn on the same provider instance
     // the seeded binding names, or startSession ignores the cursor.
     const modelSelection =
@@ -347,6 +360,17 @@ export const makeThreadForkWsHandlers = Effect.fnUntraced(function* (deps: {
             reason: "fork-failed",
             message: `Could not fork the Claude session: ${error.detail}`,
           }),
+      ),
+    );
+
+    // Best-effort, same as the fork path (see forkNotice.ts).
+    yield* appendForkNotice({
+      sessionId: forked.sessionId,
+      preferredCwd: session.cwd,
+      noticeText: ADOPT_NOTICE_TEXT,
+    }).pipe(
+      Effect.catch((cause) =>
+        Effect.logWarning("thread adopt: notice append failed", { cause }).pipe(Effect.as(false)),
       ),
     );
 

@@ -17,6 +17,7 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -138,6 +139,7 @@ const makeHarness = (options?: {
         }),
     }),
     cryptoLayer,
+    NodeServices.layer,
     emptyWatcherLayer,
   );
 
@@ -319,6 +321,7 @@ it.effect("deletes the new thread when cursor seeding fails", () =>
           }),
       }),
       cryptoLayer,
+      NodeServices.layer,
       emptyWatcherLayer,
     );
 
@@ -429,6 +432,7 @@ const makeAdoptHarness = (options?: {
         ),
     }),
     cryptoLayer,
+    NodeServices.layer,
   );
 
   const observeRpcEffect = (<A, E, R>(_method: string, effect: Effect.Effect<A, E, R>) =>

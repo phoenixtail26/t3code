@@ -31,6 +31,15 @@ throwaway scratch sessions only — see "Dogfooding hazard").
 - **Config-dir stance follows the radar**: default `CLAUDE_CONFIG_DIR ??
 ~/.claude` only; custom per-instance homePath sessions fail with a clear
   fork error, same as they're invisible to the radar.
+- **A fork notice is injected into the copied session** (2026-07-31, after
+  dogfooding found a fork resuming its parent's in-flight plan — two threads
+  doing the same work in the shared tree). `threadFork/forkNotice.ts`
+  appends an `isMeta` user record — the CLI's own invisible-context
+  mechanism: the model sees it, every transcript renderer drops it — telling
+  the model in-progress work stays with the source and the next message is a
+  fresh request. Best-effort (a failed append degrades to the old behavior);
+  live-verified: a resumed fork quoted the notice's instruction and still
+  recalled inherited context.
 - **Adopt input is `{ sessionId, modelSelection }`** — the client supplies
   the model selection like every other thread-creation path; the server
   derives the project from the session cwd (same matching as the radar) and
