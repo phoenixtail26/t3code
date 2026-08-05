@@ -5,9 +5,6 @@ import { passkeys } from "@clerk/electron/passkeys";
 import { ClerkProvider as ElectronClerkProvider } from "@clerk/electron/react";
 import { createHashHistory, createBrowserHistory } from "@tanstack/react-router";
 
-import "@fontsource-variable/dm-sans/index.css";
-import "@fontsource/jetbrains-mono/400.css";
-import "@fontsource/jetbrains-mono/500.css";
 import "./index.css";
 // Fork-owned styles last so they can override upstream rules at equal
 // specificity; kept out of index.css to avoid upstream merge conflicts.
