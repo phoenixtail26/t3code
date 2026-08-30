@@ -35,6 +35,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 
+import { handleArchivedOnlyProjectRemoval } from "../sidebar/removeProjectArchivedFallback";
 import { useComposerDraftStore } from "../../composerDraftStore";
 import { isElectron } from "../../env";
 import {
@@ -729,8 +730,27 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
           () => undefined,
         );
         if (result._tag === "Failure") {
-          reportFailure(`Failed to remove "${member.title}"`, result);
-          return;
+          // Fork: a project holding only archived threads fails the unforced
+          // delete above (the thread list omits archived ones), so re-confirm
+          // and force rather than dead-ending on the invariant message.
+          const failure = squashAtomCommandFailure(result);
+          const handledAsArchivedOnly = await handleArchivedOnlyProjectRemoval({
+            member,
+            failureMessage: failure instanceof Error ? failure.message : String(failure),
+            confirm: async (text) => {
+              const outcome = await settlePromise(() => api.dialogs.confirm(text));
+              return outcome._tag === "Success" && outcome.value === true;
+            },
+            forceRemove: () =>
+              deleteProject({
+                environmentId: member.environmentId,
+                input: { projectId: member.id, force: true },
+              }),
+          });
+          if (!handledAsArchivedOnly) {
+            reportFailure(`Failed to remove "${member.title}"`, result);
+            return;
+          }
         }
         const projectRef = scopeProjectRef(member.environmentId, member.id);
         releaseProjectDraftUploads(

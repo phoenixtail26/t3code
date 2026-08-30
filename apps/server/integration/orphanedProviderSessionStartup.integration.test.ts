@@ -23,6 +23,7 @@ import * as EnvironmentAuth from "../src/auth/EnvironmentAuth.ts";
 import * as ServiceLauncherClient from "../src/cloud/serviceLauncherClient.ts";
 import * as ServerConfig from "../src/config.ts";
 import * as ServerEnvironment from "../src/environment/ServerEnvironment.ts";
+import * as ExternalSessionsWatcher from "../src/externalSessions/ExternalSessionsWatcher.ts";
 import * as Keybindings from "../src/keybindings.ts";
 import { OrchestrationLayerLive } from "../src/orchestration/runtimeLayer.ts";
 import * as OrchestrationEngine from "../src/orchestration/Services/OrchestrationEngine.ts";
@@ -66,6 +67,10 @@ const makePersistedRuntimeLayer = (dbPath: string) => {
 
 const startupDependencies = Layer.mergeAll(
   Layer.mock(Keybindings.Keybindings)({
+    start: Effect.void,
+  }),
+  // Fork: server startup also boots the external-sessions watcher.
+  Layer.mock(ExternalSessionsWatcher.ExternalSessionsWatcher)({
     start: Effect.void,
   }),
   ServerSettings.layerTest(),

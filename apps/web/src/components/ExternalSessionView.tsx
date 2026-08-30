@@ -172,8 +172,8 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
       <div className="relative flex min-h-0 flex-1 flex-col">
         <MessagesTimeline
           isWorking={false}
-          activeTurnInProgress={false}
           activeTurnStartedAt={null}
+          liveFollowEnabled
           listRef={listRef}
           timelineEntries={timelineEntries}
           latestTurn={null}
@@ -192,7 +192,6 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
           workspaceRoot={data.cwd ?? undefined}
           anchorMessageId={null}
           onAnchorReady={noop}
-          onAnchorSizeChanged={noop}
           contentInsetEndAdjustment={0}
           onIsAtEndChange={noop}
           onManualNavigation={noop}

@@ -361,22 +361,19 @@ export const make = Effect.gen(function* () {
         preload: environment.preloadPath,
         // The window boots hidden (show: false until ready-to-show), and
         // Chromium throttles hidden renderers: timers coalesce and rAF stops,
-        // which stalls first paint. Boot unthrottled; the first-reveal trigger
-        // re-enables throttling so a hidden or minimized window goes back to
-        // being cheap after it has been shown once.
+        // which stalls first paint. Boot unthrottled.
+        //
+        // Fork: it also STAYS unthrottled. This renderer must keep working
+        // precisely while backgrounded — that is when thread notifications are
+        // raised (they only fire when unfocused), when their debounce timers
+        // run, and when their click handlers have to respond. Upstream hands
+        // the window back to normal throttling on first reveal; see the
+        // first-reveal trigger below for why the fork skips that.
         backgroundThrottling: false,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
         webviewTag: true,
-        // Chromium throttles — and eventually freezes — timers and task queues
-        // in a backgrounded window. This renderer must keep working precisely
-        // while it is in the background: that is when thread notifications are
-        // raised (they only fire when unfocused), when their debounce timers
-        // run, and when their click handlers have to respond. With throttling
-        // on, a long-backgrounded window delivers toasts late and stops
-        // reacting to clicks on them until it is foregrounded again.
-        backgroundThrottling: false,
       },
     });
 
@@ -739,11 +736,9 @@ export const make = Effect.gen(function* () {
       revealSubscribers.push((fire) => window.webContents.once("did-finish-load", fire));
     }
     bindFirstRevealTrigger(revealSubscribers, () => {
-      // Boot is done; hand the window back to normal hidden-window throttling
-      // (see the backgroundThrottling comment on the create options above).
-      if (!window.isDestroyed()) {
-        window.webContents.setBackgroundThrottling(true);
-      }
+      // Fork: upstream re-enables hidden-window throttling here. We leave it
+      // off — a throttled background renderer delivers thread notifications
+      // late and stops reacting to clicks on them (see the create options).
       // Reveal the real window, then close the connecting splash (if any) so the
       // two don't overlap and there's no blank gap between them.
       if (persistedSettings.mainWindowMaximized) {
