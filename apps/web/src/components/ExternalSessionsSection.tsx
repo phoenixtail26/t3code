@@ -89,7 +89,7 @@ export function externalSessionTitle(session: ExternalSessionShell): string {
  * one collapsed `ExternalSessionsSection` per scope-visible project that has
  * sessions. Keeps SidebarV2.tsx's fork footprint at an import + one element.
  */
-export function SidebarV2ExternalSessions({
+export function SidebarExternalSessions({
   projects,
   scopedProjectKeys,
 }: {

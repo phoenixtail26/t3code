@@ -149,6 +149,49 @@ export function validateServerUpdateReadyEvent(
   );
 }
 
+/**
+ * Keeps reconnect attempts ~1s apart for the whole update restart.
+ *
+ * A restart takes the server down for ~15 seconds, but the supervisor's normal
+ * backoff ladder (1/2/4/8/16s) assumes an unexpected failure and lands attempts
+ * at ~3, 5, 9, 17 and 33 seconds — so a 15-second restart is observed as a
+ * 33-second "Resuming". Nudging on every backoff entry (not just the first)
+ * holds the retry cadence flat until the server answers again. The sleep before
+ * each nudge is the pacer: a connection that fails instantly re-enters backoff
+ * immediately and would otherwise spin a tight retry loop.
+ *
+ * A newly restarted server can also reject the first environment credential.
+ * Authentication blocks need the same paced retry during this known restart;
+ * permission and configuration failures remain blocked.
+ *
+ * Callers fork this as a child of the update command so it is interrupted as
+ * soon as the update settles, whether it succeeds, fails, or times out.
+ */
+export function nudgeReconnectDuringUpdateRestart(input: {
+  readonly stateChanges: Stream.Stream<
+    {
+      readonly phase: string;
+      readonly lastFailure?: { readonly reason: string } | null;
+    },
+    unknown
+  >;
+  readonly retryNow: Effect.Effect<void>;
+  readonly interval?: Duration.Duration;
+}): Effect.Effect<void> {
+  return input.stateChanges.pipe(
+    Stream.filter(
+      (state) =>
+        state.phase === "backoff" ||
+        (state.phase === "blocked" && state.lastFailure?.reason === "authentication"),
+    ),
+    Stream.runForEach(() =>
+      Effect.sleep(input.interval ?? Duration.seconds(1)).pipe(Effect.andThen(input.retryNow)),
+    ),
+    Effect.timeoutOption(SERVER_UPDATE_RESUME_TIMEOUT),
+    Effect.ignore,
+  );
+}
+
 export function serverUpdateStateForProgressEvent(
   fromVersion: string,
   targetVersion: string,
@@ -230,12 +273,24 @@ export function applyServerConfigProjection(
   event: ServerConfigStreamEvent,
 ): Option.Option<ServerConfigProjection> {
   switch (event.type) {
-    case "snapshot":
+    case "snapshot": {
+      // A snapshot never carries published themes -- the theme stream owns
+      // them -- so taking it wholesale would clear the set on every reconnect
+      // and repaint anyone wearing one until the follow-up event landed.
+      // Only from a server that still streams them. Reconnecting to one that
+      // predates the feature must drop the set rather than leave a palette on
+      // screen that nothing will ever update again.
+      const carried =
+        event.config.environment.capabilities.environmentThemes === true && Option.isSome(current)
+          ? current.value.config.environmentThemes
+          : undefined;
       return Option.some({
-        config: event.config,
+        config:
+          carried === undefined ? event.config : { ...event.config, environmentThemes: carried },
         latestEvent: event,
-        source: "live",
+        source: "live" as const,
       });
+    }
     case "keybindingsUpdated":
       return Option.map(current, (projection) => ({
         config: {
@@ -264,6 +319,15 @@ export function applyServerConfigProjection(
         latestEvent: event,
         source: "live",
       }));
+    case "environmentThemesUpdated":
+      return Option.map(current, (projection) => ({
+        config: {
+          ...projection.config,
+          environmentThemes: event.payload.themes.length > 0 ? event.payload.themes : undefined,
+        },
+        latestEvent: event,
+        source: "live",
+      }));
   }
 }
 
@@ -286,8 +350,19 @@ const cachedConfigSnapshotEvent = (config: ServerConfig): ServerConfigStreamEven
  * config carries the provider/model catalogue used by task creation, so it is
  * useful—and safe—to retain after a transport session ends.
  */
+/**
+ * Published themes live only as long as the machine publishes them, so they
+ * must not survive in the config cache: a restart or an offline load would
+ * otherwise hand clients palettes the environment has already dropped.
+ */
+function withoutEnvironmentThemes(config: ServerConfig): ServerConfig {
+  if (config.environmentThemes === undefined) return config;
+  const { environmentThemes: _ephemeral, ...rest } = config;
+  return rest;
+}
+
 export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConfigState.make")(
-  function* () {
+  function* (environmentThemes?: boolean) {
     const supervisor = yield* EnvironmentSupervisor;
     const cache = yield* EnvironmentCacheStore;
     const environmentId = supervisor.target.environmentId;
@@ -303,9 +378,11 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
       ),
     );
     const state = yield* SubscriptionRef.make<Option.Option<ServerConfigProjection>>(
-      Option.map(cachedConfig, (config) => ({
-        config,
-        latestEvent: cachedConfigSnapshotEvent(config),
+      // Stripped on load as well as on save: a cache written by an earlier
+      // build can still carry published themes.
+      Option.map(cachedConfig, (cached) => ({
+        config: withoutEnvironmentThemes(cached),
+        latestEvent: cachedConfigSnapshotEvent(withoutEnvironmentThemes(cached)),
         source: "cache" as const,
       })),
     );
@@ -315,7 +392,7 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
     const persist = Effect.fn("EnvironmentServerConfigState.persist")(function* (
       config: ServerConfig,
     ) {
-      return yield* cache.saveServerConfig(environmentId, config).pipe(
+      return yield* cache.saveServerConfig(environmentId, withoutEnvironmentThemes(config)).pipe(
         Effect.as(true),
         Effect.catch((error) =>
           Effect.logWarning("Could not persist cached server configuration.").pipe(
@@ -346,7 +423,10 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
       Effect.forkScoped,
     );
 
-    yield* subscribe(WS_METHODS.subscribeServerConfig, {}).pipe(
+    yield* subscribe(
+      WS_METHODS.subscribeServerConfig,
+      environmentThemes === true ? { environmentThemes: true } : {},
+    ).pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
           const next = applyServerConfigProjection(yield* SubscriptionRef.get(state), event);
@@ -376,11 +456,14 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
   },
 );
 
-export function serverConfigStateChanges(environmentId: EnvironmentId) {
+export function serverConfigStateChanges(
+  environmentId: EnvironmentId,
+  environmentThemes?: boolean,
+) {
   return followStreamInEnvironment(
     environmentId,
     Stream.unwrap(
-      makeEnvironmentServerConfigState().pipe(
+      makeEnvironmentServerConfigState(environmentThemes).pipe(
         Effect.map((state) =>
           SubscriptionRef.changes(state).pipe(
             Stream.filterMap((projection) =>
@@ -433,6 +516,12 @@ export function createServerEnvironmentAtoms<R, E>(
     readonly initialConfigValueAtom: (
       environmentId: EnvironmentId,
     ) => Atom.Atom<ServerConfig | null>;
+    /**
+     * Whether this surface renders themes the environment publishes. Mobile
+     * keeps its own appearance settings, so it neither asks for the stream nor
+     * receives the payload.
+     */
+    readonly environmentThemes?: boolean;
   },
 ) {
   const configScheduler = createAtomCommandScheduler();
@@ -444,7 +533,7 @@ export function createServerEnvironmentAtoms<R, E>(
   };
   const configProjectionFamily = Atom.family((environmentId: EnvironmentId) =>
     runtime
-      .atom(serverConfigStateChanges(environmentId))
+      .atom(serverConfigStateChanges(environmentId, options.environmentThemes))
       .pipe(
         Atom.setIdleTTL(5 * 60_000),
         Atom.withLabel(`environment-data:server:config-projection:${environmentId}`),
@@ -589,18 +678,13 @@ export function createServerEnvironmentAtoms<R, E>(
           }),
         );
 
-        // The update restart is intentional. As soon as the supervisor sees
-        // that first failed connection, discard any prior backoff debt and
-        // retry immediately instead of carrying an old 16-second delay.
-        yield* environmentRegistry.stateChanges(target.environmentId).pipe(
-          Stream.filter((state) => state.phase === "backoff"),
-          Stream.take(1),
-          Stream.runDrain,
-          Effect.andThen(environmentRegistry.retryNow(target.environmentId)),
-          Effect.timeoutOption(Duration.seconds(30)),
-          Effect.ignore,
-          Effect.forkChild,
-        );
+        // The update restart is intentional and the server stays unreachable
+        // for the whole restart, so hold the retry cadence flat instead of
+        // letting the supervisor climb its backoff ladder.
+        yield* nudgeReconnectDuringUpdateRestart({
+          stateChanges: environmentRegistry.stateChanges(target.environmentId),
+          retryNow: environmentRegistry.retryNow(target.environmentId),
+        }).pipe(Effect.forkChild);
 
         const resumed = yield* environmentRegistry
           .followStream(target.environmentId, subscribe(WS_METHODS.subscribeServerLifecycle, {}))
@@ -682,6 +766,13 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:resource-telemetry-history",
       tag: WS_METHODS.serverGetResourceTelemetryHistory,
       staleTimeMs: 5_000,
+    }),
+    // A cold transcript scan is measured in seconds, so keep the result around
+    // long enough that switching windows or re-rendering does not rescan.
+    usageSummary: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:usage-summary",
+      tag: WS_METHODS.serverGetUsageSummary,
+      staleTimeMs: 60_000,
     }),
     configProjection,
     welcome: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
