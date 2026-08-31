@@ -2,12 +2,15 @@ import { useAtomValue } from "@effect/atom-react";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ExternalSessionShell } from "@t3tools/contracts";
 import { Link, useParams } from "@tanstack/react-router";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useClientSettings } from "~/hooks/useSettings";
 import { cn } from "../lib/utils";
 import { readLocalApi } from "../localApi";
+import { Atom } from "effect/unstable/reactivity";
 import { useExternalSessionsForProject } from "../state/entities";
+import { environmentExternalSessions } from "../state/externalSessions";
+import { primaryEnvironmentIdAtom } from "../state/primaryEnvironment";
 import { environmentServerConfigsAtom } from "../state/server";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { resolveClaudeAgentAdoptModelSelection } from "../threadFork/adoptModelSelection";
@@ -83,11 +86,15 @@ export function externalSessionTitle(session: ExternalSessionShell): string {
   return session.title ?? session.sessionId.slice(0, 8);
 }
 
+const EMPTY_EXTERNAL_SESSIONS_STATE_ATOM = Atom.make<ReadonlyMap<string, ExternalSessionShell>>(
+  new Map(),
+);
+
 /**
- * SidebarV2 mount for the radar. V2's list is flat (no per-project expandable
- * groups like the legacy Sidebar), so the radar renders as a tail section:
- * one collapsed `ExternalSessionsSection` per scope-visible project that has
- * sessions. Keeps SidebarV2.tsx's fork footprint at an import + one element.
+ * Mount for the default (flat-list) sidebar: a single shelf at the tail of the
+ * thread list, styled after the settled shelf (label, count while collapsed,
+ * rule, chevron). Keeps Sidebar.tsx's fork footprint at an import + one
+ * element.
  */
 export function SidebarExternalSessions({
   projects,
@@ -100,34 +107,59 @@ export function SidebarExternalSessions({
   const showExternalSessions = useClientSettings<boolean>(
     (settings) => settings.showExternalSessions,
   );
-  if (!showExternalSessions) return null;
-  const visible = projects.filter(
-    (project) =>
-      scopedProjectKeys === null || scopedProjectKeys.has(`${project.environmentId}:${project.id}`),
+  // The radar only watches the local filesystem, so sessions are scoped to
+  // the primary environment (same as useExternalSessionsForProject).
+  const primaryEnvironmentId = useAtomValue(primaryEnvironmentIdAtom);
+  const sessionsById = useAtomValue(
+    primaryEnvironmentId === null
+      ? EMPTY_EXTERNAL_SESSIONS_STATE_ATOM
+      : environmentExternalSessions.stateValueAtom(primaryEnvironmentId),
   );
+  const [expanded, setExpanded] = useState(false);
+  const sessions = useMemo(() => {
+    if (primaryEnvironmentId === null) return [];
+    const visibleProjectIds = new Set(
+      projects
+        .filter(
+          (project) =>
+            project.environmentId === primaryEnvironmentId &&
+            (scopedProjectKeys === null ||
+              scopedProjectKeys.has(`${project.environmentId}:${project.id}`)),
+        )
+        .map((project) => project.id),
+    );
+    return sortExternalSessions(
+      [...sessionsById.values()].filter((session) => visibleProjectIds.has(session.projectId)),
+    );
+  }, [primaryEnvironmentId, projects, scopedProjectKeys, sessionsById]);
+  if (!showExternalSessions || primaryEnvironmentId === null || sessions.length === 0) {
+    return null;
+  }
   return (
     <>
-      {visible.map((project) => (
-        <SidebarV2ProjectExternalSessions
-          key={`${project.environmentId}:${project.id}`}
-          projectId={project.id}
-          environmentId={project.environmentId}
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        aria-expanded={expanded}
+        className="mb-1 mt-3 flex w-full cursor-pointer items-center gap-2 px-2.5 text-left"
+      >
+        <span className="text-xs font-medium text-muted-foreground/50">
+          {expanded ? "External" : `External (${sessions.length})`}
+        </span>
+        <span className="h-px flex-1 bg-sidebar-border/60" />
+        <ChevronDownIcon
+          aria-hidden
+          className={cn(
+            "size-3 text-muted-foreground/50 transition-transform",
+            expanded && "rotate-180",
+          )}
         />
-      ))}
+      </button>
+      {expanded ? (
+        <ExternalSessionList sessions={sessions} environmentId={primaryEnvironmentId} />
+      ) : null}
     </>
   );
-}
-
-function SidebarV2ProjectExternalSessions({
-  projectId,
-  environmentId,
-}: {
-  projectId: string;
-  environmentId: EnvironmentId;
-}) {
-  const sessions = useExternalSessionsForProject(projectId);
-  if (sessions.length === 0) return null;
-  return <ExternalSessionsSection sessions={sessions} environmentId={environmentId} />;
 }
 
 /**
@@ -159,6 +191,41 @@ export function ExternalSessionsSection({
   environmentId: EnvironmentId;
 }) {
   const [expanded, setExpanded] = useState(false);
+  if (sessions.length === 0) {
+    return null;
+  }
+  return (
+    <div className="w-full">
+      <button
+        type="button"
+        className="flex h-6 w-full items-center gap-1.5 px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80 sm:h-7"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <ChevronRightIcon
+          className={cn(
+            "size-3 shrink-0 text-muted-foreground/60 transition-transform duration-150",
+            expanded ? "rotate-90" : "",
+          )}
+        />
+        <span className="flex-1 truncate">External</span>
+        <span className="shrink-0 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground/60">
+          {sessions.length}
+        </span>
+      </button>
+      {expanded && <ExternalSessionList sessions={sessions} environmentId={environmentId} />}
+    </div>
+  );
+}
+
+/** Session rows plus the adopt context menu — shared by both sidebar mounts. */
+function ExternalSessionList({
+  sessions,
+  environmentId,
+}: {
+  sessions: ReadonlyArray<ExternalSessionShell>;
+  environmentId: EnvironmentId;
+}) {
   const sortedSessions = useMemo(() => sortExternalSessions(sessions), [sessions]);
   const activeSessionId = useParams({
     strict: false,
@@ -193,67 +260,43 @@ export function ExternalSessionsSection({
     [adoptModelSelection, adoptSession, environmentId],
   );
 
-  if (sessions.length === 0) {
-    return null;
-  }
-
   return (
-    <div className="w-full">
-      <button
-        type="button"
-        className="flex h-6 w-full items-center gap-1.5 px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80 sm:h-7"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((current) => !current)}
-      >
-        <ChevronRightIcon
-          className={cn(
-            "size-3 shrink-0 text-muted-foreground/60 transition-transform duration-150",
-            expanded ? "rotate-90" : "",
-          )}
-        />
-        <span className="flex-1 truncate">External</span>
-        <span className="shrink-0 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground/60">
-          {sessions.length}
-        </span>
-      </button>
-      {expanded && (
-        <div>
-          {sortedSessions.map((session) => {
-            const title = externalSessionTitle(session);
-            const tooltip = session.cwd ? `${title}\n${session.cwd}` : title;
-            const isActive = activeSessionId === session.sessionId;
-            return (
-              <SidebarMenuSubItem key={session.sessionId} className="w-full px-0">
-                <SidebarMenuSubButton
-                  size="sm"
-                  isActive={isActive}
-                  title={tooltip}
-                  className="mx-0 flex h-6 w-full min-w-0 translate-x-0 items-center gap-1.5 rounded-none px-2 text-left sm:h-7"
-                  onContextMenu={(event: ReactMouseEvent<HTMLAnchorElement>) => {
-                    if (!adoptModelSelection) return;
-                    event.preventDefault();
-                    handleSessionContextMenu(session, { x: event.clientX, y: event.clientY });
-                  }}
-                  render={
-                    <Link
-                      to="/$environmentId/external/$sessionId"
-                      params={{ environmentId, sessionId: session.sessionId }}
-                    />
-                  }
-                >
-                  <ThreadStatusLabel status={EXTERNAL_SESSION_STATE_PILLS[session.state]} compact />
-                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                    {title}
-                  </span>
-                  <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/40">
-                    {formatRelativeTimeLabel(session.lastActivityAt)}
-                  </span>
-                </SidebarMenuSubButton>
-              </SidebarMenuSubItem>
-            );
-          })}
-        </div>
-      )}
+    <div>
+      {sortedSessions.map((session) => {
+        const title = externalSessionTitle(session);
+        const tooltip = session.cwd
+          ? `${title}
+${session.cwd}`
+          : title;
+        const isActive = activeSessionId === session.sessionId;
+        return (
+          <SidebarMenuSubItem key={session.sessionId} className="w-full px-0">
+            <SidebarMenuSubButton
+              size="sm"
+              isActive={isActive}
+              title={tooltip}
+              className="mx-0 flex h-6 w-full min-w-0 translate-x-0 items-center gap-1.5 rounded-none px-2 text-left sm:h-7"
+              onContextMenu={(event: ReactMouseEvent<HTMLAnchorElement>) => {
+                if (!adoptModelSelection) return;
+                event.preventDefault();
+                handleSessionContextMenu(session, { x: event.clientX, y: event.clientY });
+              }}
+              render={
+                <Link
+                  to="/$environmentId/external/$sessionId"
+                  params={{ environmentId, sessionId: session.sessionId }}
+                />
+              }
+            >
+              <ThreadStatusLabel status={EXTERNAL_SESSION_STATE_PILLS[session.state]} compact />
+              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{title}</span>
+              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/40">
+                {formatRelativeTimeLabel(session.lastActivityAt)}
+              </span>
+            </SidebarMenuSubButton>
+          </SidebarMenuSubItem>
+        );
+      })}
     </div>
   );
 }
