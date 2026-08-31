@@ -1,6 +1,7 @@
 import type { ContextMenuItem } from "@t3tools/contracts";
 
 import type { ThreadActionMenuId } from "../components/threadActionMenu.logic";
+import { canForkThread } from "./gate";
 
 /**
  * Appends the fork's "Fork thread" entry to upstream's thread action menu.
@@ -12,10 +13,24 @@ import type { ThreadActionMenuId } from "../components/threadActionMenu.logic";
  */
 export type ForkThreadActionMenuId = ThreadActionMenuId | "fork";
 
+const FORK_THREAD_MENU_ITEM = { id: "fork", label: "Fork thread", icon: "git-branch" } as const;
+
 export function withForkThreadMenuItem(
   items: ReadonlyArray<ContextMenuItem<ThreadActionMenuId>>,
   canFork: boolean,
 ): ReadonlyArray<ContextMenuItem<ForkThreadActionMenuId>> {
   // Fork is Claude-only (FORK_PLAN_FORKING.md #6) — see threadFork/gate.ts.
-  return canFork ? [...items, { id: "fork", label: "Fork thread", icon: "git-branch" }] : items;
+  return canFork ? [...items, FORK_THREAD_MENU_ITEM] : items;
+}
+
+/**
+ * Spread-style variant for menus built as inline arrays (the legacy sidebar):
+ * `...forkThreadMenuEntry(serverConfigs, environmentId, instanceId)`.
+ */
+export function forkThreadMenuEntry(
+  serverConfigs: Parameters<typeof canForkThread>[0],
+  environmentId: Parameters<typeof canForkThread>[1],
+  instanceId: Parameters<typeof canForkThread>[2],
+): ReadonlyArray<typeof FORK_THREAD_MENU_ITEM> {
+  return canForkThread(serverConfigs, environmentId, instanceId) ? [FORK_THREAD_MENU_ITEM] : [];
 }

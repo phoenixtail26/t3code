@@ -130,6 +130,26 @@ function SidebarV2ProjectExternalSessions({
   return <ExternalSessionsSection sessions={sessions} environmentId={environmentId} />;
 }
 
+/**
+ * Legacy-sidebar mount: renders inside a project's expandable group. Reads the
+ * visibility setting and the project's sessions itself so LegacySidebar.tsx
+ * stays at one import and one element (AGENTS.md, "Fork additions").
+ */
+export function LegacySidebarProjectExternalSessions({
+  project,
+  expanded,
+}: {
+  project: { readonly id: string; readonly environmentId: EnvironmentId };
+  expanded: boolean;
+}) {
+  const showExternalSessions = useClientSettings<boolean>(
+    (settings) => settings.showExternalSessions,
+  );
+  const sessions = useExternalSessionsForProject(project.id);
+  if (!expanded || !showExternalSessions) return null;
+  return <ExternalSessionsSection sessions={sessions} environmentId={project.environmentId} />;
+}
+
 export function ExternalSessionsSection({
   sessions,
   environmentId,
