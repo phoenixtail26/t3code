@@ -1,4 +1,8 @@
-import type { PushNotificationSettings, ThreadId } from "@t3tools/contracts";
+import type {
+  OrchestrationThreadShell,
+  PushNotificationSettings,
+  ThreadId,
+} from "@t3tools/contracts";
 import type { AgentAwarenessPhase, AgentAwarenessState } from "@t3tools/shared/agentAwareness";
 
 /**
@@ -21,6 +25,34 @@ import type { AgentAwarenessPhase, AgentAwarenessState } from "@t3tools/shared/a
  * `waiting_for_approval` across many domain events notifies once, and the
  * same phase notifies again only after the thread has moved away and back.
  */
+
+/**
+ * How long a completion push waits before delivery. The last background task
+ * finishing clears `backgroundLiveness` a few seconds before the agent
+ * resumes with a fresh turn, so the thread reads "completed" in that window;
+ * the recheck re-reads the thread after this delay and delivers only if it is
+ * still settled. Mirrors the web client's COMPLETION_DEBOUNCE_MS.
+ */
+export const COMPLETION_RECHECK_MS = 10_000;
+
+/**
+ * The awareness ladder reads a settled turn as "completed", but native
+ * background work (subagents, workflows, watch loops) outlives the turn: the
+ * agent yields, the work keeps running, and a fresh turn starts when it lands.
+ * `backgroundLiveness` is the server's signal for exactly that window — the
+ * same one that keeps the sidebar pill at "Working" instead of "Done"
+ * (ThreadBackgroundLivenessService) — so the phase is held at "running" until
+ * it clears and a finish push fires only when the pill would go green.
+ */
+export function awarenessWithBackgroundLiveness(
+  state: AgentAwarenessState | null,
+  backgroundLiveness: OrchestrationThreadShell["backgroundLiveness"],
+): AgentAwarenessState | null {
+  if (state === null || state.phase !== "completed" || backgroundLiveness == null) {
+    return state;
+  }
+  return { ...state, phase: "running" };
+}
 
 const PHASE_PRIORITY: Partial<Record<AgentAwarenessPhase, string>> = {
   waiting_for_approval: "high",

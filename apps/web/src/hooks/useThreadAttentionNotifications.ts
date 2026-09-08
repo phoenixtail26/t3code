@@ -10,6 +10,7 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   classifyThreadTransitions,
   COMPLETION_DEBOUNCE_MS,
+  phaseWithBackgroundLiveness,
   type AttentionNotification,
   type ThreadAwarenessSnapshot,
 } from "./threadAttention.logic";
@@ -34,6 +35,9 @@ import {
  *    Completion toasts wait out {@link COMPLETION_DEBOUNCE_MS}; if the thread
  *    resumes work in that window the toast is cancelled. Blocking phases
  *    (approval/input/failed) still fire immediately — they are stable states.
+ *    A turn that settled while background tasks are still running is not
+ *    "completed" at all — {@link phaseWithBackgroundLiveness} holds it at
+ *    "running" until the sidebar's Working-pill signal clears.
  */
 
 export function useThreadAttentionNotifications(): void {
@@ -157,7 +161,7 @@ export function useThreadAttentionNotifications(): void {
         key: `${shell.environmentId} ${shell.id}`,
         environmentId: shell.environmentId,
         threadId: shell.id,
-        phase: state.phase,
+        phase: phaseWithBackgroundLiveness(state.phase, shell.backgroundLiveness),
         title: `${state.headline}: ${state.threadTitle}`,
         body: state.detail ? `${projectTitle} · ${state.detail}` : projectTitle,
       });

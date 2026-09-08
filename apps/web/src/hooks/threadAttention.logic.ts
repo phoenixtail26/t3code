@@ -1,3 +1,4 @@
+import type { OrchestrationThreadShell } from "@t3tools/contracts";
 import type { AgentAwarenessPhase } from "@t3tools/shared/agentAwareness";
 
 /**
@@ -54,6 +55,24 @@ export const IMMEDIATE_ALERT_PHASES: ReadonlySet<AgentAwarenessPhase> = new Set(
 ]);
 
 const COMPLETION_PHASE: AgentAwarenessPhase = "completed";
+
+/**
+ * The awareness ladder reads a settled turn as "completed", but native
+ * background work (subagents, workflows, watch loops) can outlive the turn:
+ * the agent yields, the work keeps running, and a fresh turn starts when it
+ * lands — 30-80s gaps where the thread looks done and is not. That gap
+ * outlives the completion debounce, so gating on the phase alone toasts
+ * "finished" several times per task. `backgroundLiveness` is the server's
+ * signal for exactly this window — the same one that keeps the sidebar pill
+ * at "Working" instead of a green "Done" — so the phase is held at "running"
+ * until it clears and a finish toast fires only when the pill would go green.
+ */
+export function phaseWithBackgroundLiveness(
+  phase: AgentAwarenessPhase,
+  backgroundLiveness: OrchestrationThreadShell["backgroundLiveness"],
+): AgentAwarenessPhase {
+  return phase === COMPLETION_PHASE && backgroundLiveness != null ? "running" : phase;
+}
 
 /** Phases that keep the taskbar lit even without a fresh transition. */
 export const WAITING_PHASES: ReadonlySet<AgentAwarenessPhase> = new Set([

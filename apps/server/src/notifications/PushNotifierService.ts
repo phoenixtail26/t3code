@@ -2,6 +2,7 @@ import type { PushNotificationSettings, ThreadId } from "@t3tools/contracts";
 import { projectThreadAwareness } from "@t3tools/shared/agentAwareness";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -17,6 +18,8 @@ import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSn
 import { eventThreadId } from "../relay/AgentAwarenessRelay.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import {
+  awarenessWithBackgroundLiveness,
+  COMPLETION_RECHECK_MS,
   ObservedPhaseTracker,
   type PushNotification,
   resolvePushNotification,
@@ -221,6 +224,65 @@ export const make = Effect.gen(function* () {
       );
   });
 
+  // Threads with a completion recheck fiber in flight, so repeated completed
+  // transitions inside the window arm exactly one recheck.
+  const pendingCompletionRechecks = new Set<ThreadId>();
+
+  const deliverUnlessPresent = Effect.fn("pushNotifier.deliverUnlessPresent")(function* (
+    threadId: ThreadId,
+    settings: PushNotificationSettings,
+    phase: string | null,
+    notification: PushNotification,
+  ) {
+    // The user is at the machine and already got a desktop notification, so a
+    // push to their pocket is pure duplication.
+    if (
+      isUserPresent({
+        nowMs: DateTime.toEpochMillis(yield* DateTime.now),
+        windowSeconds: settings.suppressWhenPresentSeconds,
+        lastPresentAtMs: readLastPresenceMs(),
+      })
+    ) {
+      yield* Effect.logDebug("push notification suppressed; user present at machine", {
+        threadId,
+        phase,
+      });
+      return;
+    }
+
+    yield* Effect.logInfo("push notification sending", { threadId, phase });
+    yield* deliver(settings, notification);
+  });
+
+  // Delayed leg of a completion push: re-read the thread after the window and
+  // deliver only if it is still settled. Anything else means work resumed (or
+  // a blocking phase already notified through the normal transition path).
+  const recheckCompletion = Effect.fn("pushNotifier.recheckCompletion")(function* (
+    threadId: ThreadId,
+    settings: PushNotificationSettings,
+  ) {
+    yield* Effect.sleep(Duration.millis(COMPLETION_RECHECK_MS));
+    const environmentId = yield* serverEnvironment.getEnvironmentId;
+    const thread = yield* snapshotQuery.getThreadShellById(threadId);
+    if (Option.isNone(thread)) return;
+    const project = yield* snapshotQuery.getProjectShellById(thread.value.projectId);
+    if (Option.isNone(project)) return;
+    const state = awarenessWithBackgroundLiveness(
+      projectThreadAwareness({ environmentId, project: project.value, thread: thread.value }),
+      thread.value.backgroundLiveness,
+    );
+    if (state?.phase !== "completed") return;
+    const notification = resolvePushNotification({
+      settings,
+      state,
+      // The completed transition was deliberately withheld when this recheck
+      // was armed; treat it as fresh here.
+      lastObservedPhase: undefined,
+    });
+    if (notification === null) return;
+    yield* deliverUnlessPresent(threadId, settings, state.phase, notification);
+  });
+
   const handleThread = Effect.fn("pushNotifier.handleThread")(function* (threadId: ThreadId) {
     const settings = yield* serverSettings.getSettings.pipe(
       Effect.map((current) => current.pushNotifications),
@@ -240,41 +302,41 @@ export const make = Effect.gen(function* () {
     const project = yield* snapshotQuery.getProjectShellById(thread.value.projectId);
     if (Option.isNone(project)) return;
 
-    const state = projectThreadAwareness({
-      environmentId,
-      project: project.value,
-      thread: thread.value,
-    });
+    // Background-liveness gate: a settled turn whose background work is still
+    // running reads as "running", not "completed" — see
+    // awarenessWithBackgroundLiveness.
+    const state = awarenessWithBackgroundLiveness(
+      projectThreadAwareness({ environmentId, project: project.value, thread: thread.value }),
+      thread.value.backgroundLiveness,
+    );
     const notification = resolvePushNotification({
       settings,
       state,
       lastObservedPhase: observedPhases.get(threadId),
     });
+    // The phase is recorded whether or not anything is delivered, so stepping
+    // away later does not replay old transitions.
     observedPhases.observe(threadId, state?.phase ?? null);
     if (notification === null) return;
 
-    // The user is at the machine and already got a desktop notification, so a
-    // push to their pocket is pure duplication. The phase is recorded above
-    // either way, so stepping away later does not replay old transitions.
-    if (
-      isUserPresent({
-        nowMs: DateTime.toEpochMillis(yield* DateTime.now),
-        windowSeconds: settings.suppressWhenPresentSeconds,
-        lastPresentAtMs: readLastPresenceMs(),
-      })
-    ) {
-      yield* Effect.logDebug("push notification suppressed; user present at machine", {
-        threadId,
-        phase: state?.phase ?? null,
-      });
+    // Completions are deferred, mirroring the web client's debounce: the event
+    // that carried this transition is often the last background task landing,
+    // with the agent about to resume. The recheck delivers only if the thread
+    // stays settled through the window.
+    if (state?.phase === "completed") {
+      if (pendingCompletionRechecks.has(threadId)) return;
+      pendingCompletionRechecks.add(threadId);
+      yield* recheckCompletion(threadId, settings).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("push completion recheck failed", { threadId, cause }),
+        ),
+        Effect.ensuring(Effect.sync(() => pendingCompletionRechecks.delete(threadId))),
+        Effect.forkScoped,
+      );
       return;
     }
 
-    yield* Effect.logInfo("push notification sending", {
-      threadId,
-      phase: state?.phase ?? null,
-    });
-    yield* deliver(settings, notification);
+    yield* deliverUnlessPresent(threadId, settings, state?.phase ?? null, notification);
   });
 
   const start = () =>

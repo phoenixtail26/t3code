@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { AgentAwarenessPhase } from "@t3tools/shared/agentAwareness";
 
-import { classifyThreadTransitions, type ThreadAwarenessSnapshot } from "./threadAttention.logic";
+import {
+  classifyThreadTransitions,
+  phaseWithBackgroundLiveness,
+  type ThreadAwarenessSnapshot,
+} from "./threadAttention.logic";
 
 function snapshot(key: string, phase: AgentAwarenessPhase): ThreadAwarenessSnapshot {
   return {
@@ -127,6 +131,18 @@ describe("classifyThreadTransitions", () => {
     expect(result.completedExitedKeys).toEqual(["a"]);
   });
 
+  it("gates only completion on background liveness", () => {
+    expect(phaseWithBackgroundLiveness("completed", "working")).toBe("running");
+    expect(phaseWithBackgroundLiveness("completed", "monitoring")).toBe("running");
+    expect(phaseWithBackgroundLiveness("completed", null)).toBe("completed");
+    expect(phaseWithBackgroundLiveness("completed", undefined)).toBe("completed");
+    // Blocking phases stay immediate even with live background work.
+    expect(phaseWithBackgroundLiveness("failed", "working")).toBe("failed");
+    expect(phaseWithBackgroundLiveness("waiting_for_approval", "working")).toBe(
+      "waiting_for_approval",
+    );
+  });
+
   it("counts only approval/input phases toward the waiting badge", () => {
     const result = classifyThreadTransitions({
       previousPhases: seededEmpty,
@@ -139,6 +155,25 @@ describe("classifyThreadTransitions", () => {
       seeded: true,
     });
     expect(result.waitingCount).toBe(2);
+  });
+
+  it("holds a settled turn at running while background work is live (no finish toast)", () => {
+    // The turn settles while a background task runs: the gated phase stays
+    // "running", so nothing is armed across the gap however long it lasts.
+    const gap = classifyThreadTransitions({
+      previousPhases: new Map([["a", "running"]]),
+      snapshots: [snapshot("a", phaseWithBackgroundLiveness("completed", "working"))],
+      seeded: true,
+    });
+    expect(gap.completedEntered).toEqual([]);
+    expect(gap.immediate).toEqual([]);
+    // The work lands and liveness clears: only now does completion arm.
+    const settled = classifyThreadTransitions({
+      previousPhases: gap.nextPhases,
+      snapshots: [snapshot("a", phaseWithBackgroundLiveness("completed", null))],
+      seeded: true,
+    });
+    expect(settled.completedEntered.map((n) => n.key)).toEqual(["a"]);
   });
 
   it("re-arms after a completed → running → completed round trip", () => {

@@ -3,6 +3,7 @@ import type { AgentAwarenessState } from "@t3tools/shared/agentAwareness";
 import { describe, expect, it } from "@effect/vitest";
 
 import {
+  awarenessWithBackgroundLiveness,
   buildThreadWebUrl,
   ObservedPhaseTracker,
   resolvePushNotification,
@@ -111,6 +112,40 @@ describe("resolvePushNotification", () => {
       resolvePushNotification({
         settings: enabledSettings,
         state: null,
+        lastObservedPhase: "running",
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("awarenessWithBackgroundLiveness", () => {
+  it("holds a settled turn at running while background work is live", () => {
+    const completed = makeState({ phase: "completed", headline: "Agent finished" });
+    expect(awarenessWithBackgroundLiveness(completed, "working")?.phase).toBe("running");
+    expect(awarenessWithBackgroundLiveness(completed, "monitoring")?.phase).toBe("running");
+  });
+
+  it("passes completion through once liveness clears", () => {
+    const completed = makeState({ phase: "completed", headline: "Agent finished" });
+    expect(awarenessWithBackgroundLiveness(completed, null)).toBe(completed);
+    expect(awarenessWithBackgroundLiveness(completed, undefined)).toBe(completed);
+  });
+
+  it("gates only completion — blocking phases and null state pass through", () => {
+    const failed = makeState({ phase: "failed", headline: "Agent failed" });
+    expect(awarenessWithBackgroundLiveness(failed, "working")).toBe(failed);
+    expect(awarenessWithBackgroundLiveness(null, "working")).toBeNull();
+  });
+
+  it("suppresses the completion push while background work is live end to end", () => {
+    // The turn settles mid-task: gated phase is "running", an ignored phase.
+    expect(
+      resolvePushNotification({
+        settings: enabledSettings,
+        state: awarenessWithBackgroundLiveness(
+          makeState({ phase: "completed", headline: "Agent finished" }),
+          "working",
+        ),
         lastObservedPhase: "running",
       }),
     ).toBeNull();
