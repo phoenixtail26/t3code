@@ -72,6 +72,14 @@ If the timestamps did not move, the build did nothing — report that as a
 failure regardless of exit code. A healthy run reports packages built and
 finishes in roughly 10-30s warm.
 
+If the sync bumped `electron` in `apps/desktop/package.json`, also confirm the
+binary exists: `apps/desktop/node_modules/electron/dist/electron.exe`. An install
+that ran while the app was still holding the old binary can leave the new
+package with no `dist/` and no `path.txt` while pnpm reports nothing pending;
+the build then passes and the launcher has nothing to run. Fix: with the PATH
+above, run `node install.js` inside that electron package dir, then check
+`dist/electron.exe --version`.
+
 ## The icon is NOT a build output — do not chase it here
 
 The app icon and the name on Windows toast notifications come from the
