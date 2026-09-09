@@ -98,7 +98,7 @@ all projects/threads rebound from `codex` to `claudeAgent` + `claude-fable-5`.
   stays a pristine mirror of `upstream/main` and upstream lands via
   `merge --ff-only` then `main` → `g3code`. Full workflow, including how to cut
   an upstreamable PR branch, is in `FORK_REMOTES.md`. The fork's own files
-  (FORK*\*, RUN*_, CLAUDE*WINDOWS*_, usage feature) are additive and
+  (FORK*\*, RUN*\_, CLAUDE*WINDOWS*_, usage feature) are additive and
   low-conflict.
 
 ## Environment facts agents keep rediscovering (save yourself the time)

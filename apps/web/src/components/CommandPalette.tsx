@@ -1857,6 +1857,10 @@ function OpenCommandPaletteDialog(props: {
       }
 
       const projectId = newProjectId();
+      const targetEnvironmentProviders =
+        environments.find((environment) => environment.environmentId === input.environmentId)
+          ?.serverConfig?.providers ??
+        (input.environmentId === primaryEnvironmentId ? providers : []);
       const createResult = await createProject({
         environmentId: input.environmentId,
         input: {

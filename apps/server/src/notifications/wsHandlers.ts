@@ -57,12 +57,10 @@ export const makeWebPushWsHandlers = Effect.fnUntraced(function* (deps: {
         Effect.gen(function* () {
           const settings = yield* serverSettings.getSettings;
           const webPush = yield* webPushStore.snapshot.pipe(
-            Effect.orElseSucceed(
-              (): WebPushStore.WebPushSnapshot => ({
-                vapidKeys: Option.none(),
-                subscriptions: [],
-              }),
-            ),
+            Effect.orElseSucceed((): WebPushStore.WebPushSnapshot => ({
+              vapidKeys: Option.none(),
+              subscriptions: [],
+            })),
           );
           const result = yield* sendTestPushNotification(settings.pushNotifications, webPush);
           // Best-effort: a prune failure must not mask the test result.

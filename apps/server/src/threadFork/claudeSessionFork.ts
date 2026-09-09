@@ -14,7 +14,7 @@ import { forkSession } from "@anthropic-ai/claude-agent-sdk";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-export class ClaudeSessionForkError extends Schema.TaggedErrorClass<ClaudeSessionForkError>()(
+export class ClaudeSessionForkError extends Schema.TaggedError<ClaudeSessionForkError>()(
   "ClaudeSessionForkError",
   {
     sourceSessionId: Schema.String,

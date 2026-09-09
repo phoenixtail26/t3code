@@ -200,9 +200,10 @@ export const make = Effect.gen(function* () {
       yield* sendNtfyNotification(settings.topicUrl, notification);
     }
     const webPush = yield* webPushStore.snapshot.pipe(
-      Effect.orElseSucceed(
-        (): WebPushStore.WebPushSnapshot => ({ vapidKeys: Option.none(), subscriptions: [] }),
-      ),
+      Effect.orElseSucceed((): WebPushStore.WebPushSnapshot => ({
+        vapidKeys: Option.none(),
+        subscriptions: [],
+      })),
     );
     const results = yield* sendWebPushToSnapshot({ settings, webPush, notification });
     const failed = results.filter((result) => result.outcome !== "delivered");

@@ -65,6 +65,8 @@ export function isViewportAtRealContentEnd({
   );
   const visibleBottom = state.scroll + usableViewportHeight;
   return realContentBottom - visibleBottom <= REAL_CONTENT_END_TOLERANCE_PX;
+}
+
 /**
  * Whether the timeline's real rows extend past the viewport left above the
  * composer. The list's own content length includes the composer inset

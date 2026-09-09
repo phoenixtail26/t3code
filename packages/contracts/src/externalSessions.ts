@@ -114,7 +114,7 @@ export const ExternalSessionsGetTranscriptInput = Schema.Struct({
 });
 export type ExternalSessionsGetTranscriptInput = typeof ExternalSessionsGetTranscriptInput.Type;
 
-export class ExternalSessionTranscriptError extends Schema.TaggedErrorClass<ExternalSessionTranscriptError>()(
+export class ExternalSessionTranscriptError extends Schema.TaggedError<ExternalSessionTranscriptError>()(
   "ExternalSessionTranscriptError",
   {
     /** "not-found": unknown/aged-out session; "read-failed": FS error. */

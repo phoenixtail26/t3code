@@ -43,7 +43,6 @@ describe("parseTranscriptLine", () => {
     expect(oversized.length).toBeGreaterThan(MAX_RECORD_BYTES);
     let parseCalled = false;
     const originalParse = JSON.parse;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (JSON as any).parse = (...args: Parameters<typeof JSON.parse>) => {
       parseCalled = true;
       return originalParse(...args);

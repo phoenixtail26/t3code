@@ -113,9 +113,11 @@ const sendToSubscription = (input: {
           gone: status === 404 || status === 410,
         };
       }),
-      Effect.orElseSucceed(
-        (): WebPushDeliveryResult => ({ endpoint, outcome: "unreachable", gone: false }),
-      ),
+      Effect.orElseSucceed((): WebPushDeliveryResult => ({
+        endpoint,
+        outcome: "unreachable",
+        gone: false,
+      })),
     );
   });
 

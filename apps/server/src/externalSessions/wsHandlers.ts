@@ -141,14 +141,12 @@ export const makeExternalSessionsWsHandlers = Effect.fnUntraced(function* (deps:
                   { cause },
                 ).pipe(
                   Effect.flatMap(() => nowIso),
-                  Effect.map(
-                    (updatedAt): OrchestrationShellSnapshot => ({
-                      snapshotSequence: 0,
-                      projects: [],
-                      threads: [],
-                      updatedAt,
-                    }),
-                  ),
+                  Effect.map((updatedAt): OrchestrationShellSnapshot => ({
+                    snapshotSequence: 0,
+                    projects: [],
+                    threads: [],
+                    updatedAt,
+                  })),
                 ),
               ),
             );

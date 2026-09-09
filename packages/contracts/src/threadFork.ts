@@ -67,7 +67,7 @@ export const ThreadInheritedTranscript = Schema.Struct({
 });
 export type ThreadInheritedTranscript = typeof ThreadInheritedTranscript.Type;
 
-export class ThreadForkError extends Schema.TaggedErrorClass<ThreadForkError>()("ThreadForkError", {
+export class ThreadForkError extends Schema.TaggedError<ThreadForkError>()("ThreadForkError", {
   /**
    * "not-found": unknown thread / external session. "unsupported": the
    * source's provider is not Claude (or the session already belongs to a

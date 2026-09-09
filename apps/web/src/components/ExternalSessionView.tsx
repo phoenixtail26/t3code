@@ -30,8 +30,7 @@ import { ThreadStatusLabel } from "./ThreadStatusIndicators";
 // quiets down instead of one request per tick.
 const TRANSCRIPT_REFRESH_DEBOUNCE_MS = 1_000;
 
-const EMPTY_TURN_DIFF_SUMMARY_MAP = new Map<MessageId, TurnDiffSummary>();
-const EMPTY_REVERT_COUNT_MAP = new Map<MessageId, number>();
+const EMPTY_TURN_DIFF_SUMMARIES: ReadonlyArray<TurnDiffSummary> = [];
 
 function noop(): void {}
 
@@ -178,11 +177,11 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
           timelineEntries={timelineEntries}
           latestTurn={null}
           runningTurnId={null}
-          turnDiffSummaryByAssistantMessageId={EMPTY_TURN_DIFF_SUMMARY_MAP}
+          turnDiffSummaries={EMPTY_TURN_DIFF_SUMMARIES}
           routeThreadKey={`external:${sessionId}`}
           onOpenTurnDiff={noop}
-          revertTurnCountByUserMessageId={EMPTY_REVERT_COUNT_MAP}
-          onRevertUserMessage={noop}
+          supportsConversationRollback={false}
+          onRevertToTurnCount={noop}
           isRevertingCheckpoint={false}
           onImageExpand={noop}
           activeThreadEnvironmentId={environmentId}

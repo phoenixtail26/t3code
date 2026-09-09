@@ -196,7 +196,6 @@ import {
   ThreadStatusPill,
 } from "./Sidebar.logic";
 import { sortThreads } from "../lib/threadSort";
-import { handleArchivedOnlyProjectRemoval } from "./sidebar/removeProjectArchivedFallback";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useIsMobile } from "~/hooks/useMediaQuery";
@@ -1628,16 +1627,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
         const error = squashAtomCommandFailure(result);
         const message = error instanceof Error ? error.message : "Unknown error removing project.";
-
-        const handledAsArchivedOnly = await handleArchivedOnlyProjectRemoval({
-          member,
-          failureMessage: message,
-          confirm: (text) => api.dialogs.confirm(text),
-          forceRemove: () => removeProject(member, { force: true }),
-        });
-        if (handledAsArchivedOnly) {
-          return;
-        }
 
         console.error("Failed to remove project", {
           projectId: member.id,

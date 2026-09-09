@@ -34,7 +34,7 @@ export const WebPushOperation = Schema.Literals([
 ]);
 export type WebPushOperation = typeof WebPushOperation.Type;
 
-export class WebPushError extends Schema.TaggedErrorClass<WebPushError>()("WebPushError", {
+export class WebPushError extends Schema.TaggedError<WebPushError>()("WebPushError", {
   operation: WebPushOperation,
   cause: Schema.Defect(),
 }) {
