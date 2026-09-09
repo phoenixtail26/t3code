@@ -119,14 +119,16 @@ describe("resolvePushNotification", () => {
 });
 
 describe("awarenessWithBackgroundLiveness", () => {
-  it("holds a settled turn at running while background work is live", () => {
+  it("holds a settled turn at running while background tasks are working", () => {
     const completed = makeState({ phase: "completed", headline: "Agent finished" });
     expect(awarenessWithBackgroundLiveness(completed, "working")?.phase).toBe("running");
-    expect(awarenessWithBackgroundLiveness(completed, "monitoring")?.phase).toBe("running");
   });
 
-  it("passes completion through once liveness clears", () => {
+  it("passes completion through once no task is actively working", () => {
     const completed = makeState({ phase: "completed", headline: "Agent finished" });
+    // Monitoring-only threads are settled (often waiting on the user); a
+    // long-lived watch loop must not swallow the finish notification.
+    expect(awarenessWithBackgroundLiveness(completed, "monitoring")).toBe(completed);
     expect(awarenessWithBackgroundLiveness(completed, null)).toBe(completed);
     expect(awarenessWithBackgroundLiveness(completed, undefined)).toBe(completed);
   });

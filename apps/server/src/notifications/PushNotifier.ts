@@ -43,12 +43,18 @@ export const COMPLETION_RECHECK_MS = 10_000;
  * same one that keeps the sidebar pill at "Working" instead of "Done"
  * (ThreadBackgroundLivenessService) — so the phase is held at "running" until
  * it clears and a finish push fires only when the pill would go green.
+ *
+ * Only "working" gates. "monitoring" means watch loops are the sole live
+ * work: the real task is settled and often waiting on the user, so
+ * suppressing there swallows the finish notification entirely (a monitor can
+ * run for hours). If the monitor wakes the agent, the phase returns to
+ * running and the next settle notifies again.
  */
 export function awarenessWithBackgroundLiveness(
   state: AgentAwarenessState | null,
   backgroundLiveness: OrchestrationThreadShell["backgroundLiveness"],
 ): AgentAwarenessState | null {
-  if (state === null || state.phase !== "completed" || backgroundLiveness == null) {
+  if (state === null || state.phase !== "completed" || backgroundLiveness !== "working") {
     return state;
   }
   return { ...state, phase: "running" };

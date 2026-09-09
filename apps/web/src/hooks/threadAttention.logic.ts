@@ -66,12 +66,18 @@ const COMPLETION_PHASE: AgentAwarenessPhase = "completed";
  * signal for exactly this window — the same one that keeps the sidebar pill
  * at "Working" instead of a green "Done" — so the phase is held at "running"
  * until it clears and a finish toast fires only when the pill would go green.
+ *
+ * Only "working" gates. "monitoring" means watch loops are the sole live
+ * work: the real task is settled and often waiting on the user, so
+ * suppressing there swallows the finish toast entirely (a monitor can run
+ * for hours). If the monitor wakes the agent, the phase returns to running
+ * and the next settle toasts again.
  */
 export function phaseWithBackgroundLiveness(
   phase: AgentAwarenessPhase,
   backgroundLiveness: OrchestrationThreadShell["backgroundLiveness"],
 ): AgentAwarenessPhase {
-  return phase === COMPLETION_PHASE && backgroundLiveness != null ? "running" : phase;
+  return phase === COMPLETION_PHASE && backgroundLiveness === "working" ? "running" : phase;
 }
 
 /** Phases that keep the taskbar lit even without a fresh transition. */

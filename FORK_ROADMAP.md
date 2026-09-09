@@ -135,7 +135,10 @@ finish toast per gap between auto-resumed turns; the phase is now held at
 "running" until liveness clears, and the phone push gained the same 10s
 completion deferral the desktop toasts already had (the final `task.completed`
 clears liveness seconds before the agent resumes, so an instant push there
-would still announce a false finish).
+would still announce a false finish). Amended again 2026-09-09: only
+`"working"` gates — gating `"monitoring"` too swallowed the finish toast
+entirely for threads whose real work was done but which left a watch loop
+running (often precisely the "waiting on the user" case).
 
 ## 4. Notification settings UI for the phone/push fields (DONE 2026-07-20)
 

@@ -131,9 +131,11 @@ describe("classifyThreadTransitions", () => {
     expect(result.completedExitedKeys).toEqual(["a"]);
   });
 
-  it("gates only completion on background liveness", () => {
+  it("gates completion only on live 'working' background tasks", () => {
     expect(phaseWithBackgroundLiveness("completed", "working")).toBe("running");
-    expect(phaseWithBackgroundLiveness("completed", "monitoring")).toBe("running");
+    // Monitoring-only threads are settled (often waiting on the user); a
+    // long-lived watch loop must not swallow the finish toast.
+    expect(phaseWithBackgroundLiveness("completed", "monitoring")).toBe("completed");
     expect(phaseWithBackgroundLiveness("completed", null)).toBe("completed");
     expect(phaseWithBackgroundLiveness("completed", undefined)).toBe("completed");
     // Blocking phases stay immediate even with live background work.
