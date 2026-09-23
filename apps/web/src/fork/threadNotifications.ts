@@ -134,3 +134,22 @@ export async function previewNotificationSound(soundPath: string): Promise<boole
   }
   return playSoundFile(soundPath);
 }
+
+/**
+ * Longest notification tag the Electron 44 renderer will still display on
+ * Windows. Measured 2026-09-23 against electron 44.4.2: a `new Notification`
+ * with a 40+ character tag is silently never shown (no error, no show event),
+ * while 39 works. Upstream tags with `${environmentId}:${threadId}`, two UUIDs
+ * (73 chars), so every desktop toast was dropped.
+ */
+export const MAX_NOTIFICATION_TAG_LENGTH = 39;
+
+/**
+ * Tag for a thread's notification: upstream's `environment:thread` while that
+ * fits, otherwise the thread id alone (a UUID, 36 chars, unique enough across
+ * environments for toast replacement).
+ */
+export function notificationTag(environmentId: string, threadId: string): string {
+  const full = `${environmentId}:${threadId}`;
+  return full.length <= MAX_NOTIFICATION_TAG_LENGTH ? full : threadId;
+}

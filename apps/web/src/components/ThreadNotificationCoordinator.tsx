@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useRef } from "react";
 
 import {
+  notificationTag,
   openThreadFromNotification,
   playNotificationSound,
   useCompletionDebounce,
@@ -215,7 +216,7 @@ function EnvironmentNotifications({
       try {
         const notification = new Notification(title, {
           body: thread.title,
-          tag: `${environmentId}:${thread.id}`,
+          tag: notificationTag(environmentId, thread.id),
           silent: true,
         });
         onNotification(environmentId, notification);

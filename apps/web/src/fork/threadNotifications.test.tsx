@@ -79,3 +79,13 @@ it("drops a settled completion when the thread resumes before delivery", async (
   latest!.cancel(THREAD);
   expect(latest!.ready(THREAD)).toBe(false);
 });
+
+it("keeps upstream's tag while it fits and falls back to the thread id past the Electron ceiling", async () => {
+  const { notificationTag, MAX_NOTIFICATION_TAG_LENGTH } = await import("./threadNotifications");
+  expect(notificationTag("env-1", "thread-1")).toBe("env-1:thread-1");
+  const environmentId = "698d507e-4e69-4c61-b2f8-f2ba333bd11c";
+  const threadId = "7a3ea668-f23f-4047-8956-6b2e6680603f";
+  const tag = notificationTag(environmentId, threadId);
+  expect(tag).toBe(threadId);
+  expect(tag.length).toBeLessThanOrEqual(MAX_NOTIFICATION_TAG_LENGTH);
+});

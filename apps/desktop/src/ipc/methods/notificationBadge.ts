@@ -31,6 +31,7 @@ export function applyNotificationBadge(
             overlay?.isEmpty() ? null : overlay,
             count > 0 ? `${count} threads with new notifications` : "",
           );
+          window.flashFrame(count > 0); // Fork: taskbar flash until the window is focused.
         }
       }
     } else if (platform === "darwin" || platform === "linux") {
