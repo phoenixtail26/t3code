@@ -16,6 +16,7 @@ import { useWebPushDevice } from "../../../hooks/useWebPush";
 import { usePrimaryEnvironment } from "../../../state/environments";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
+import { hasNotificationSound } from "../../../threadNotifications";
 import { Button } from "../../ui/button";
 import { DraftInput } from "../../ui/draft-input";
 import { Switch } from "../../ui/switch";
@@ -28,24 +29,12 @@ import { SettingResetButton, SettingsRow, SettingsSection } from "../settingsLay
  */
 export function useForkSettingsDirtyLabels(settings: UnifiedSettings): ReadonlyArray<string> {
   return useMemo(
-    () => [
-      ...(settings.desktopNotificationsEnabled !==
-      DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled
-        ? ["Desktop notifications"]
-        : []),
-      ...(settings.desktopNotificationSound !== DEFAULT_UNIFIED_SETTINGS.desktopNotificationSound
-        ? ["Notification sound"]
-        : []),
-      ...(settings.desktopNotificationSoundPath !==
+    () =>
+      settings.desktopNotificationSoundPath !==
       DEFAULT_UNIFIED_SETTINGS.desktopNotificationSoundPath
         ? ["Notification sound choice"]
-        : []),
-    ],
-    [
-      settings.desktopNotificationsEnabled,
-      settings.desktopNotificationSound,
-      settings.desktopNotificationSoundPath,
-    ],
+        : [],
+    [settings.desktopNotificationSoundPath],
   );
 }
 
@@ -80,93 +69,39 @@ export function ExternalSessionsSettingRow() {
   );
 }
 
-/** Fork feature: desktop notification toggles (enable, sound, sound choice). */
-export function DesktopNotificationSettingRows() {
+/**
+ * Fork feature: pick which OS sound plays for upstream's thread notifications.
+ * Sits under the upstream notification mode row; only meaningful when that
+ * mode includes sound.
+ */
+export function NotificationSoundRow() {
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
   return (
-    <>
-      <SettingsRow
-        title="Desktop notifications"
-        description="Show a system notification when a thread needs approval, asks a question, or fails. Only fires while this app is not focused."
-        resetAction={
-          settings.desktopNotificationsEnabled !==
-          DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled ? (
-            <SettingResetButton
-              label="desktop notifications"
-              onClick={() =>
-                updateSettings({
-                  desktopNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled,
-                })
-              }
-            />
-          ) : null
-        }
-        control={
-          <Switch
-            checked={settings.desktopNotificationsEnabled}
-            onCheckedChange={(checked) =>
-              updateSettings({ desktopNotificationsEnabled: Boolean(checked) })
+    <SettingsRow
+      title="Notification sound choice"
+      description="Which sound plays for thread notifications on this device. System sounds come from your OS; the default is the bundled sound."
+      resetAction={
+        settings.desktopNotificationSoundPath !==
+        DEFAULT_UNIFIED_SETTINGS.desktopNotificationSoundPath ? (
+          <SettingResetButton
+            label="notification sound choice"
+            onClick={() =>
+              updateSettings({
+                desktopNotificationSoundPath: DEFAULT_UNIFIED_SETTINGS.desktopNotificationSoundPath,
+              })
             }
-            aria-label="Enable desktop notifications"
           />
-        }
-      />
-
-      <SettingsRow
-        title="Notification sound"
-        description="Play a short sound with desktop notifications."
-        resetAction={
-          settings.desktopNotificationSound !==
-          DEFAULT_UNIFIED_SETTINGS.desktopNotificationSound ? (
-            <SettingResetButton
-              label="notification sound"
-              onClick={() =>
-                updateSettings({
-                  desktopNotificationSound: DEFAULT_UNIFIED_SETTINGS.desktopNotificationSound,
-                })
-              }
-            />
-          ) : null
-        }
-        control={
-          <Switch
-            checked={settings.desktopNotificationSound}
-            disabled={!settings.desktopNotificationsEnabled}
-            onCheckedChange={(checked) =>
-              updateSettings({ desktopNotificationSound: Boolean(checked) })
-            }
-            aria-label="Enable notification sound"
-          />
-        }
-      />
-
-      <SettingsRow
-        title="Notification sound choice"
-        description="Pick which sound plays, and preview it. System sounds come from your OS; the built-in chime is used elsewhere."
-        resetAction={
-          settings.desktopNotificationSoundPath !==
-          DEFAULT_UNIFIED_SETTINGS.desktopNotificationSoundPath ? (
-            <SettingResetButton
-              label="notification sound choice"
-              onClick={() =>
-                updateSettings({
-                  desktopNotificationSoundPath:
-                    DEFAULT_UNIFIED_SETTINGS.desktopNotificationSoundPath,
-                })
-              }
-            />
-          ) : null
-        }
-        control={
-          <NotificationSoundControl
-            value={settings.desktopNotificationSoundPath}
-            disabled={!settings.desktopNotificationsEnabled || !settings.desktopNotificationSound}
-            onChange={(soundPath) => updateSettings({ desktopNotificationSoundPath: soundPath })}
-          />
-        }
-      />
-    </>
+        ) : null
+      }
+      control={
+        <NotificationSoundControl
+          value={settings.desktopNotificationSoundPath}
+          disabled={!hasNotificationSound(settings.notificationMode)}
+          onChange={(soundPath) => updateSettings({ desktopNotificationSoundPath: soundPath })}
+        />
+      }
+    />
   );
 }
 

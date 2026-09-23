@@ -368,18 +368,11 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   diffFilesCollapsed: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   diffIgnoreWhitespace: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
-  // Per-device notification preferences. A desktop/browser notification is a
-  // property of the client you are sitting at, not of the environment, so
-  // these live here rather than in ServerSettings (which owns the phone/ntfy
-  // push config). Notifications only fire while this client is unfocused.
-  desktopNotificationsEnabled: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(true)),
-  ),
-  desktopNotificationSound: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /**
-   * Absolute path of an OS sound to play, from the desktop bridge's sound list.
-   * Empty means the built-in synthesized chime, which is also the fallback
-   * wherever the bridge is unavailable (browser, phone PWA).
+   * Fork: absolute path of an OS sound to play for thread notifications, from
+   * the desktop bridge's sound list. Per device, like notificationMode. Empty
+   * means the bundled sounds, which are also the fallback wherever the bridge
+   * is unavailable (browser, phone PWA).
    */
   desktopNotificationSoundPath: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   diffLayout: DiffLayout.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_DIFF_LAYOUT))),
@@ -1637,8 +1630,6 @@ export const ClientSettingsPatch = Schema.Struct({
   confirmQuit: Schema.optionalKey(QuitConfirmationMode),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
-  desktopNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
-  desktopNotificationSound: Schema.optionalKey(Schema.Boolean),
   desktopNotificationSoundPath: Schema.optionalKey(TrimmedString),
   confirmThreadUnpin: Schema.optionalKey(Schema.Boolean),
   diffFilesCollapsed: Schema.optionalKey(Schema.Boolean),

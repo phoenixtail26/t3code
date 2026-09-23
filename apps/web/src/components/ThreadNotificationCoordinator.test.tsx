@@ -4,6 +4,8 @@ import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { COMPLETION_DEBOUNCE_MS } from "../fork/threadNotifications";
+
 const state = vi.hoisted(() => ({
   mode: "off" as ClientSettings["notificationMode"],
   inApp: true,
@@ -92,10 +94,15 @@ async function render() {
 async function complete() {
   state.completedAt = "2026-09-13T10:00:00.000Z";
   await render();
+  // Fork: a completion has to hold for the debounce window before it alerts.
+  await act(async () => {
+    vi.advanceTimersByTime(COMPLETION_DEBOUNCE_MS);
+  });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.useFakeTimers();
   Object.assign(state, {
     mode: "off",
     inApp: true,
@@ -126,6 +133,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(() => renderer?.unmount());
   renderer = undefined;
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 

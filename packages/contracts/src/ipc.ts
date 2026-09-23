@@ -1183,16 +1183,10 @@ export interface DesktopBridge {
   onSshPasswordPrompt: (listener: (request: DesktopSshPasswordPromptRequest) => void) => () => void;
   resolveSshPasswordPrompt: (requestId: string, password: string | null) => Promise<void>;
   /**
-   * Taskbar attention state (overlay dot + flash) while a thread is waiting.
-   * Optional so a newer renderer against an older desktop shell degrades to
-   * "no badge" rather than throwing.
-   */
-  setAttentionState?: (input: { readonly waiting: boolean }) => Promise<void>;
-  /**
    * Restore/show/focus the main window from the main process. Renderer-side
    * `window.focus()` cannot foreground a minimized/background window on
-   * Windows, so notification clicks need this. Optional for the same
-   * version-drift reason as {@link setAttentionState}.
+   * Windows, so notification clicks need this. Optional so a newer renderer
+   * against an older desktop shell degrades gracefully rather than throwing.
    */
   focusMainWindow?: () => Promise<void>;
   /**
@@ -1200,13 +1194,13 @@ export interface DesktopBridge {
    * Lets the renderer trigger a full restart — picking up rebuilt server/main
    * code and re-authorizing internal MCP servers, not just the renderer bundle
    * a page reload would refresh. Optional for the same version-drift reason as
-   * {@link setAttentionState}.
+   * {@link focusMainWindow}.
    */
   relaunchApp?: () => Promise<void>;
   /**
    * Seconds since the last OS-level user input, so the renderer can report the
    * user present even while this app is in the background. Optional for the
-   * same version-drift reason as {@link setAttentionState}.
+   * same version-drift reason as {@link focusMainWindow}.
    */
   getSystemIdleSeconds?: () => Promise<number>;
   /** OS notification sounds available to choose from (Windows only today). */

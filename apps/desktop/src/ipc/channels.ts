@@ -111,7 +111,6 @@ export const PREVIEW_RECORDING_FRAME_CHANNEL = "desktop:preview-recording-frame"
 export const PREVIEW_STATE_CHANGE_CHANNEL = "desktop:preview-state-change";
 export const PREVIEW_POINTER_EVENT_CHANNEL = "desktop:preview-pointer-event";
 
-export const SET_ATTENTION_STATE_CHANNEL = "desktop:set-attention-state";
 export const FOCUS_MAIN_WINDOW_CHANNEL = "desktop:focus-main-window";
 export const RELAUNCH_APP_CHANNEL = "desktop:relaunch-app";
 export const GET_SYSTEM_IDLE_SECONDS_CHANNEL = "desktop:get-system-idle-seconds";

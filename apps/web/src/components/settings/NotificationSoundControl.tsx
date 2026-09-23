@@ -1,7 +1,7 @@
 import { PlayIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { playNotificationSound } from "../../lib/notificationSound";
+import { previewNotificationSound } from "../../fork/threadNotifications";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { toastManager } from "../ui/toast";
@@ -75,12 +75,12 @@ export function NotificationSoundControl({
         size="sm"
         disabled={disabled}
         onClick={() => {
-          void playNotificationSound(value).then((played) => {
+          void previewNotificationSound(value).then((played) => {
             if (played) return;
             toastManager.add({
               type: "warning",
               title: "Could not play that sound",
-              description: "Fell back to the built-in chime.",
+              description: "Played the built-in chime instead.",
             });
           });
         }}

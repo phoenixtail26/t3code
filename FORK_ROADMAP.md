@@ -109,16 +109,15 @@ Implementation status:
 Phone push alone left the common case uncovered: t3code on another monitor or
 behind the IDE, with no signal at all until you happened to look. Now:
 
-- **Desktop/browser notifications** (`useThreadAttentionNotifications`) fire on
-  awareness phase transitions, only while the client is unfocused, only once
-  per transition, and never for state that already existed at startup. Clicking
-  one opens that thread. Implemented in the renderer, so Electron delivers a
-  native system notification and the phone PWA gets the same behaviour free.
-- **Windows taskbar attention** (overlay dot + frame flash) via the
-  `setAttentionState` IPC method, cleared the moment the window regains focus.
-- **Per-device preferences** in ClientSettings with Settings rows
-  (notifications on/off, sound on/off — sound synthesized, no asset). Device
-  preferences belong to the client, unlike the server-side phone push config.
+- **Desktop/browser notifications** are upstream's since the 2026-09-23 sync
+  (`ThreadNotificationCoordinator`, Settings → Behavior → notification mode,
+  off by default; in-app toasts and a numeric taskbar badge came with it). The
+  fork's own notifier, taskbar dot and on/off toggles were retired then. What
+  the fork still adds lives in `apps/web/src/fork/threadNotifications.ts` and
+  mounts into the coordinator as one-line calls: the 10s completion hold
+  (upstream alerts on every step boundary otherwise), a Windows-safe
+  click-to-open via the `focusMainWindow` IPC, and a per-device OS sound
+  choice (`desktopNotificationSoundPath`) in place of the bundled sound.
 - **Phone suppression**: clients POST `/api/presence`; the ntfy bridge skips
   the push when presence is recent (`suppressWhenPresentSeconds`, default 300,
   0 disables). Presence means focused OR recent OS input (Electron

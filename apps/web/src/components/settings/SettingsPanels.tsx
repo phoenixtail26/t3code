@@ -144,7 +144,7 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import {
-  DesktopNotificationSettingRows,
+  NotificationSoundRow,
   ExternalSessionsSettingRow,
   PushNotificationSettingsSection,
   useForkSettingsDirtyLabels,
@@ -2332,6 +2332,7 @@ export function GeneralSettingsPanel() {
 
       <SettingsSection id="behavior" title="Behavior">
         <NotificationSettings />
+        <NotificationSoundRow />
         <SettingsRow
           {...searchableSetting("in-app-notifications")}
           description="Show a toast when another thread finishes, fails, or needs input or approval while this app has focus."
@@ -3054,8 +3055,6 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-
-        <DesktopNotificationSettingRows />
 
         {isElectron ? (
           <SettingsRow

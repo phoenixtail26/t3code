@@ -36,8 +36,6 @@ const clientSettings: ClientSettings = {
   contextWindowMeterEnabled: false,
   composerCollapseOnScroll: true,
   dismissedProviderUpdateNotificationKeys: [],
-  desktopNotificationsEnabled: true,
-  desktopNotificationSound: false,
   desktopNotificationSoundPath: "",
   diffFilesCollapsed: true,
   diffIgnoreWhitespace: true,

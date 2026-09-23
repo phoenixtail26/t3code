@@ -6,7 +6,6 @@ import {
   getSystemIdleSeconds,
   listNotificationSounds,
   readNotificationSound,
-  setAttentionState,
 } from "./methods/attention.ts";
 import { installNotificationBadge } from "./methods/notificationBadge.ts";
 import { getClientSettings, setClientSettings } from "./methods/clientSettings.ts";
@@ -128,7 +127,6 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(setServerExposureMode);
   yield* ipc.handle(setTailscaleServeEnabled);
   yield* ipc.handle(getAdvertisedEndpoints);
-  yield* ipc.handle(setAttentionState);
   yield* ipc.handle(focusMainWindow);
   yield* ipc.handle(relaunchApp);
   yield* ipc.handle(getSystemIdleSeconds);

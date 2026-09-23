@@ -10,13 +10,17 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 
+import {
+  openThreadFromNotification,
+  playNotificationSound,
+  useCompletionDebounce,
+} from "../fork/threadNotifications";
 import { getClientSettings, useClientSettings } from "../hooks/useSettings";
 import { useEnvironments } from "../state/environments";
 import { environmentShell } from "../state/shell";
 import {
   hasDesktopNotifications,
   hasNotificationSound,
-  playNotificationSound,
   setNotificationBadge,
   unlockNotificationAudio,
 } from "../threadNotifications";
@@ -103,6 +107,7 @@ function EnvironmentNotifications({
   const { environmentId: activeEnvironmentId, threadId: activeThreadId } = useParams({
     strict: false,
   });
+  const completions = useCompletionDebounce();
   const previous = useRef(
     new Map<ThreadId, { attention: string | null; completion: number | null }>(),
   );
@@ -116,6 +121,7 @@ function EnvironmentNotifications({
     for (const thread of shell.snapshot.value.threads) {
       let status = resolveSidebarThreadStatus(thread);
       if (status === "ready" && thread.latestTurn?.state === "error") status = "failed";
+      if (status !== "ready") completions.cancel(thread.id);
       const prior = previous.current.get(thread.id);
       const attention =
         status === "input" || status === "approval" || status === "failed"
@@ -137,6 +143,10 @@ function EnvironmentNotifications({
             ? "completion"
             : null;
       if (!kind) continue;
+      if (kind === "completion" && !completions.ready(thread.id)) {
+        next.set(thread.id, { attention, completion: prior.completion });
+        continue;
+      }
       const title =
         kind === "completion"
           ? "Thread completed"
@@ -211,11 +221,7 @@ function EnvironmentNotifications({
         onNotification(environmentId, notification);
         notification.addEventListener("click", () => {
           notification.close();
-          window.focus();
-          void navigate({
-            to: "/$environmentId/$threadId",
-            params: { environmentId, threadId: thread.id },
-          });
+          openThreadFromNotification(navigate, environmentId, thread.id);
         });
       } catch {
         // Some browsers expose Notification but reject desktop presentation.
@@ -225,6 +231,7 @@ function EnvironmentNotifications({
   }, [
     activeEnvironmentId,
     activeThreadId,
+    completions,
     environmentId,
     inAppNotificationsEnabled,
     mode,

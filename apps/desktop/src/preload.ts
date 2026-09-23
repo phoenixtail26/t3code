@@ -156,7 +156,6 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   },
   resolveSshPasswordPrompt: (requestId, password) =>
     ipcRenderer.invoke(IpcChannels.RESOLVE_SSH_PASSWORD_PROMPT_CHANNEL, { requestId, password }),
-  setAttentionState: (input) => ipcRenderer.invoke(IpcChannels.SET_ATTENTION_STATE_CHANNEL, input),
   focusMainWindow: () => ipcRenderer.invoke(IpcChannels.FOCUS_MAIN_WINDOW_CHANNEL),
   relaunchApp: () => ipcRenderer.invoke(IpcChannels.RELAUNCH_APP_CHANNEL),
   getSystemIdleSeconds: () => ipcRenderer.invoke(IpcChannels.GET_SYSTEM_IDLE_SECONDS_CHANNEL),
