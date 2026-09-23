@@ -110,7 +110,7 @@ export const readTranscriptFileCapped = Effect.fn("threadFork.readTranscriptFile
   const bytes = yield* Effect.scoped(
     Effect.gen(function* () {
       const file = yield* fs.open(filePath);
-      if (start > 0) yield* file.seek(start, "start");
+      if (start > 0) yield* file.seek(BigInt(start), "start");
       const read = yield* file.readAlloc(size - start);
       return Option.getOrElse(read, () => new Uint8Array(0));
     }),

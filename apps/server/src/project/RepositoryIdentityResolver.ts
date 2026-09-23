@@ -38,7 +38,7 @@ export class RepositoryIdentityResolver extends Context.Service<
      * that starting from `<repo>/apps/server` lands on the same workspace as
      * starting from `<repo>`.
      */
-    readonly resolveWorkspaceRoot: (cwd: string) => Effect.Effect<string>;
+    readonly resolveWorkspaceRoot?: (cwd: string) => Effect.Effect<string>;
   }
 >()("t3/project/RepositoryIdentityResolver") {}
 

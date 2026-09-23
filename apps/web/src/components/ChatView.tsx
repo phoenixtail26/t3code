@@ -5396,10 +5396,10 @@ export default function ChatView(props: ChatViewProps) {
 
     return isViewportAtRealContentEnd({
       state,
-      composerOverlayHeight,
+      composerOverlayHeight: composerOverlayHeightRef.current,
       anchorOffset: CHAT_TIMELINE_ANCHOR_OFFSET,
     });
-  }, [composerOverlayHeight]);
+  }, []);
 
   const pageScrollControllerRef = useRef<ReturnType<typeof createPageScrollController> | null>(
     null,

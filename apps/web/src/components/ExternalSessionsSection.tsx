@@ -270,7 +270,7 @@ ${session.cwd}`
           : title;
         const isActive = activeSessionId === session.sessionId;
         return (
-          <SidebarMenuSubItem key={session.sessionId} className="w-full px-0">
+          <SidebarMenuSubItem key={session.sessionId} className="w-full">
             <SidebarMenuSubButton
               size="sm"
               isActive={isActive}

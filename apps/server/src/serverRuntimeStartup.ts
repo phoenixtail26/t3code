@@ -215,9 +215,11 @@ export const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
       // Bootstrap off the repository root rather than the raw cwd. Dev scripts
       // and editors routinely launch the server from a subdirectory, and
       // keying on cwd registered a second project for the same checkout.
-      const bootstrapWorkspaceRoot = yield* repositoryIdentityResolver.resolveWorkspaceRoot(
-        serverConfig.cwd,
-      );
+      // Optional on the service so upstream test fixtures that mock the resolver
+      // never need to know about this fork addition.
+      const bootstrapWorkspaceRoot = yield* repositoryIdentityResolver.resolveWorkspaceRoot
+        ? repositoryIdentityResolver.resolveWorkspaceRoot(serverConfig.cwd)
+        : Effect.succeed(serverConfig.cwd);
       const existingProject =
         yield* projectionReadModelQuery.getActiveProjectByWorkspaceRoot(bootstrapWorkspaceRoot);
       let nextProjectId: ProjectId;

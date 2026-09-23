@@ -93,7 +93,7 @@ export const makeExternalSessionsWsHandlers = Effect.fnUntraced(function* (deps:
     return yield* Effect.scoped(
       Effect.gen(function* () {
         const file = yield* fs.open(filePath);
-        if (start > 0) yield* file.seek(start, "start");
+        if (start > 0) yield* file.seek(BigInt(start), "start");
         const read = yield* file.readAlloc(end - start);
         return Option.getOrElse(read, () => new Uint8Array(0));
       }),

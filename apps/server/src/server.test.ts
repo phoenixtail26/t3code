@@ -1241,9 +1241,9 @@ const buildAppUnderTest = (options?: {
         };
       }),
       Layer.provideMerge(makeAuthTestLayer()),
-      // Real store against the test secrets dir; the ws handlers need it.
-      Layer.provideMerge(WebPushStore.layer),
-      Layer.provideMerge(ServerSecretStore.layer),
+      // Real store against the test secrets dir; the ws handlers need it. Folded
+      // onto the secret store it reads so the pipe stays under 20 arguments.
+      Layer.provideMerge(WebPushStore.layer.pipe(Layer.provideMerge(ServerSecretStore.layer))),
       Layer.provide(workspaceAndProjectServicesLayer),
       Layer.provideMerge(FetchHttpClient.layer),
       Layer.provide(GitHubCli.layer.pipe(Layer.provideMerge(VcsProcess.layer))),
