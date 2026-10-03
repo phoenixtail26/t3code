@@ -14,7 +14,7 @@ describe("ChatMarkdown inline code file mentions", () => {
     const html = renderMarkdown("See `apps/web/src/main.tsx` for the entry point.");
     expect(html).toContain("chat-markdown-file-link");
     expect(html).toContain("main.tsx");
-    expect(html).not.toContain("<code>apps/web/src/main.tsx</code>");
+    expect(html).not.toMatch(/<code[^>]*>apps\/web\/src\/main\.tsx<\/code>/);
   });
 
   it("renders an inline code path with line suffix as a chip with the line label", () => {
@@ -28,15 +28,15 @@ describe("ChatMarkdown inline code file mentions", () => {
     // claudeUsage.ts "failed to read workspace file" regression.
     const html = renderMarkdown("Look at `claudeUsage.ts` and `README.md`.");
     expect(html).not.toContain("chat-markdown-file-link");
-    expect(html).toContain("<code>claudeUsage.ts</code>");
-    expect(html).toContain("<code>README.md</code>");
+    expect(html).toMatch(/<code[^>]*>claudeUsage\.ts<\/code>/);
+    expect(html).toMatch(/<code[^>]*>README\.md<\/code>/);
   });
 
   it("leaves non-file inline code as plain code", () => {
     const html = renderMarkdown("Use `console.log` and `arr.map` here.");
     expect(html).not.toContain("chat-markdown-file-link");
-    expect(html).toContain("<code>console.log</code>");
-    expect(html).toContain("<code>arr.map</code>");
+    expect(html).toMatch(/<code[^>]*>console\.log<\/code>/);
+    expect(html).toMatch(/<code[^>]*>arr\.map<\/code>/);
   });
 
   it("leaves fenced code blocks untouched", () => {
@@ -59,6 +59,6 @@ describe("ChatMarkdown inline code file mentions", () => {
     );
     // The prose token renders as a skill chip; the code-span token stays literal.
     expect(html).toContain('data-markdown-copy="$deploy"');
-    expect(html).toContain("<code>$deploy</code>");
+    expect(html).toMatch(/<code[^>]*>\$deploy<\/code>/);
   });
 });

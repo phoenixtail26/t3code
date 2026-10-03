@@ -1,31 +1,103 @@
-import type { ScopedThreadRef } from "@t3tools/contracts";
-import { useCallback } from "react";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import {
+  isAtomCommandInterrupted,
+  settlePromise,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import type { SidebarThreadSummary } from "../types";
+import { useRouter } from "@tanstack/react-router";
+import { useCallback, useRef } from "react";
 
-import { threadForkEnvironment } from "./state";
-import { useThreadForkOutcome } from "./useThreadForkOutcome";
-
-// Module-level so the outcome callback keeps a stable identity across renders.
-const FORK_OUTCOME_OPTIONS = {
-  failureTitle: "Failed to fork thread",
-  successToast: {
-    title: "Thread forked",
-    description: "Shares the original's working tree and branch.",
-  },
-} as const;
+import { stackedThreadToast, toastManager } from "../components/ui/toast";
+import { newThreadId } from "../lib/utils";
+import { threadEnvironment } from "../state/threads";
+import { useAtomCommand } from "../state/use-atom-command";
+import { buildThreadRouteParams } from "../threadRoutes";
+import { waitForThreadShell } from "./useThreadForkOutcome";
 
 /**
- * Fork a thread's Claude session into a new thread that keeps full
- * conversation context (FORK_PLAN_FORKING.md, increment F5). Forking never
- * touches the original thread, so there is no confirmation step — dispatch,
- * navigate to the new thread, toast. `useThreadForkOutcome` shares that
- * choreography (and its in-flight guard) with `useAdoptExternalSession` (F6).
+ * Sidebar "Fork thread": fork the whole thread at its latest run through
+ * upstream's native `thread.fork` command (the same path as the timeline's
+ * per-response fork), then open the new thread. Forking never touches the
+ * original, so there is no confirmation step. A ref-based guard keeps a second
+ * click a no-op while one fork is in flight.
  */
 export function useForkThread() {
-  const runOutcome = useThreadForkOutcome(threadForkEnvironment.fork, FORK_OUTCOME_OPTIONS);
+  const forkThreadFromRun = useAtomCommand(threadEnvironment.forkFromRun, {
+    reportFailure: false,
+  });
+  const router = useRouter();
+  const pendingRef = useRef(false);
 
   return useCallback(
-    (target: ScopedThreadRef) =>
-      runOutcome({ environmentId: target.environmentId, input: { threadId: target.threadId } }),
-    [runOutcome],
+    async (thread: Pick<SidebarThreadSummary, "environmentId" | "id" | "title" | "latestRun">) => {
+      if (pendingRef.current) return;
+      const runId = thread.latestRun?.runId;
+      if (runId === undefined) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to fork thread",
+            description: "This thread has no completed response to fork from yet.",
+          }),
+        );
+        return;
+      }
+
+      pendingRef.current = true;
+      try {
+        const targetThreadId = newThreadId();
+        const targetThreadRef = scopeThreadRef(thread.environmentId, targetThreadId);
+        const result = await forkThreadFromRun({
+          environmentId: thread.environmentId,
+          input: {
+            sourceThreadId: thread.id,
+            targetThreadId,
+            runId,
+            title: `${thread.title} fork`,
+          },
+        });
+        if (result._tag === "Failure") {
+          if (isAtomCommandInterrupted(result)) return;
+          const error = squashAtomCommandFailure(result);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to fork thread",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+          return;
+        }
+
+        toastManager.add(
+          stackedThreadToast({
+            type: "success",
+            title: "Thread forked",
+            description: "Shares the original's working tree and branch.",
+          }),
+        );
+        await waitForThreadShell(targetThreadRef);
+        const navigationResult = await settlePromise(() =>
+          router.navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(targetThreadRef),
+          }),
+        );
+        if (navigationResult._tag === "Failure") {
+          const error = squashAtomCommandFailure(navigationResult);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Created the fork, but could not open it",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+        }
+      } finally {
+        pendingRef.current = false;
+      }
+    },
+    [forkThreadFromRun, router],
   );
 }

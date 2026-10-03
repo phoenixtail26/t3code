@@ -7,6 +7,7 @@ import { layer as providerSessionRuntimeLayer } from "../persistence/ProviderSes
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import { ProviderAuthServiceLive } from "../provider/Layers/ProviderAuthService.ts";
 import { layer as agentSessionImporterLayer } from "../project/AgentSessionImporter.ts";
+import { layer as threadAdoptServiceLayer } from "../threadFork/ThreadAdoptService.ts";
 import * as AgentSessionScanner from "../project/AgentSessionScanner.ts";
 import { layer as projectServiceLayer } from "../project/ProjectService.ts";
 import { layer as projectSetupScriptRunnerLayer } from "../project/ProjectSetupScriptRunner.ts";
@@ -235,6 +236,17 @@ const agentSessionImporterProvided = agentSessionImporterLayer.pipe(
 const threadManagementProvided = threadManagementServiceLayer.pipe(
   Layer.provide(Layer.merge(orchestratorProvided, legacyV1ThreadImporterProvided)),
 );
+// Fork: radar adoption writes thread events like the importer above.
+const threadAdoptProvided = threadAdoptServiceLayer.pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      ProjectServiceLayerLive,
+      threadManagementProvided,
+      eventSinkProvided,
+      idAllocatorLayer,
+    ),
+  ),
+);
 export const ProjectSetupScriptRunnerLayerLive = projectSetupScriptRunnerLayer.pipe(
   Layer.provide(ProjectServiceLayerLive),
 );
@@ -319,6 +331,7 @@ export const OrchestrationV2ProductionLayerLive = Layer.mergeAll(
   ),
   providerContinuationWorkerProvided,
   agentSessionImporterProvided,
+  threadAdoptProvided,
 ).pipe(
   Layer.provide(Scheduler.layer),
   Layer.provideMerge(OrchestrationEventInfrastructureLayerLive),

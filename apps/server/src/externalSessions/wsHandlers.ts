@@ -2,7 +2,6 @@
 // session subscriptions. Lives here rather than inline in ws.ts so the fork's
 // contact surface in that upstream-owned file stays at one import and two
 // spread lines (see AGENTS.md, "Fork additions").
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -17,13 +16,15 @@ import {
   ExternalSessionTranscriptError,
   type ExternalSessionTranscript,
   type ExternalSessionsStreamItem,
-  type OrchestrationShellSnapshot,
+  type OrchestrationProjectShell,
+  type OrchestrationV2ThreadShell,
   ProjectId,
 } from "@t3tools/contracts";
 
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
-import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import { buildCwdIndex, matchCwdToProject } from "./cwdMatching.ts";
 import * as ExternalSessionsWatcher from "./ExternalSessionsWatcher.ts";
 import { collectOwnSessionIds } from "./ownSessions.ts";
@@ -65,8 +66,6 @@ export type ObserveRpcEffect = <A, E, R>(
 
 const textDecoder = new TextDecoder();
 
-const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
-
 /**
  * Builds the external-sessions RPC handler entries for WsRpcGroup.of(...).
  * Yields its own service dependencies so the caller only supplies the
@@ -77,7 +76,8 @@ export const makeExternalSessionsWsHandlers = Effect.fnUntraced(function* (deps:
   readonly observeRpcEffect: ObserveRpcEffect;
 }) {
   const { observeRpcStreamEffect, observeRpcEffect } = deps;
-  const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
+  const threadManagement = yield* ThreadManagement.ThreadManagementService;
+  const projectService = yield* ProjectService.ProjectService;
   const externalSessionsWatcher = yield* ExternalSessionsWatcher.ExternalSessionsWatcher;
   const fs = yield* FileSystem.FileSystem;
 
@@ -132,24 +132,24 @@ export const makeExternalSessionsWsHandlers = Effect.fnUntraced(function* (deps:
           // A snapshot load failure must not fail the subscription: the
           // radar is best-effort, so degrade to an empty snapshot (no
           // roots watched, no matches) rather than surfacing an error.
-          const shellSnapshot: OrchestrationShellSnapshot = yield* projectionSnapshotQuery
-            .getShellSnapshot()
-            .pipe(
-              Effect.catch((cause) =>
-                Effect.logWarning(
-                  "external sessions: shell snapshot load failed, serving empty snapshot",
-                  { cause },
-                ).pipe(
-                  Effect.flatMap(() => nowIso),
-                  Effect.map((updatedAt): OrchestrationShellSnapshot => ({
-                    snapshotSequence: 0,
-                    projects: [],
-                    threads: [],
-                    updatedAt,
-                  })),
-                ),
+          const shellSnapshot = yield* Effect.all({
+            projects: projectService.listShells(),
+            threads: threadManagement
+              .getShellSnapshot()
+              .pipe(Effect.map((snapshot) => snapshot.threads)),
+          }).pipe(
+            Effect.catch((cause) =>
+              Effect.logWarning(
+                "external sessions: shell snapshot load failed, serving empty snapshot",
+                { cause },
+              ).pipe(
+                Effect.as({
+                  projects: [] as ReadonlyArray<OrchestrationProjectShell>,
+                  threads: [] as ReadonlyArray<OrchestrationV2ThreadShell>,
+                }),
               ),
-            );
+            ),
+          );
 
           // Projects first: buildCwdIndex keeps the first entry for a
           // given path, so a worktree that equals a workspace root

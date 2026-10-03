@@ -2339,7 +2339,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         return;
       }
       if (clicked === "fork") {
-        void forkThread(threadRef);
+        void forkThread(thread);
         return;
       }
       if (clicked !== "delete") return;

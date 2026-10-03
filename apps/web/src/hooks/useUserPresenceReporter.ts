@@ -41,7 +41,7 @@ export function useUserPresenceReporter(): void {
       try {
         await runPrimaryHttp(
           PrimaryEnvironmentHttpClient.pipe(
-            Effect.flatMap((client) => client.orchestration.reportPresence({ headers: {} })),
+            Effect.flatMap((client) => client.fork.reportPresence({ headers: {} })),
           ),
         );
       } catch {

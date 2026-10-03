@@ -573,7 +573,14 @@ class EnvironmentProjectsHttpApi extends HttpApiGroup.make("projects")
       success: Project,
       error: EnvironmentProjectMutationErrors,
     }).middleware(EnvironmentAuthenticatedAuth),
-  )
+  ) {}
+
+/**
+ * Fork-only endpoints: the Claude plan-usage meter and the presence heartbeat
+ * that suppresses phone pushes while the user is at the machine. Kept in their
+ * own group so upstream's groups never carry fork handlers.
+ */
+class EnvironmentForkHttpApi extends HttpApiGroup.make("fork")
   .add(
     HttpApiEndpoint.get("claudeUsage", "/api/claude/usage", {
       headers: OptionalBearerHeaders,
@@ -672,4 +679,5 @@ export class EnvironmentHttpApi extends HttpApi.make("environment")
   .add(EnvironmentOrchestrationHttpApi)
   .add(EnvironmentPullRequestsHttpApi)
   .add(EnvironmentProjectsHttpApi)
-  .add(EnvironmentConnectHttpApi) {}
+  .add(EnvironmentConnectHttpApi)
+  .add(EnvironmentForkHttpApi) {}

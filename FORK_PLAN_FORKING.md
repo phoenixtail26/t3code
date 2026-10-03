@@ -50,6 +50,40 @@ throwaway scratch sessions only — see "Dogfooding hazard").
   RpcAuthorization.ts (1 import + 1 spread), rpc.ts (fork RPC block),
   orchestration.ts/decider.ts (F1 fields + passthrough).
 
+### Re-platformed on orchestration v2 (2026-10-03 sync)
+
+Upstream replaced the orchestration layer (`feat(orchestrator): introduce new
+orchestrator`, #2829), deleting `ProviderService`, `ProviderSessionDirectory`
+and the v1 `thread.create` seam this plan was built on, and shipping native
+versions of both halves of the feature. The fork now rides those:
+
+- **Fork thread = upstream's `thread.fork`.** The sidebar item
+  (`apps/web/src/threadFork/useForkThread.ts`) dispatches
+  `threadEnvironment.forkFromRun` for the thread's latest run — the same path
+  as upstream's per-response "fork" in the timeline. Upstream's
+  `ThreadForkService` handles the provider-side copy (`native_fork` for Claude),
+  lineage (`forkedFrom`) and the context carried into the new thread, so the
+  fork-owned SDK `forkSession` wrapper, the `isMeta` fork notice and the
+  inherited-history prelude are gone. Gating stays Claude-only in `gate.ts`.
+- **Adopt = upstream's import recipe.** `threadFork/wsHandlers.ts` follows
+  `project/AgentSessionImporter.ts`: it writes `thread.created` with a
+  provider thread whose strong `nativeThreadRef` is the CLI session id, so the
+  first turn resumes that session natively, and imports the transcript's
+  visible user/assistant text (upstream's `parseAgentSessionTranscript`) as the
+  thread's own history. The session file is never copied or written; the
+  previous fork-on-adopt two-writers guard is replaced by upstream's stance for
+  imported sessions (bind directly). Thread ids are derived
+  (`adopt:<instance>:<session>`) so a repeat adopt reopens the same thread.
+- **Own-session filter** reads `nativeThreadRef.nativeId` off the v2
+  provider-thread projection (`externalSessions/ownSessions.ts`); v2 keeps no
+  per-thread `resume_cursor_json` for live threads.
+- Files now: `packages/contracts/src/threadFork.ts` (adopt only),
+  `apps/server/src/threadFork/wsHandlers.ts`, web `threadFork/{useForkThread,
+useAdoptExternalSession,useThreadForkOutcome,state,gate,menu}.ts`.
+  Upstream-file mounts: ws.ts and RpcAuthorization.ts (unchanged), rpc.ts (one
+  Rpc), Sidebar.tsx (menu wrap + `case "fork"`). The F1 schema fields
+  (`resumeCursor`/`forkedFromThreadId`) no longer exist.
+
 Companion docs: `FORK_PLAN_RADAR.md` (phases 1–4, all shipped),
 `apps/server/src/externalSessions/DESIGN.md` (radar module internals),
 `FORK_ROADMAP.md` #1/#8.

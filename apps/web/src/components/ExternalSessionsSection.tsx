@@ -198,7 +198,7 @@ export function ExternalSessionsSection({
     <div className="w-full">
       <button
         type="button"
-        className="flex h-6 w-full items-center gap-1.5 px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80 sm:h-7"
+        className="flex h-6 w-full items-center gap-1.5 px-2 text-left text-3xs text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80 sm:h-7"
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
       >
@@ -209,7 +209,7 @@ export function ExternalSessionsSection({
           )}
         />
         <span className="flex-1 truncate">External</span>
-        <span className="shrink-0 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground/60">
+        <span className="shrink-0 rounded-full bg-muted px-1.5 text-3xs tabular-nums text-muted-foreground/60">
           {sessions.length}
         </span>
       </button>
@@ -290,7 +290,7 @@ ${session.cwd}`
             >
               <ThreadStatusLabel status={EXTERNAL_SESSION_STATE_PILLS[session.state]} compact />
               <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{title}</span>
-              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/40">
+              <span className="shrink-0 text-3xs tabular-nums text-muted-foreground/40">
                 {formatRelativeTimeLabel(session.lastActivityAt)}
               </span>
             </SidebarMenuSubButton>

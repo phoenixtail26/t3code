@@ -219,10 +219,12 @@ needed. Refetch is driven by the already-subscribed shell's
 
 Exclude sessions t3code itself is driving:
 
-- session UUIDs from every thread's persisted `resume_cursor_json`
-  (`ProviderSessionRuntime`), plus
-- UUIDs allocated in-memory but not yet persisted (registration point for
-  the adapter; also covers future fork-on-adopt files).
+- session UUIDs from every v2 provider thread's `nativeThreadRef.nativeId`
+  (`orchestration_v2_projection_provider_threads`, `driver = 'claudeAgent'`),
+  read in one query by `ownSessions.ts`. Adopted sessions are bound the same
+  way, so they drop out of the radar as soon as the thread exists. (Before
+  orchestration v2 this read `resume_cursor_json` plus the adapters' live
+  session list.)
 - Candidate extra signal observed in the field survey: `bridge-session`
   records appear in sessions driven through a bridge — verify during 1.6
   whether t3code-driven sessions carry them and, if so, use as a

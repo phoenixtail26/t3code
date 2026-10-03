@@ -4468,7 +4468,7 @@ export default function Sidebar() {
             copyThreadIdToClipboard(thread.id, { threadId: thread.id });
             return;
           case "fork":
-            void forkThread(threadRef);
+            void forkThread(thread);
             return;
           case "archive": {
             if (confirmThreadArchive) {

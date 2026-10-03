@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { LegendListRef } from "@legendapp/list/react";
-import type { EnvironmentId, MessageId } from "@t3tools/contracts";
+import type { EnvironmentId, MessageId, ServerProvider } from "@t3tools/contracts";
 import { useEffect, useMemo, useRef } from "react";
 
 import { useEnvironmentSettings } from "../hooks/useSettings";
@@ -12,6 +12,7 @@ import { formatRelativeTimeLabel } from "../timestampFormat";
 import { resolveClaudeAgentAdoptModelSelection } from "../threadFork/adoptModelSelection";
 import { useAdoptExternalSession } from "../threadFork/useAdoptExternalSession";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
+import type { HandoffTimelineRun } from "./chat/V2LifecycleRow";
 import { EXTERNAL_SESSION_STATE_PILLS } from "./ExternalSessionsSection";
 import { mapExternalTranscriptEntriesToTimeline } from "./ExternalSessionView.logic";
 import { ThreadStatusLabel } from "./ThreadStatusIndicators";
@@ -31,8 +32,11 @@ import { ThreadStatusLabel } from "./ThreadStatusIndicators";
 const TRANSCRIPT_REFRESH_DEBOUNCE_MS = 1_000;
 
 const EMPTY_TURN_DIFF_SUMMARIES: ReadonlyArray<TurnDiffSummary> = [];
+const EMPTY_PROVIDER_STATUSES: ReadonlyArray<ServerProvider> = [];
+const EMPTY_RUNS: ReadonlyArray<HandoffTimelineRun> = [];
 
 function noop(): void {}
+async function asyncNoop(): Promise<void> {}
 
 function externalTranscriptTitle(title: string | null, sessionId: string): string {
   return title ?? sessionId.slice(0, 8);
@@ -136,7 +140,7 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
       <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 py-2 text-xs text-muted-foreground">
         <ThreadStatusLabel status={EXTERNAL_SESSION_STATE_PILLS[data.state]} compact />
         <span className="min-w-0 flex-1 truncate font-medium text-foreground">{title}</span>
-        <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-0.5 text-[10px] tracking-wide text-muted-foreground/70 uppercase">
+        <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-0.5 text-3xs tracking-wide text-muted-foreground/70 uppercase">
           Read-only
         </span>
         {adoptModelSelection && (
@@ -155,31 +159,35 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
           </button>
         )}
         {data.truncated && (
-          <span className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-600 dark:text-amber-300/90">
+          <span className="shrink-0 rounded-full border border-warning/40 bg-warning-surface px-1.5 py-0.5 text-3xs text-warning">
             Truncated
           </span>
         )}
         {data.cwd !== null && (
-          <span className="hidden shrink-0 truncate font-mono text-[10px] text-muted-foreground/60 sm:inline">
+          <span className="hidden shrink-0 truncate font-mono text-3xs text-muted-foreground/60 sm:inline">
             {data.cwd}
           </span>
         )}
-        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/50">
+        <span className="shrink-0 text-3xs tabular-nums text-muted-foreground/50">
           {formatRelativeTimeLabel(data.lastActivityAt)}
         </span>
       </div>
       <div className="relative flex min-h-0 flex-1 flex-col">
         <MessagesTimeline
           isWorking={false}
+          activeTurnInProgress={false}
           activeTurnStartedAt={null}
           liveFollowEnabled
           listRef={listRef}
           timelineEntries={timelineEntries}
-          latestTurn={null}
-          runningTurnId={null}
+          latestRun={null}
+          runningRunId={null}
           turnDiffSummaries={EMPTY_TURN_DIFF_SUMMARIES}
           routeThreadKey={`external:${sessionId}`}
           onOpenTurnDiff={noop}
+          onOpenThread={noop}
+          onForkFromRun={asyncNoop}
+          onRollbackCheckpoint={noop}
           supportsConversationRollback={false}
           onRevertToTurnCount={noop}
           isRevertingCheckpoint={false}
@@ -189,8 +197,11 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
           resolvedTheme={resolvedTheme}
           timestampFormat={timestampFormat}
           workspaceRoot={data.cwd ?? undefined}
+          providerStatuses={EMPTY_PROVIDER_STATUSES}
+          runs={EMPTY_RUNS}
           anchorMessageId={null}
           onAnchorReady={noop}
+          onAnchorSizeChanged={noop}
           contentInsetEndAdjustment={0}
           onIsAtEndChange={noop}
           onManualNavigation={noop}

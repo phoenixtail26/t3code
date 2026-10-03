@@ -18,6 +18,42 @@ it) lives there too.
 - Never force-push anything in this flow. Every push here is a fast-forward by
   construction; if git says otherwise, something is wrong — stop and report.
 
+## Where am I running?
+
+The steps below are written for the owner's Windows checkout (the main worktree
+parked on `g3code`, portable Node on `D:`). A **Claude Code cloud session**
+(fresh Linux container, one worktree, cloned from `origin` only) runs the same
+flow with these substitutions — read them before step 1:
+
+- **Remotes.** The container has only `origin`. Add upstream first, with the
+  push URL disabled the same way the owner's checkout does:
+  `git remote add upstream https://github.com/pingdotgg/t3code.git &&
+git remote set-url --push upstream DISABLED_PUSH_TO_ORIGIN_INSTEAD`.
+- **Branches.** `g3code` and `main` are not checked out; use
+  `origin/g3code` / `origin/main` in the measurements, then
+  `git checkout -b g3code origin/g3code` (there is no separate main worktree;
+  `<main-worktree>` below is the current directory) and
+  `git branch -f main upstream/main` after the ancestry guard.
+- **Pushing.** Cloud sessions push only to their session branch unless the
+  owner says otherwise. This flow pushes `main` and `g3code`; ask the owner
+  to confirm that in the session before step 3, or land everything on the
+  session branch and say so in the report.
+- **Toolchain.** The repo needs Node ≥ 24 (`engines`); the container ships 22.
+  `export NVM_DIR=/opt/nvm && . /opt/nvm/nvm.sh && nvm install 24 && nvm use 24`,
+  then `corepack pnpm install` (resolves the lockfile and provides `vp` as
+  `node_modules/.bin/vp`). Skip the `D:\Dev\tools` PATH line in step 7 and
+  ignore the Windows-only `ProviderRegistry.test.ts` exemption.
+- **rerere.** Recorded resolutions live in the owner's local git config, not
+  the repo; enable it fresh (`git config rerere.enabled true &&
+git config rerere.autoUpdate true`) but expect no replays.
+- **Scratch files.** Write the tripwire snapshots to the session scratchpad
+  instead of `/tmp`.
+- **Verification scale.** A repo-wide `vp check` on a merge this size is the
+  slowest step and the likeliest to hit container limits. Run per-package
+  `tsc --noEmit` first (contracts, shared, client-runtime, server, web) and the
+  fork's own test files; fall back to `vp check` only if those pass and time
+  allows, and say in the report exactly which checks ran.
+
 ## Steps
 
 **1. Fetch and measure the drift.**
@@ -43,7 +79,11 @@ git merge-tree --write-tree --name-only g3code upstream/main
 
 Grep the output for `CONFLICT`. This is the honest preview of what step 5
 will hit. Report the conflict list to the user **before** merging if there is
-anything beyond the expected contact files (see step 5).
+anything beyond the expected contact files (see step 5). A `modify/delete`
+conflict means upstream removed a file the fork edits: the fork lines need a
+new home, not a resolution — list those separately, with the fork's delta in
+each (`git diff $BASE g3code -- <file>`), since re-homing is design work the
+owner may want a say in.
 
 Also snapshot the fork's delta NOW, while `g3code` is still unmerged — step 6
 compares against it to catch silently dropped fork lines:
@@ -108,11 +148,12 @@ done
 ```
 
 Historic conflict hotspots: `ChatView.tsx`, `Sidebar.tsx`, `CommandPalette.tsx`,
-`ChatMarkdown.tsx`, `SettingsPanels.tsx`, `contracts/{index,settings}.ts`, the
-package.jsons, and `pnpm-lock.yaml` (never hand-merge the lockfile — take
-theirs, then `corepack pnpm install --lockfile-only` to reconcile). Conflicts
-in derived contact files are yours to resolve; conflicts in files the fork has
-never touched are unexpected — resolve if clearly trivial, otherwise stop and
+`ChatMarkdown.tsx`, `SettingsPanels.tsx`, `contracts/{index,settings,rpc}.ts`,
+`serverRuntimeStartup.ts`, `server.ts`, the package.jsons, and
+`pnpm-lock.yaml` (never hand-merge the lockfile — take theirs, then
+`corepack pnpm install --lockfile-only` to reconcile). Conflicts in derived
+contact files are yours to resolve; conflicts in files the fork has never
+touched are unexpected — resolve if clearly trivial, otherwise stop and
 report. Most fork edits are one-line mounts (e.g. `<ForkSidebarPills />` in
 `SidebarChrome.tsx`, handler spreads in `ws.ts`) — when re-applying one after
 an upstream restructure, keep it one line; if a fork edit inside an upstream
@@ -130,8 +171,10 @@ git show :3:<file>   # theirs (upstream)
 The usual shape: upstream rewrote a region the fork barely touched. Take
 upstream's version wholesale and re-apply the fork's few lines on top —
 historically `ChatView.tsx` resolves to "theirs + re-append the fork's
-`fallbackDefaultModelSelection` memo". Do not keep stale fork copies of code
-upstream has since restructured.
+`fallbackDefaultModelSelection` substitution". Do not keep stale fork copies
+of code upstream has since restructured. When a whole file is more upstream
+rewrite than fork, `git checkout --theirs <file>` and re-mount the fork lines
+from `git diff $BASE g3code -- <file>` is faster and safer than hunk surgery.
 
 **6. Tripwire: check no fork line was silently dropped.**
 
@@ -176,6 +219,12 @@ acceptable). Ignore the 16 known `ProviderRegistry.test.ts` Windows failures.
 If upstream touched Claude provider files, say so in the report and recommend
 a live smoke test (`/build`, then spawn a Claude session after the user
 restarts).
+
+When the merge re-homed fork code (step 2's modify/delete case), keep that
+work in a **separate commit after the merge commit** ("port fork to …"), so
+the merge commit stays a pure merge and the next sync's agent can read the
+port on its own. Run the fork's own test files (`vp test run <files>` or
+`npx vitest run <files>`) for every module the port touched.
 
 **8. Commit and push.**
 

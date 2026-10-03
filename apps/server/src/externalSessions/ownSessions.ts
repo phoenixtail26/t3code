@@ -3,73 +3,60 @@
  * external-sessions radar can exclude its own threads (DESIGN.md,
  * "Own-session filter").
  *
- * Two sources, unioned:
- * - persisted runtime bindings for every known thread
- *   (`ProviderSessionDirectory.listThreadIds` + `getBinding`), covering
- *   inactive threads;
- * - live in-memory sessions across all adapters
- *   (`ProviderService.listSessions`), covering cursors allocated but not
- *   yet persisted.
+ * Orchestration v2 records every provider conversation it owns as a provider
+ * thread whose `nativeThreadRef.nativeId` is the CLI's session id (for Claude,
+ * the JSONL filename). One read over the projection table covers every
+ * thread, live or idle, including threads adopted from the radar. The payload
+ * JSON is provider-specific and treated as untrusted: only a string
+ * `nativeThreadRef.nativeId` on a `claudeAgent` row is read.
  *
- * `ProviderSessionDirectory` is used rather than the lower-level
- * `ProviderSessionRuntimeRepository` because the directory is the service
- * that is ambient in the server runtime stack (`server.ts`,
- * `ProviderSessionDirectoryLayerLive`); the raw repository is internal to
- * it and not provided at the level the WS layer runs.
- *
- * Cursor JSON is provider-specific and treated as untrusted: only a string
- * `resume` field (the Claude session UUID, `ClaudeResumeState`) is read;
- * other providers' cursor shapes simply contribute nothing.
+ * Read directly rather than through `ProjectionStore`, whose provider-thread
+ * queries are scoped to one thread: the radar needs the whole set per
+ * snapshot, and a per-thread fan-out would make a radar refresh cost
+ * proportional to how many threads exist.
  */
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import * as ProviderSessionDirectory from "../provider/Services/ProviderSessionDirectory.ts";
-import { ProviderService } from "../provider/Services/ProviderService.ts";
+const ClaudeProviderThreadRow = Schema.Struct({
+  payload_json: Schema.String,
+});
 
-function addResumeSessionId(ids: Set<string>, resumeCursor: unknown): void {
-  if (resumeCursor === null || resumeCursor === undefined || typeof resumeCursor !== "object") {
-    return;
-  }
-  const resume = (resumeCursor as Record<string, unknown>).resume;
-  if (typeof resume === "string" && resume.length > 0) ids.add(resume);
-}
+const ClaudeNativeThreadRef = Schema.fromJsonString(
+  Schema.Struct({
+    driver: Schema.String,
+    nativeThreadRef: Schema.NullOr(
+      Schema.Struct({
+        nativeId: Schema.NullOr(Schema.String),
+      }),
+    ),
+  }),
+);
+const decodeProviderThreadPayload = Schema.decodeUnknownOption(ClaudeNativeThreadRef);
 
 export const collectOwnSessionIds = Effect.fn("collectOwnSessionIds")(
-  function* (): Effect.fn.Return<
-    ReadonlySet<string>,
-    never,
-    ProviderSessionDirectory.ProviderSessionDirectory | ProviderService
-  > {
-    const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
-    const providerService = yield* ProviderService;
+  function* (): Effect.fn.Return<ReadonlySet<string>, never, SqlClient.SqlClient> {
+    const sql = yield* SqlClient.SqlClient;
     const ids = new Set<string>();
-
-    const threadIds = yield* directory
-      .listThreadIds()
-      .pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<never>));
-    const bindings = yield* Effect.forEach(
-      threadIds,
-      (threadId) =>
-        directory
-          .getBinding(threadId)
-          .pipe(
-            Effect.orElseSucceed(() =>
-              Option.none<ProviderSessionDirectory.ProviderRuntimeBinding>(),
-            ),
-          ),
-      { concurrency: 8 },
+    const rows = yield* sql<typeof ClaudeProviderThreadRow.Type>`
+      SELECT payload_json
+      FROM orchestration_v2_projection_provider_threads
+      WHERE driver = 'claudeAgent'
+    `.pipe(
+      Effect.catch((cause) =>
+        Effect.logWarning("external sessions: own-session read failed", { cause }).pipe(
+          Effect.as([] as ReadonlyArray<typeof ClaudeProviderThreadRow.Type>),
+        ),
+      ),
     );
-    for (const bindingOption of bindings) {
-      const binding = Option.getOrUndefined(bindingOption);
-      if (binding) addResumeSessionId(ids, binding.resumeCursor);
+    for (const row of rows) {
+      const payload = decodeProviderThreadPayload(row.payload_json);
+      if (Option.isNone(payload) || payload.value.driver !== "claudeAgent") continue;
+      const nativeId = payload.value.nativeThreadRef?.nativeId;
+      if (typeof nativeId === "string" && nativeId.length > 0) ids.add(nativeId);
     }
-
-    const live = yield* providerService.listSessions();
-    for (const session of live) {
-      addResumeSessionId(ids, session.resumeCursor);
-    }
-
     return ids;
   },
 );

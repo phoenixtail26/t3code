@@ -1,86 +1,49 @@
 import * as Schema from "effect/Schema";
 
 import { ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
-import { ExternalTranscriptEntry } from "./externalSessions.ts";
 import { ModelSelection } from "./modelSelection.ts";
 
 /**
- * Thread forking — fork feature (FORK_PLAN_FORKING.md).
+ * External-session adoption — fork feature (FORK_PLAN_FORKING.md).
  *
- * Forks a Claude-driven thread's CLI session into a fresh session file (full
- * conversation context preserved) and creates a new thread seeded to resume
- * it. The parent thread — its session file, checkpoints, and history — is
- * never modified. v1 forks the whole session; forking from a specific
- * message is a later increment.
+ * Turns a Claude Code CLI session the radar found into a t3 thread bound to
+ * that same session, with its visible transcript imported as history. Forking
+ * a t3 thread uses upstream's native `thread.fork` command instead and has no
+ * fork-owned contract.
  */
 
 export const THREAD_FORK_WS_METHODS = {
-  forkThread: "threads.forkThread",
   adoptExternalSession: "threads.adoptExternalSession",
-  getInheritedTranscript: "threads.getInheritedTranscript",
 } as const;
 
-export const ThreadForkInput = Schema.Struct({
-  /** The thread whose Claude session should be forked. */
-  threadId: ThreadId,
-});
-export type ThreadForkInput = typeof ThreadForkInput.Type;
-
 export const ThreadForkResult = Schema.Struct({
-  /** The newly created thread, ready for its first turn. */
+  /** The new thread, already created when the RPC returns. */
   threadId: ThreadId,
 });
 export type ThreadForkResult = typeof ThreadForkResult.Type;
 
 /**
- * Adopt an external (radar) Claude CLI session as a t3 thread. The session
- * file is forked, never extended, so the CLI's own transcript is left for
- * the CLI; the adopted thread continues on the copy. The server derives the
- * project from the session's cwd (same matching as the radar sidebar);
- * the client supplies the model selection the new thread should use, same
- * as every other thread-creation path.
+ * Adopt an external (radar) Claude Code session as a new t3 thread. The
+ * session must match a known project by cwd; `modelSelection` picks the Claude
+ * provider instance the thread continues on.
  */
 export const ThreadAdoptExternalSessionInput = Schema.Struct({
-  /** Claude Code session UUID, as shown in the radar. */
-  sessionId: Schema.String,
+  sessionId: TrimmedNonEmptyString,
   modelSelection: ModelSelection,
 });
 export type ThreadAdoptExternalSessionInput = typeof ThreadAdoptExternalSessionInput.Type;
 
-/**
- * Inherited history for a forked/adopted thread: the part of its Claude
- * session transcript that predates the thread's own first turn, mapped with
- * the same read-only entry shape as the radar transcript view. Empty for
- * ordinary threads (and on any soft failure — the prelude is best-effort,
- * never an error surface).
- */
-export const ThreadInheritedTranscriptInput = Schema.Struct({
-  threadId: ThreadId,
-});
-export type ThreadInheritedTranscriptInput = typeof ThreadInheritedTranscriptInput.Type;
-
-export const ThreadInheritedTranscript = Schema.Struct({
-  threadId: ThreadId,
-  entries: Schema.Array(ExternalTranscriptEntry),
-  /** True when caps dropped the head of the session file (large transcripts). */
-  truncated: Schema.Boolean,
-});
-export type ThreadInheritedTranscript = typeof ThreadInheritedTranscript.Type;
-
 export class ThreadForkError extends Schema.TaggedError<ThreadForkError>()("ThreadForkError", {
   /**
-   * "not-found": unknown thread / external session. "unsupported": the
-   * source's provider is not Claude (or the session already belongs to a
-   * t3 thread). "no-session": thread has no resumable Claude session yet.
-   * "no-project": the external session's cwd matches no t3 project.
-   * "fork-failed": the session transcript could not be forked.
-   * "create-failed": the forked session exists but thread creation or
-   * cursor seeding failed (no new thread was left behind).
+   * "not-found": unknown external session. "unsupported": the target provider
+   * is not Claude, or the session already belongs to a t3 thread.
+   * "no-project": the session's cwd matches no t3 project. "fork-failed": the
+   * session transcript could not be read. "create-failed": the thread events
+   * could not be written (no thread was left behind).
    */
   reason: Schema.Literals([
     "not-found",
     "unsupported",
-    "no-session",
     "no-project",
     "fork-failed",
     "create-failed",

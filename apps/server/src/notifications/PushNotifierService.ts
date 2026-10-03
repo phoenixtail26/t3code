@@ -1,5 +1,5 @@
 import type { PushNotificationSettings, ThreadId } from "@t3tools/contracts";
-import { projectThreadAwareness } from "@t3tools/shared/agentAwareness";
+import { projectThreadAwarenessV2 } from "@t3tools/shared/agentAwareness";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -13,12 +13,11 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import * as OrchestrationEngine from "../orchestration/Services/OrchestrationEngine.ts";
-import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
-import { eventThreadId } from "../relay/AgentAwarenessRelay.ts";
+import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "../project/ProjectService.ts";
+import { shouldPublishAgentAwarenessEvent } from "../relay/AgentAwarenessRelay.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import {
-  awarenessWithBackgroundLiveness,
   COMPLETION_RECHECK_MS,
   ObservedPhaseTracker,
   type PushNotification,
@@ -186,8 +185,8 @@ const sendTestNtfyNotification = (
 
 export const make = Effect.gen(function* () {
   const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
-  const snapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-  const orchestrationEngine = yield* OrchestrationEngine.OrchestrationEngineService;
+  const threads = yield* ThreadManagement.ThreadManagementService;
+  const projects = yield* ProjectService.ProjectService;
   const serverSettings = yield* ServerSettingsService;
   const webPushStore = yield* WebPushStore.WebPushStore;
   const observedPhases = new ObservedPhaseTracker();
@@ -255,6 +254,19 @@ export const make = Effect.gen(function* () {
     yield* deliver(settings, notification);
   });
 
+  // One shell read per event (the relay does the same): materializing the
+  // whole shell here would make each thread's activity cost proportional to
+  // how many threads exist. Subagent threads never notify.
+  const readThreadState = Effect.fn("pushNotifier.readThreadState")(function* (threadId: ThreadId) {
+    const environmentId = yield* serverEnvironment.getEnvironmentId;
+    const thread = yield* threads.getThreadShell(threadId);
+    if (thread === null || thread.archivedAt !== null) return Option.none();
+    if (thread.lineage.relationshipToParent === "subagent") return Option.none();
+    const project = yield* projects.getById(thread.projectId);
+    if (Option.isNone(project)) return Option.none();
+    return Option.some(projectThreadAwarenessV2({ environmentId, project: project.value, thread }));
+  });
+
   // Delayed leg of a completion push: re-read the thread after the window and
   // deliver only if it is still settled. Anything else means work resumed (or
   // a blocking phase already notified through the normal transition path).
@@ -263,15 +275,9 @@ export const make = Effect.gen(function* () {
     settings: PushNotificationSettings,
   ) {
     yield* Effect.sleep(Duration.millis(COMPLETION_RECHECK_MS));
-    const environmentId = yield* serverEnvironment.getEnvironmentId;
-    const thread = yield* snapshotQuery.getThreadShellById(threadId);
-    if (Option.isNone(thread)) return;
-    const project = yield* snapshotQuery.getProjectShellById(thread.value.projectId);
-    if (Option.isNone(project)) return;
-    const state = awarenessWithBackgroundLiveness(
-      projectThreadAwareness({ environmentId, project: project.value, thread: thread.value }),
-      thread.value.backgroundLiveness,
-    );
+    const current = yield* readThreadState(threadId);
+    if (Option.isNone(current)) return;
+    const state = current.value;
     if (state?.phase !== "completed") return;
     const notification = resolvePushNotification({
       settings,
@@ -294,22 +300,15 @@ export const make = Effect.gen(function* () {
     // Disabled is the default; skip all projection work in that case.
     if (settings.topicUrl.length === 0 && !hasWebPush) return;
 
-    const environmentId = yield* serverEnvironment.getEnvironmentId;
-    const thread = yield* snapshotQuery.getThreadShellById(threadId);
-    if (Option.isNone(thread)) {
+    const current = yield* readThreadState(threadId);
+    if (Option.isNone(current)) {
       observedPhases.observe(threadId, null);
       return;
     }
-    const project = yield* snapshotQuery.getProjectShellById(thread.value.projectId);
-    if (Option.isNone(project)) return;
-
-    // Background-liveness gate: a settled turn whose background work is still
-    // running reads as "running", not "completed" — see
-    // awarenessWithBackgroundLiveness.
-    const state = awarenessWithBackgroundLiveness(
-      projectThreadAwareness({ environmentId, project: project.value, thread: thread.value }),
-      thread.value.backgroundLiveness,
-    );
+    // projectThreadAwarenessV2 already holds a settled turn at "running" while
+    // native background work (subagents, workflows) is still pending, so a
+    // finish push fires only when the sidebar pill would go green.
+    const state = current.value;
     const notification = resolvePushNotification({
       settings,
       state,
@@ -342,9 +341,11 @@ export const make = Effect.gen(function* () {
 
   const start = () =>
     Effect.forkScoped(
-      Stream.runForEach(orchestrationEngine.streamDomainEvents, (event) => {
-        const threadId = eventThreadId(event);
-        if (threadId === null) return Effect.void;
+      Stream.runForEach(threads.streamDomainEvents, (event) => {
+        // Same event filter as the relay: only events that can move the
+        // awareness phase are worth a shell read.
+        if (!shouldPublishAgentAwarenessEvent(event)) return Effect.void;
+        const threadId = event.threadId;
         // Never let a notification failure disturb orchestration.
         return handleThread(threadId).pipe(
           Effect.catchCause((cause) =>
@@ -357,4 +358,9 @@ export const make = Effect.gen(function* () {
   return PushNotifier.of({ start });
 });
 
-export const layer = Layer.effect(PushNotifier, make);
+/**
+ * Self-starting: v1 started reactors from one OrchestrationReactor; v2 has no
+ * such hub, so the layer forks the domain-event subscription into its own
+ * scope, like `StorageCleanup` in server.ts.
+ */
+export const layer = Layer.effectDiscard(Effect.flatMap(make, (service) => service.start()));

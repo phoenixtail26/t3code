@@ -1,4 +1,4 @@
-import { MessageId, TurnId, type ExternalTranscriptEntry } from "@t3tools/contracts";
+import { MessageId, RunId, type ExternalTranscriptEntry } from "@t3tools/contracts";
 
 import type { TimelineEntry, WorkLogEntry } from "../session-logic";
 import type { ChatMessage } from "../types";
@@ -20,7 +20,7 @@ export function mapExternalTranscriptEntriesToTimeline(
         role: entry.role,
         text: entry.text,
         attachments: [],
-        turnId: entry.turnId === null ? null : TurnId.make(entry.turnId),
+        runId: entry.turnId === null ? null : RunId.make(entry.turnId),
         streaming: false,
         createdAt: entry.createdAt,
         updatedAt: entry.createdAt,
@@ -39,7 +39,7 @@ export function mapExternalTranscriptEntriesToTimeline(
     const workEntry: WorkLogEntry = {
       id: entry.id,
       createdAt: entry.createdAt,
-      turnId: entry.turnId === null ? null : TurnId.make(entry.turnId),
+      runId: entry.turnId === null ? null : RunId.make(entry.turnId),
       label: entry.label,
       tone: entry.tone,
       ...(entry.detail !== null ? { detail: entry.detail } : {}),

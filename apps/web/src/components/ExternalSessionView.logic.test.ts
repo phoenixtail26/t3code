@@ -48,7 +48,7 @@ describe("mapExternalTranscriptEntriesToTimeline", () => {
         role: "user",
         text: "hi there",
         attachments: [],
-        turnId: "turn-1",
+        runId: "turn-1",
         streaming: false,
         createdAt: "2026-07-20T10:00:00.000Z",
         updatedAt: "2026-07-20T10:00:00.000Z",
@@ -65,18 +65,18 @@ describe("mapExternalTranscriptEntriesToTimeline", () => {
     expect(row && row.kind === "message" ? row.message.role : null).toBe("assistant");
   });
 
-  it("carries turnId through as a branded value when present", () => {
+  it("carries turnId through as a branded runId when present", () => {
     const [row] = mapExternalTranscriptEntriesToTimeline([
       messageEntry({ id: "m-3", turnId: "turn-42" }),
     ]);
 
-    expect(row && row.kind === "message" ? row.message.turnId : undefined).toBe("turn-42");
+    expect(row && row.kind === "message" ? row.message.runId : undefined).toBe("turn-42");
   });
 
   it("keeps turnId null when the entry has no turn", () => {
     const [row] = mapExternalTranscriptEntriesToTimeline([messageEntry({ turnId: null })]);
 
-    expect(row && row.kind === "message" ? row.message.turnId : undefined).toBeNull();
+    expect(row && row.kind === "message" ? row.message.runId : undefined).toBeNull();
   });
 
   it.each(["thinking", "tool", "error"] as const)(

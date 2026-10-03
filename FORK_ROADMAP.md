@@ -23,6 +23,12 @@ cursor-seeded thread that carries the full conversation, with the inherited
 history rendered read-only above the live timeline. Verified live against a
 throwaway CLI session in an isolated dev environment.
 
+**2026-10-03:** on orchestration v2, adoption binds the new thread straight to
+the CLI session (upstream's agent-session import recipe) and imports the
+transcript as the thread's own history; the session file is no longer copied
+and there is no inherited-history prelude. See `FORK_PLAN_FORKING.md`,
+"Re-platformed on orchestration v2".
+
 Also fixed on the way (2026-07-31): the radar section had never been mounted
 in `SidebarV2`, so the default sidebar lost its External section when
 upstream switched to V2 — the sync tripwire couldn't see it because V2
@@ -337,6 +343,12 @@ confirmation dialog — forking never touches the source, so it just runs and
 opens the new thread. Live-verified: a forked thread recalled a secret taught
 only to its parent, and the parent's session file was byte-identical after.
 Design and the deltas from the sketch below: `FORK_PLAN_FORKING.md`.
+
+**2026-10-03:** upstream's orchestration v2 ships native thread forking
+(`thread.fork`, lineage, per-response fork in the timeline). The sidebar item
+now dispatches that command for the latest run; the fork-owned session copy,
+fork notice and inherited-history prelude are retired. See
+`FORK_PLAN_FORKING.md`, "Re-platformed on orchestration v2".
 
 **Deliberately not in v1**, roughly in the order worth doing:
 

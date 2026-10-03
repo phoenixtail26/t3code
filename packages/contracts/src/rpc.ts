@@ -62,10 +62,7 @@ import {
   THREAD_FORK_WS_METHODS,
   ThreadAdoptExternalSessionInput,
   ThreadForkError,
-  ThreadForkInput,
   ThreadForkResult,
-  ThreadInheritedTranscript,
-  ThreadInheritedTranscriptInput,
 } from "./threadFork.ts";
 import {
   AuthAccessStreamError,
@@ -1780,29 +1777,14 @@ export const WsExternalSessionsGetTranscriptRpc = Rpc.make(
   },
 );
 
-// Fork feature: fork a Claude thread's session into a new seeded thread,
-// or adopt an external (radar) session the same way. See ./threadFork.ts.
-export const WsThreadForkRpc = Rpc.make(THREAD_FORK_WS_METHODS.forkThread, {
-  payload: ThreadForkInput,
-  success: ThreadForkResult,
-  error: Schema.Union([ThreadForkError, EnvironmentAuthorizationError]),
-});
-
+// Fork feature: adopt an external (radar) Claude session as a thread bound to
+// that session. See ./threadFork.ts.
 export const WsThreadAdoptExternalSessionRpc = Rpc.make(
   THREAD_FORK_WS_METHODS.adoptExternalSession,
   {
     payload: ThreadAdoptExternalSessionInput,
     success: ThreadForkResult,
     error: Schema.Union([ThreadForkError, EnvironmentAuthorizationError]),
-  },
-);
-
-export const WsThreadInheritedTranscriptRpc = Rpc.make(
-  THREAD_FORK_WS_METHODS.getInheritedTranscript,
-  {
-    payload: ThreadInheritedTranscriptInput,
-    success: ThreadInheritedTranscript,
-    error: EnvironmentAuthorizationError,
   },
 );
 
@@ -1987,7 +1969,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2SubscribeThreadRpc,
   WsExternalSessionsSubscribeRpc,
   WsExternalSessionsGetTranscriptRpc,
-  WsThreadForkRpc,
   WsThreadAdoptExternalSessionRpc,
-  WsThreadInheritedTranscriptRpc,
 );

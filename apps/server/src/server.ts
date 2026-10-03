@@ -172,6 +172,7 @@ import {
 } from "./serverRuntimeState.ts";
 import { orchestrationHttpApiLayer } from "./orchestration-v2/http.ts";
 import { projectHttpApiLayer } from "./project/http.ts";
+import { forkHttpApiLayer } from "./fork/http.ts";
 import * as NetService from "@t3tools/shared/Net";
 import * as RelayClient from "@t3tools/shared/relayClient";
 import { disableTailscaleServe, ensureTailscaleServe } from "@t3tools/tailscale";
@@ -642,6 +643,7 @@ const makeRoutesLayer = Layer.mergeAll(
       Layer.provide(orchestrationHttpApiLayer),
       Layer.provide(pullRequestHttpApiLayer),
       Layer.provide(projectHttpApiLayer),
+      Layer.provide(forkHttpApiLayer),
       Layer.provide(serverEnvironmentHttpApiLayer),
       Layer.provide(environmentAuthenticatedAuthLayer),
     ),

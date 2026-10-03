@@ -165,7 +165,7 @@ function UsageLimitRow({ limit }: { readonly limit: ClaudeUsageLimit }) {
         />
       </div>
       {resetLabel && (
-        <div className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{resetLabel}</div>
+        <div className="mt-0.5 text-3xs leading-4 text-muted-foreground">{resetLabel}</div>
       )}
     </div>
   );
@@ -192,7 +192,7 @@ export function SidebarClaudeUsagePill() {
     try {
       const next = await runPrimaryHttp(
         PrimaryEnvironmentHttpClient.pipe(
-          Effect.flatMap((client) => client.orchestration.claudeUsage({ headers: {} })),
+          Effect.flatMap((client) => client.fork.claudeUsage({ headers: {} })),
         ),
       );
       if (next.status === "ok") {

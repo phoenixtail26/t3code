@@ -23,7 +23,10 @@ import { useAtomCommand } from "../state/use-atom-command";
  * waitForStartedServerThread in ChatView.logic.ts); on timeout navigate
  * anyway — the thread exists server-side.
  */
-function waitForThreadShell(threadRef: ScopedThreadRef, timeoutMs = 5_000): Promise<boolean> {
+export function waitForThreadShell(
+  threadRef: ScopedThreadRef,
+  timeoutMs = 5_000,
+): Promise<boolean> {
   const shellAtom = environmentThreadShells.threadShellAtom(threadRef);
   if (appAtomRegistry.get(shellAtom) !== null) {
     return Promise.resolve(true);
@@ -63,14 +66,12 @@ function waitForThreadShell(threadRef: ScopedThreadRef, timeoutMs = 5_000): Prom
 }
 
 /**
- * Shared engine behind `useForkThread` (F5) and `useAdoptExternalSession`
- * (F6) — both RPCs return the same `{threadId}` success / `ThreadForkError`
- * failure shape (packages/contracts/src/threadFork.ts) and need the same
- * dispatch -> navigate -> toast choreography (FORK_PLAN_FORKING.md). Both
- * operations are non-destructive (the source thread/session is never
- * touched), so neither gates on a confirmation dialog — the success toast
- * carries the one fact worth knowing instead. A ref-based guard keeps a
- * second call a no-op while one is already in flight.
+ * Dispatch -> navigate -> toast choreography behind `useAdoptExternalSession`
+ * (FORK_PLAN_FORKING.md); `useForkThread` mirrors it over upstream's fork
+ * command. Adoption is non-destructive (the CLI session is never touched), so
+ * it does not gate on a confirmation dialog — the success toast carries the
+ * one fact worth knowing instead. A ref-based guard keeps a second call a
+ * no-op while one is already in flight.
  */
 export function useThreadForkOutcome<W extends { readonly environmentId: EnvironmentId }, E>(
   mutation: AtomCommand<W, ThreadForkResult, E>,
