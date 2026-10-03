@@ -1,6 +1,8 @@
+import { presentThreadShell } from "@t3tools/client-runtime/state/models";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import * as Option from "effect/Option";
 import {
   CircleAlertIcon,
@@ -17,7 +19,7 @@ import {
   useCompletionDebounce,
 } from "../fork/threadNotifications";
 import { getClientSettings, useClientSettings } from "../hooks/useSettings";
-import { useEnvironments } from "../state/environments";
+import { useEnvironmentIds } from "../state/environments";
 import { environmentShell } from "../state/shell";
 import {
   hasDesktopNotifications,
@@ -29,7 +31,7 @@ import { resolveSidebarThreadStatus } from "./Sidebar.logic";
 import { toastManager } from "./ui/toast";
 
 export function ThreadNotificationCoordinator() {
-  const { environments } = useEnvironments();
+  const environmentIds = useEnvironmentIds();
   const mode = useClientSettings((settings) => settings.notificationMode);
   const inAppNotificationsEnabled = useClientSettings(
     (settings) => settings.inAppNotificationsEnabled,
@@ -44,7 +46,7 @@ export function ThreadNotificationCoordinator() {
   }, []);
 
   useEffect(() => {
-    const activeIds = new Set(environments.map(({ environmentId }) => environmentId));
+    const activeIds = new Set(environmentIds);
     const count = pending.current.size;
     for (const [tag, { environmentId, notification }] of pending.current) {
       if (activeIds.has(environmentId)) continue;
@@ -52,7 +54,7 @@ export function ThreadNotificationCoordinator() {
       pending.current.delete(tag);
     }
     if (count !== pending.current.size) setNotificationBadge(pending.current.size);
-  }, [environments]);
+  }, [environmentIds]);
 
   useEffect(() => {
     const clear = () => {
@@ -83,10 +85,10 @@ export function ThreadNotificationCoordinator() {
 
   if (mode === "off" && !inAppNotificationsEnabled) return null;
 
-  return environments.map((environment) => (
+  return environmentIds.map((environmentId) => (
     <EnvironmentNotifications
-      key={environment.environmentId}
-      environmentId={environment.environmentId}
+      key={environmentId}
+      environmentId={environmentId}
       onNotification={onNotification}
     />
   ));
@@ -119,20 +121,24 @@ function EnvironmentNotifications({
       return;
     }
     const next = new Map<ThreadId, { attention: string | null; completion: number | null }>();
-    for (const thread of shell.snapshot.value.threads) {
+    for (const rawThread of shell.snapshot.value.threads) {
+      if (rawThread.lineage.relationshipToParent === "subagent") continue;
+      const thread = presentThreadShell(environmentId, rawThread);
       let status = resolveSidebarThreadStatus(thread);
-      if (status === "ready" && thread.latestTurn?.state === "error") status = "failed";
+      if (status === "ready" && thread.latestRun?.status === "failed") status = "failed";
       if (status !== "ready") completions.cancel(thread.id);
       const prior = previous.current.get(thread.id);
       const attention =
-        status === "input" || status === "approval" || status === "failed"
-          ? `${thread.latestTurn?.turnId ?? ""}:${status}`
+        status === "input" || status === "approval" || status === "failed" || status === "limited"
+          ? `${thread.latestRun?.runId ?? ""}:${status}`
           : null;
-      const completedAt = Date.parse(thread.latestTurn?.completedAt ?? "");
+      const completedAt = Date.parse(thread.latestRun?.completedAt ?? "");
+      // Waiting only on commands (a dev server) is done; subagents and monitors wake the agent.
+      const settled =
+        status === "ready" ||
+        (status === "waiting" && !backgroundWorkHoldsCompletion(thread.pendingBackgroundTasks));
       const completion =
-        status === "ready" &&
-        thread.latestTurn?.state === "completed" &&
-        Number.isFinite(completedAt)
+        settled && thread.latestRun?.status === "completed" && Number.isFinite(completedAt)
           ? completedAt
           : (prior?.completion ?? null);
       next.set(thread.id, { attention, completion });
@@ -153,9 +159,11 @@ function EnvironmentNotifications({
           ? "Thread completed"
           : status === "approval"
             ? "Approval needed"
-            : status === "failed"
-              ? "Thread failed"
-              : "Input needed";
+            : status === "limited"
+              ? "Usage limit reached"
+              : status === "failed"
+                ? "Thread failed"
+                : "Input needed";
       if (hasNotificationSound(mode)) {
         void playNotificationSound(kind, () =>
           hasNotificationSound(getClientSettings().notificationMode),
@@ -175,22 +183,13 @@ function EnvironmentNotifications({
             hideCopyButton: true,
             leadingIcon:
               kind === "completion" ? (
-                <CircleCheckIcon
-                  aria-hidden
-                  className="size-4 text-emerald-700 dark:text-emerald-300"
-                />
+                <CircleCheckIcon aria-hidden className="size-4 text-success-foreground" />
               ) : status === "approval" ? (
-                <ShieldQuestionIcon
-                  aria-hidden
-                  className="size-4 text-amber-700 dark:text-amber-300"
-                />
+                <ShieldQuestionIcon aria-hidden className="size-4 text-warning-foreground" />
               ) : status === "failed" ? (
-                <CircleAlertIcon aria-hidden className="size-4 text-red-700 dark:text-red-300" />
+                <CircleAlertIcon aria-hidden className="size-4 text-destructive-foreground" />
               ) : (
-                <MessageCircleQuestionIcon
-                  aria-hidden
-                  className="size-4 text-indigo-600 dark:text-indigo-300"
-                />
+                <MessageCircleQuestionIcon aria-hidden className="size-4 text-info-foreground" />
               ),
           },
           actionProps: {

@@ -2,7 +2,7 @@ import * as Schema from "effect/Schema";
 
 import { ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { ExternalTranscriptEntry } from "./externalSessions.ts";
-import { ModelSelection } from "./orchestration.ts";
+import { ModelSelection } from "./modelSelection.ts";
 
 /**
  * Thread forking — fork feature (FORK_PLAN_FORKING.md).

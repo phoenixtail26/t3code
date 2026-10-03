@@ -7,6 +7,7 @@ import "./index.css";
 // specificity; kept out of index.css to avoid upstream merge conflicts.
 import "./fork.css";
 
+import { prepareProviderAuthDelivery } from "./providerAuthDelivery";
 import { isElectron } from "./env";
 import { registerPushServiceWorker } from "./lib/webPush";
 import { hasCloudPublicConfig } from "./cloud/publicConfig";
@@ -17,6 +18,8 @@ import {
 } from "./lib/windowControlsOverlay";
 import { AppRoot } from "./AppRoot";
 import { clearChunkReloadGuard, reloadOnceForChunkLoadError } from "./lib/chunkReloadGuard";
+
+prepareProviderAuthDelivery();
 
 // Electron loads the app from a file-backed shell, so hash history avoids path resolution issues.
 const history = isElectron ? createHashHistory() : createBrowserHistory();
