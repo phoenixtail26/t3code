@@ -14,6 +14,8 @@ desktop app runs the current `g3code` code.
 - **Never restart the daily driver yourself.** The agent session you are talking
   to lives in that instance's database (`~\.t3\userdata`); restarting kills it
   mid-task. Tell the user to restart when convenient — that is their call.
+  The exception is a build that needs a dependency install: then the user
+  closes the app and must **not** reopen it (see the heal task below).
 
 ## Build in the MAIN worktree
 
@@ -28,6 +30,40 @@ work is not yet merged into `g3code`, say so — this build will not include it.
 To exercise unmerged work, the documented path is a second instance from the
 worktree (`pnpm dev:desktop`, uses the isolated `~\.t3\dev` store), not this
 command.
+
+## If dependencies changed: hand off to the heal task, do not build here
+
+The daily driver runs in place out of this worktree's `node_modules` and holds
+`electron.exe` locked. When the lockfile has moved since the last install
+(typically right after `/sync-upstream`), the build command below first runs a
+`pnpm install`, which hangs silently against the running app and leaves
+`node_modules` half-built. Check before building:
+
+```bash
+[ node_modules/.pnpm-workspace-state-v1.json -nt pnpm-lock.yaml ] && echo "deps current" || echo "install needed"
+```
+
+`deps current`, or the app is not running: continue with the command below.
+`install needed` while the app is running: do **not** run the build. Start the
+heal task instead. It waits for the app to close, installs, builds, and
+reopens the app by itself:
+
+```powershell
+schtasks /create /f /sc once /st 00:00 /tn "T3Code Fork Heal After Close" /tr "pwsh -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File D:\Dev\tools\t3code-heal-after-close.ps1"
+schtasks /run /tn "T3Code Fork Heal After Close"
+```
+
+Then give the user this instruction in these words. "Restart when convenient"
+is wrong here: on 2026-10-03 the app was reopened seconds after closing, the
+install died, and the app could not start at all afterwards.
+
+> **Close T3 Code and leave it closed. Do not open it yourself.** It reopens
+> on its own when the update finishes, usually 20 to 30 minutes later. Opening
+> it early stalls or breaks the update. If it has not come back after 45
+> minutes, check `D:\Dev\tools\t3code-heal.log` before launching anything.
+
+Report that nothing has been rebuilt yet and stop; the rest of this command
+does not apply. The script deletes its own task when it finishes.
 
 ## The command
 
@@ -110,4 +146,5 @@ things instead of rebuilding:
 
 State what was rebuilt (with the before/after timestamps as evidence), which
 branch was built, and remind the user the change is live only after they
-restart the app themselves.
+restart the app themselves. After a heal-task handoff the reminder is the
+opposite: close the app and do not reopen it, in the exact words above.
