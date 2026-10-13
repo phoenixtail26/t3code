@@ -10,8 +10,8 @@ work is going. Workers read the spec, not this.
 | 0 Spike                  | subagent | Opus  | `dictation-spike`          | merged `fe1000b024` | -                         |
 | 1 Server service         | subagent | Opus  | `dictation` @ `50a5da8098` | done, reviewed      | -                         |
 | 2 Composer button        | subagent | Fable | `dictation` @ `4ca322a22a` | done, reviewed      | owner: mic proof (Done 1) |
-| 3 Cleanup and dictionary | subagent | Opus  | `dictation` @ `8902213d64` | in review           | -                         |
-| 4 Settings section       | -        | -     | -                          | not started         | -                         |
+| 3 Cleanup and dictionary | subagent | Opus  | `dictation` @ `8902213d64` | done, reviewed      | -                         |
+| 4 Settings section       | subagent | Fable | `dictation`                | building            | -                         |
 | 5 Phone pass and docs    | -        | -     | -                          | not started         | -                         |
 
 Overnight run 2026-10-13: branch `dictation` cut from `g3code` @
@@ -24,6 +24,14 @@ route and recorder code, and unit tests. Phase 6 phone pass is blocked by
 design. Each worker starts and stops its own `pnpm dev:desktop` by PID.
 
 Decisions this wave:
+
+- 2026-10-13 phase 4 review: accepted, no changes. Left for the owner's
+  in-use validation of the rules (spec: "to be validated in use"):
+  "apples, uh, pears" becomes "apples pears" (both commas dropped);
+  "bye bye", "no no", "very very" are collapsed as doubles; dictionary
+  entries apply in order so a later entry can rewrite an earlier one's
+  output. Phase 5 must prove the settings RPC patch path, since phase 4 set
+  the dictionary by editing settings.json.
 
 - 2026-10-13 phase 4 (cleanup) worker choices, accepted pending review:
   Parakeet already writes spoken "tee three" as "T3", so the spec's Done 3
