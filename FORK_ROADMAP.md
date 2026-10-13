@@ -508,3 +508,13 @@ delivers both surfaces the owner asked for at once.
   to the parent thread; and confirm that post-fork navigation always lands on
   the new thread rather than a draft, which was seen once under synthetic
   events and never reproduced by hand.
+
+## 11. Desktop dictation (voice-to-text in the composer)
+
+Decided 2026-10-13, not started. Spec with the full decision list:
+`.claude/plans/desktop-dictation.md`. Local transcription on the environment
+server (`transcribe-cpp`, English Parakeet), mic button + shortcut in the web
+composer so desktop and the phone PWA share one implementation, batch (no
+streaming), rule-based filler cleanup and a global correction dictionary in
+Settings → Voice. Upstream's #14882 was rejected as too large to carry across
+syncs; if upstream ships dictation we delete ours and take theirs.
