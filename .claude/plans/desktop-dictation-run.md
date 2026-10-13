@@ -9,8 +9,8 @@ work is going. Workers read the spec, not this.
 | ------------------------ | -------- | ----- | -------------------------- | ------------------- | ------------------------- |
 | 0 Spike                  | subagent | Opus  | `dictation-spike`          | merged `fe1000b024` | -                         |
 | 1 Server service         | subagent | Opus  | `dictation` @ `50a5da8098` | done, reviewed      | -                         |
-| 2 Composer button        | subagent | Fable | `dictation` @ `9e2c6af97e` | in review           | owner: mic proof (Done 1) |
-| 3 Cleanup and dictionary | -        | -     | -                          | not started         | -                         |
+| 2 Composer button        | subagent | Fable | `dictation` @ `4ca322a22a` | done, reviewed      | owner: mic proof (Done 1) |
+| 3 Cleanup and dictionary | subagent | Opus  | `dictation`                | building            | -                         |
 | 4 Settings section       | -        | -     | -                          | not started         | -                         |
 | 5 Phone pass and docs    | -        | -     | -                          | not started         | -                         |
 
@@ -24,6 +24,13 @@ route and recorder code, and unit tests. Phase 6 phone pass is blocked by
 design. Each worker starts and stops its own `pnpm dev:desktop` by PID.
 
 Decisions this wave:
+
+- 2026-10-13 phase 3 review: sent back once (palette item was a 14-line
+  fork block in `CommandPalette.tsx`; now `dictation/paletteItem.tsx` with a
+  one-line push), fixed in `4ca322a22a`, re-accepted. Escape while
+  recording cancels the recording and is consumed; a dialog open at the same
+  time closes on the next press. Kept as is: cancelling the mic first is the
+  safer order.
 
 - 2026-10-13 phase 3 (composer) worker choices, accepted pending review:
   toggle is a no-op while downloading or transcribing; leaving the thread
