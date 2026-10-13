@@ -10,7 +10,7 @@ work is going. Workers read the spec, not this.
 | 0 Spike                  | subagent | Opus  | `dictation-spike`          | merged `fe1000b024` | -                         |
 | 1 Server service         | subagent | Opus  | `dictation` @ `50a5da8098` | done, reviewed      | -                         |
 | 2 Composer button        | subagent | Fable | `dictation` @ `4ca322a22a` | done, reviewed      | owner: mic proof (Done 1) |
-| 3 Cleanup and dictionary | subagent | Opus  | `dictation`                | building            | -                         |
+| 3 Cleanup and dictionary | subagent | Opus  | `dictation` @ `8902213d64` | in review           | -                         |
 | 4 Settings section       | -        | -     | -                          | not started         | -                         |
 | 5 Phone pass and docs    | -        | -     | -                          | not started         | -                         |
 
@@ -24,6 +24,16 @@ route and recorder code, and unit tests. Phase 6 phone pass is blocked by
 design. Each worker starts and stops its own `pnpm dev:desktop` by PID.
 
 Decisions this wave:
+
+- 2026-10-13 phase 4 (cleanup) worker choices, accepted pending review:
+  Parakeet already writes spoken "tee three" as "T3", so the spec's Done 3
+  example is moot; proven instead with `t3 code => T3 Code` (raw "T3 code is
+  great." became "T3 Code is great."). Owner's Done 3 check should use a
+  term the model actually mishears. Settings schema lives in fork-owned
+  `contracts/dictation.ts`; `settings.ts` gets 3 lines; `serverSettings.ts`
+  unchanged (generic patch merge). ", uh," closes up entirely so a filler
+  inside a comma list loses that comma; "had had" and "that that" are
+  never collapsed.
 
 - 2026-10-13 phase 3 review: sent back once (palette item was a 14-line
   fork block in `CommandPalette.tsx`; now `dictation/paletteItem.tsx` with a
