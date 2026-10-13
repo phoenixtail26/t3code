@@ -59,10 +59,10 @@ Server (`apps/server/src/dictation/`):
       verified, with progress reported to the client; remove on request.
 - [x] Model unload after 60 minutes idle; reload on the next request (cold
       load measured at ~6 s in the spike).
-- Filler cleanup pass (um, uh, er, ah, "you know", doubled words), on by
-  default, toggle in settings.
-- Dictionary pass: `heard => wanted` lines, case-insensitive, whole-word,
-  applied after filler cleanup.
+- [x] Filler cleanup pass (um, uh, er, ah, "you know", doubled words), on by
+      default, toggle in settings.
+- [x] Dictionary pass: `heard => wanted` lines, case-insensitive, whole-word,
+      applied after filler cleanup.
 - [x] The last transcription's raw and cleaned text kept in memory for the
       settings preview (not persisted).
 - [x] HTTP route `POST /api/dictation/transcribe`: body is raw PCM, response is
@@ -78,8 +78,8 @@ Server (`apps/server/src/dictation/`):
 
 Contracts (`packages/contracts/src/settings.ts`, fork fields only):
 
-- Server settings `dictation: { fillerCleanup: boolean (default true),
-dictionary: string (default "") }` with `Schema.optionalKey` in the patch.
+- [x] Server settings `dictation: { fillerCleanup: boolean (default true),
+  dictionary: string (default "") }` with `Schema.optionalKey` in the patch.
 
 Web (`apps/web/src/dictation/` plus one-line mounts):
 

@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 /**
@@ -45,3 +46,16 @@ export type DictationStatus = typeof DictationStatus.Type;
 /** Body of every non-2xx dictation response. */
 export const DictationErrorResponse = Schema.Struct({ error: Schema.String });
 export type DictationErrorResponse = typeof DictationErrorResponse.Type;
+
+/** Server settings for transcript cleanup; see `apps/server/src/dictation/cleanup.ts`. */
+export const DictationSettings = Schema.Struct({
+  fillerCleanup: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /** One `heard => wanted` entry per line, matched case-insensitively as whole words. */
+  dictionary: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+});
+export type DictationSettings = typeof DictationSettings.Type;
+
+export const DictationSettingsPatch = Schema.Struct({
+  fillerCleanup: Schema.optionalKey(Schema.Boolean),
+  dictionary: Schema.optionalKey(Schema.String),
+});

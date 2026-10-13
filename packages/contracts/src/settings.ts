@@ -1,4 +1,5 @@
 import { SshDeviceHostConfigs } from "./device.ts";
+import { DictationSettings, DictationSettingsPatch } from "./dictation.ts";
 import {
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
@@ -1357,6 +1358,7 @@ export const ServerSettings = Schema.Struct({
   ),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   pushNotifications: PushNotificationSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  dictation: DictationSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   /** Keyed by source control host kind, such as `gitcafe`; see `SourceControlHostSettings`. */
   sourceControlHosts: Schema.Record(Schema.String, SourceControlHostSettings).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
@@ -1665,6 +1667,7 @@ export const ServerSettingsPatch = Schema.Struct({
       suppressWhenPresentSeconds: Schema.optionalKey(Schema.Number),
     }),
   ),
+  dictation: Schema.optionalKey(DictationSettingsPatch),
   /**
    * Merges per host: a patched field replaces the saved one, so a client sends a per-server-host
    * map whole, with the redaction marker for each saved secret it keeps. An empty or omitted

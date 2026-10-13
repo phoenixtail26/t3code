@@ -15,6 +15,7 @@ import * as TestClock from "effect/testing/TestClock";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
 import * as ServerConfig from "../config.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as DictationService from "./DictationService.ts";
 import type { DictationModelSpec } from "./model.ts";
 import * as DictationWorker from "./worker.ts";
@@ -86,10 +87,14 @@ const layerTest = (
     readonly model?: DictationModelSpec;
     readonly serve?: Uint8Array;
     readonly http?: Layer.Layer<HttpClient.HttpClient>;
+    readonly dictionary?: string;
   } = {},
 ) =>
   DictationService.layerWithModel(options.model ?? TEST_MODEL).pipe(
     Layer.provide(Layer.succeed(DictationWorker.DictationWorker, workers.service)),
+    Layer.provide(
+      ServerSettings.layerTest({ dictation: { dictionary: options.dictionary ?? "" } }),
+    ),
     Layer.provide(options.http ?? httpServing(options.serve ?? new Uint8Array())),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "t3-dictation-" })),
     Layer.provideMerge(NodeServices.layer),
@@ -125,6 +130,20 @@ describe("DictationService", () => {
         expect(workers.counts.spawned).toBe(1);
         expect((yield* dictation.status).last).toEqual(transcript);
       }).pipe(Effect.provide(layerTest(workers)));
+    }),
+  );
+
+  it.effect("cleans the transcript with the settings dictionary and keeps both texts", () =>
+    Effect.gen(function* () {
+      const workers = yield* makeFakeWorkers;
+      yield* Effect.gen(function* () {
+        yield* installModel;
+        const dictation = yield* DictationService.DictationService;
+
+        const transcript = yield* dictation.transcribe(pcm(3));
+        expect(transcript).toEqual({ text: "Heard 3", raw: "heard 3" });
+        expect((yield* dictation.status).last).toEqual(transcript);
+      }).pipe(Effect.provide(layerTest(workers, { dictionary: "heard => Heard" })));
     }),
   );
 

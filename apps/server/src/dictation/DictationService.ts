@@ -3,11 +3,13 @@
  *
  * Requests run one at a time in arrival order. The model is downloaded on
  * first use and loaded into a worker process on the first request, never at
- * server start; the worker is stopped after an hour without requests.
+ * server start; the worker is stopped after an hour without requests. Each
+ * transcript goes through the cleanup passes the server settings ask for.
  *
  * @module DictationService
  */
 import {
+  DEFAULT_SERVER_SETTINGS,
   DICTATION_MAX_AUDIO_BYTES,
   type DictationStatus,
   type DictationTranscript,
@@ -28,6 +30,8 @@ import * as Semaphore from "effect/Semaphore";
 import { HttpClient } from "effect/http";
 
 import * as ServerConfig from "../config.ts";
+import { ServerSettingsService } from "../serverSettings.ts";
+import { cleanTranscript } from "./cleanup.ts";
 import {
   DictationModelDownloadError,
   type DictationModelPaths,
@@ -83,6 +87,7 @@ const make = Effect.fn("DictationService.make")(function* (model: DictationModel
   const config = yield* ServerConfig.ServerConfig;
   const path = yield* Path.Path;
   const workers = yield* DictationWorker.DictationWorker;
+  const serverSettings = yield* ServerSettingsService;
   const context = yield* Effect.context<FileSystem.FileSystem | HttpClient.HttpClient>();
   const scope = yield* Effect.scope;
 
@@ -176,7 +181,12 @@ const make = Effect.fn("DictationService.make")(function* (model: DictationModel
           ),
         ),
       );
-      const transcript: DictationTranscript = { text: raw, raw };
+      // Unreadable settings fall back to the defaults rather than losing the transcript.
+      const cleanup = yield* serverSettings.getSettings.pipe(
+        Effect.map((settings) => settings.dictation),
+        Effect.orElseSucceed(() => DEFAULT_SERVER_SETTINGS.dictation),
+      );
+      const transcript: DictationTranscript = { text: cleanTranscript(raw, cleanup), raw };
       yield* Ref.set(last, transcript);
       return transcript;
     }).pipe(Effect.ensuring(startIdleTimer));
