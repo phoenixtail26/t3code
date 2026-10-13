@@ -53,7 +53,10 @@ async function loadEngine(): Promise<Engine> {
     const inArchive = `.asar${NodePath.sep}`;
     if (directory.includes(inArchive)) {
       const unpacked = directory.replace(inArchive, `.asar.unpacked${NodePath.sep}`);
-      const library = NodeFS.readdirSync(unpacked).find((file) => LIBRARY_FILE.test(file));
+      // Without the unpacked copy the engine's own loader reports the failure.
+      const library = NodeFS.existsSync(unpacked)
+        ? NodeFS.readdirSync(unpacked).find((file) => LIBRARY_FILE.test(file))
+        : undefined;
       if (library) process.env.TRANSCRIBE_LIBRARY = NodePath.join(unpacked, library);
     }
   }

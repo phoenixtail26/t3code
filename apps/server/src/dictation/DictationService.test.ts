@@ -82,11 +82,15 @@ const httpServing = (body: Uint8Array) =>
 
 const layerTest = (
   workers: FakeWorkers,
-  options: { readonly model?: DictationModelSpec; readonly serve?: Uint8Array } = {},
+  options: {
+    readonly model?: DictationModelSpec;
+    readonly serve?: Uint8Array;
+    readonly http?: Layer.Layer<HttpClient.HttpClient>;
+  } = {},
 ) =>
   DictationService.layerWithModel(options.model ?? TEST_MODEL).pipe(
     Layer.provide(Layer.succeed(DictationWorker.DictationWorker, workers.service)),
-    Layer.provide(httpServing(options.serve ?? new Uint8Array())),
+    Layer.provide(options.http ?? httpServing(options.serve ?? new Uint8Array())),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "t3-dictation-" })),
     Layer.provideMerge(NodeServices.layer),
   );
@@ -226,6 +230,32 @@ describe("DictationService", () => {
         expect((yield* dictation.status).model).toEqual({ state: "missing" });
         expect(workers.counts.killed).toBe(1);
       }).pipe(Effect.provide(layerTest(workers, { serve: MODEL_BYTES })));
+    }),
+  );
+
+  it.effect("remove cancels a download a queued transcription is waiting on", () =>
+    Effect.gen(function* () {
+      const workers = yield* makeFakeWorkers;
+      const requested = yield* Deferred.make<void>();
+      // The server accepts the request and never answers.
+      const stalled = Layer.succeed(
+        HttpClient.HttpClient,
+        HttpClient.make(() =>
+          Deferred.succeed(requested, undefined).pipe(Effect.andThen(Effect.never)),
+        ),
+      );
+      yield* Effect.gen(function* () {
+        const dictation = yield* DictationService.DictationService;
+        const waiting = yield* Effect.forkChild(dictation.transcribe(pcm(6)));
+        yield* Deferred.await(requested);
+        expect((yield* dictation.status).model).toMatchObject({ state: "downloading" });
+
+        yield* dictation.removeModel;
+        const failure = yield* Effect.flip(Fiber.join(waiting));
+        expect(failure).toMatchObject({ _tag: "DictationModelDownloadError", stage: "cancelled" });
+        expect((yield* dictation.status).model).toEqual({ state: "missing" });
+        expect(workers.counts.spawned).toBe(0);
+      }).pipe(Effect.provide(layerTest(workers, { http: stalled })));
     }),
   );
 

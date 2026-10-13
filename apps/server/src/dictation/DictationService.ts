@@ -218,22 +218,31 @@ const make = Effect.fn("DictationService.make")(function* (model: DictationModel
     return { model: state, last: yield* Ref.get(last) };
   });
 
-  const remove: DictationService["Service"]["removeModel"] = enqueue(
-    Effect.gen(function* () {
-      const running = yield* downloadLock.withPermits(1)(Ref.get(download));
-      if (Option.isSome(running)) {
-        // Waiters get a typed failure, not an interruption.
-        yield* Deferred.fail(
-          running.value.done,
-          new DictationModelDownloadError({ stage: "cancelled" }),
-        );
-        yield* Fiber.interrupt(running.value.fiber);
-      }
-      yield* cancelIdleTimer;
-      yield* unloadWorker;
-      yield* removeModel(paths).pipe(Effect.provideContext(context));
-      yield* Effect.logInfo("dictation model removed");
-    }),
+  const cancelDownload = Effect.gen(function* () {
+    const running = yield* downloadLock.withPermits(1)(Ref.get(download));
+    if (Option.isNone(running)) return;
+    // Waiters get a typed failure, not an interruption.
+    yield* Deferred.fail(
+      running.value.done,
+      new DictationModelDownloadError({ stage: "cancelled" }),
+    );
+    yield* Fiber.interrupt(running.value.fiber);
+  });
+
+  // Cancelled before queuing, since a queued transcription may be waiting on
+  // the download; cancelled again in the job in case one restarted it.
+  const remove: DictationService["Service"]["removeModel"] = cancelDownload.pipe(
+    Effect.andThen(
+      enqueue(
+        Effect.gen(function* () {
+          yield* cancelDownload;
+          yield* cancelIdleTimer;
+          yield* unloadWorker;
+          yield* removeModel(paths).pipe(Effect.provideContext(context));
+          yield* Effect.logInfo("dictation model removed");
+        }),
+      ),
+    ),
   );
 
   return DictationService.of({
