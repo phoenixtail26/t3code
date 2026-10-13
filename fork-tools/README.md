@@ -27,3 +27,13 @@ Register-ScheduledTask -TaskName 'T3Code Fork Upstream Drift Check' `
 The task runs against the MAIN worktree on purpose: fetch and merge-tree are
 read-only for the working tree, and remote-tracking refs are shared across
 all worktrees, so every agent's drift check benefits from the fresh fetch.
+
+## heal-after-close.ps1
+
+One-shot install, build and relaunch of the daily driver for builds that need
+a dependency install, which cannot run while the app holds `electron.exe`.
+`/build` registers and starts it (`.claude/commands/build.md` has the commands
+and the wording to give the user); it waits for the app to close, and the app
+must stay closed until the script reopens it. Logs to
+`D:\Dev\tools\t3code-heal.log` and deletes its own task
+(**"T3Code Fork Heal After Close"**) when done.

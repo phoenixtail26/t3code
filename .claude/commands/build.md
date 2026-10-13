@@ -49,7 +49,7 @@ heal task instead. It waits for the app to close, installs, builds, and
 reopens the app by itself:
 
 ```powershell
-schtasks /create /f /sc once /st 00:00 /tn "T3Code Fork Heal After Close" /tr "pwsh -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File D:\Dev\tools\t3code-heal-after-close.ps1"
+schtasks /create /f /sc once /st 00:00 /tn "T3Code Fork Heal After Close" /tr "pwsh -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File D:\Dev\t3code\fork-tools\heal-after-close.ps1"
 schtasks /run /tn "T3Code Fork Heal After Close"
 ```
 

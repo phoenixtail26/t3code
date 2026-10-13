@@ -368,12 +368,39 @@ home-screen icon (long-press → Uninstall), then Chrome → Site settings → t
 host → Delete data, then re-pair with a fresh token and re-add to the home
 screen. Landing on the pairing prompt is the proof the reset took.
 
-**Two dead ends, so nobody repeats them:**
+**The site will not open at all** (Chrome error page instead of a splash) was
+two unrelated faults on 2026-10-06. The Chrome error code tells them apart:
 
-- Fetching the tailnet HTTPS URL _from the PC itself_ proves nothing. Windows
-  generally cannot hairpin to its own `100.x` address, so it times out even
-  while the listener is healthy and phones can reach it fine. Confirm the
-  listener with `Get-NetTCPConnection -LocalPort 443` (expect `tailscaled`).
+- `DNS_PROBE_FINISHED_BAD_CONFIG` on the `ts.net` URL: the Tailscale Android
+  app's DNS handler is wedged, so MagicDNS names do not resolve. Toggling the
+  VPN does not restart it. Android Settings → Apps → Tailscale → **Force
+  stop**, then reopen and connect.
+- `http://100.85.106.78:3773` times out while the `ts.net` URL is unaffected:
+  Windows Firewall has an inbound **Block** rule on the current
+  `electron@<version>` exe. A dismissed "allow this app?" prompt after an
+  Electron bump creates one, and Block beats Allow. The PC-side tell is the
+  peer counters in `tailscale status --json`: the phone's `RxBytes` climbs
+  while `TxBytes` stays flat. Fix from an admin PowerShell:
+
+  ```powershell
+  Get-NetFirewallRule -DisplayName Electron | Where-Object Action -eq Block | Remove-NetFirewallRule
+  New-NetFirewallRule -DisplayName "Electron (T3 tailnet)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3773 -InterfaceAlias Tailscale -Program "<path to the running electron.exe>"
+  ```
+
+  The `ts.net` URL does not need this rule: `tailscale serve` proxies to
+  loopback, which the firewall does not filter.
+
+**Three dead ends, so nobody repeats them:**
+
+- `https://100.85.106.78` (HTTPS by bare IP) is not a test of anything.
+  `tailscale serve` rejects a TLS handshake that does not name the host, so it
+  fails from the phone and from the PC alike.
+
+- Fetching the tailnet HTTPS URL _from the PC itself_ says nothing about the
+  phone. It timed out on 2026-07-19 while phones reached it fine, and returned
+  200 on 2026-10-06 while the phone could not resolve the name. A 200 does
+  prove the serve proxy and certificate are healthy. Confirm the listener with
+  `Get-NetTCPConnection -LocalPort 443` (expect `tailscaled`).
 - Absence of `webSocketTicket` requests in the log is EXPECTED for same-origin
   browser clients: they derive `wss://` from the page origin and authenticate
   with the session cookie. Only remote/bearer (DPoP) environments use the ticket
