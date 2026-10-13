@@ -3,7 +3,7 @@
 Spec: `desktop-dictation.md`. This file holds status, decisions and how the
 work is going. Workers read the spec, not this.
 
-## Status (updated 2026-10-13, wave 1 running)
+## Status (updated 2026-10-13, wave 1 waiting on owner)
 
 | Package                  | Runs as  | Model | Branch / worktree | State          | Waiting on |
 | ------------------------ | -------- | ----- | ----------------- | -------------- | ---------- |
@@ -32,6 +32,16 @@ Decisions this wave:
   changes. Phase 1 verification item added: prove the engine loads from
   inside the packaged `server.asar` (`ELECTRON_RUN_AS_NODE`); the spike
   only proved the files are staged.
+- 2026-10-13: trial merge passed: `upstream/main` (3 commits) then
+  `dictation-spike` merge clean into a scratch worktree
+  (`~/.t3/worktrees/t3code/dictation-integrate`, branch
+  `integrate-dictation-wave1` @ `3a7f063841`); lint, typecheck, test
+  19/19 pass; `import('transcribe-cpp')` loads, version 0.2.4, backends
+  Vulkan (RTX 3070, AMD iGPU) and CPU. Note for phase 1: the package is
+  ESM-only with no `require` export, so the worker must `import()` it.
+  Upstream touched `.github/workflows`, so the push needs
+  `gh auth refresh -s workflow` first. Waiting on the owner's go for the
+  real sync and merge into `g3code`.
 - Open for the owner: the ~6 s cold load means the first dictation after the
   10-minute idle unload takes ~7 s, not ~2 s. Options: accept, or lengthen
   the idle window (e.g. 60 min). Not blocking phase 1.
