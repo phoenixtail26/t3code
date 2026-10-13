@@ -3151,9 +3151,9 @@ const layerWsRpc = (
               Stream.concat(Stream.make(latest), changes),
             ),
           ),
-        ...(yield* makeExternalSessionsWsHandlers({ observeRpcStreamEffect, observeRpcEffect })),
-        ...(yield* makeWebPushWsHandlers({ observeRpcEffect })),
-        ...(yield* makeThreadForkWsHandlers({ observeRpcEffect })),
+        ...(yield* makeExternalSessionsWsHandlers()),
+        ...(yield* makeWebPushWsHandlers()),
+        ...(yield* makeThreadForkWsHandlers()),
       });
       return handlers;
     }),

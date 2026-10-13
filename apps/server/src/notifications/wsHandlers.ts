@@ -8,7 +8,6 @@ import * as Option from "effect/Option";
 import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
-  type EnvironmentAuthorizationError,
   WS_METHODS,
 } from "@t3tools/contracts";
 
@@ -25,16 +24,14 @@ export const WEB_PUSH_RPC_SCOPES = {
   [WS_METHODS.serverWebPushUnsubscribe]: AuthOrchestrationOperateScope,
 } as const;
 
-/**
- * ws.ts's per-connection instrumentation + authorization wrapper for
- * effect-returning RPCs. Mirrors the signature composed there from
- * RpcInstrumentation.observeRpcEffect and authorizeEffect.
- */
-export type ObserveRpcEffect = <A, E, R>(
-  method: string,
-  effect: Effect.Effect<A, E, R>,
-  traceAttributes?: Readonly<Record<string, unknown>>,
-) => Effect.Effect<A, E | EnvironmentAuthorizationError, R>;
+/** Aggregate labels to spread into observability/RpcInstrumentation.ts's RPC_AGGREGATES map. */
+export const WEB_PUSH_RPC_AGGREGATES = {
+  [WS_METHODS.serverSendTestPushNotification]: "server",
+  [WS_METHODS.serverWebPushStatus]: "server",
+  [WS_METHODS.serverWebPushGetPublicKey]: "server",
+  [WS_METHODS.serverWebPushSubscribe]: "server",
+  [WS_METHODS.serverWebPushUnsubscribe]: "server",
+} as const;
 
 type WebPushSubscribeInput = Parameters<WebPushStore.WebPushStore["Service"]["subscribe"]>[0];
 
@@ -43,62 +40,39 @@ type WebPushSubscribeInput = Parameters<WebPushStore.WebPushStore["Service"]["su
  * own service dependencies so the caller only supplies the connection-scoped
  * observe wrapper.
  */
-export const makeWebPushWsHandlers = Effect.fnUntraced(function* (deps: {
-  readonly observeRpcEffect: ObserveRpcEffect;
-}) {
-  const { observeRpcEffect } = deps;
+export const makeWebPushWsHandlers = Effect.fnUntraced(function* () {
   const webPushStore = yield* WebPushStore.WebPushStore;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
 
   return {
     [WS_METHODS.serverSendTestPushNotification]: (_input: unknown) =>
-      observeRpcEffect(
-        WS_METHODS.serverSendTestPushNotification,
-        Effect.gen(function* () {
-          const settings = yield* serverSettings.getSettings;
-          const webPush = yield* webPushStore.snapshot.pipe(
-            Effect.orElseSucceed((): WebPushStore.WebPushSnapshot => ({
-              vapidKeys: Option.none(),
-              subscriptions: [],
-            })),
-          );
-          const result = yield* sendTestPushNotification(settings.pushNotifications, webPush);
-          // Best-effort: a prune failure must not mask the test result.
-          yield* webPushStore.prune(result.goneEndpoints).pipe(Effect.ignore);
-          return { sent: result.sent, detail: result.detail };
-        }),
-        {
-          "rpc.aggregate": "server",
-        },
-      ),
-    [WS_METHODS.serverWebPushStatus]: (_input: unknown) =>
-      observeRpcEffect(
-        WS_METHODS.serverWebPushStatus,
-        webPushStore.snapshot.pipe(
-          Effect.map((snapshot) => ({
-            subscriptionCount: snapshot.subscriptions.length,
-            deviceLabels: snapshot.subscriptions.map(
-              (subscription) => subscription.deviceLabel ?? "Unknown device",
-            ),
+      Effect.gen(function* () {
+        const settings = yield* serverSettings.getSettings;
+        const webPush = yield* webPushStore.snapshot.pipe(
+          Effect.orElseSucceed((): WebPushStore.WebPushSnapshot => ({
+            vapidKeys: Option.none(),
+            subscriptions: [],
           })),
-        ),
-        { "rpc.aggregate": "server" },
+        );
+        const result = yield* sendTestPushNotification(settings.pushNotifications, webPush);
+        // Best-effort: a prune failure must not mask the test result.
+        yield* webPushStore.prune(result.goneEndpoints).pipe(Effect.ignore);
+        return { sent: result.sent, detail: result.detail };
+      }),
+    [WS_METHODS.serverWebPushStatus]: (_input: unknown) =>
+      webPushStore.snapshot.pipe(
+        Effect.map((snapshot) => ({
+          subscriptionCount: snapshot.subscriptions.length,
+          deviceLabels: snapshot.subscriptions.map(
+            (subscription) => subscription.deviceLabel ?? "Unknown device",
+          ),
+        })),
       ),
     [WS_METHODS.serverWebPushGetPublicKey]: (_input: unknown) =>
-      observeRpcEffect(
-        WS_METHODS.serverWebPushGetPublicKey,
-        webPushStore.getPublicKey.pipe(Effect.map((publicKey) => ({ publicKey }))),
-        { "rpc.aggregate": "server" },
-      ),
+      webPushStore.getPublicKey.pipe(Effect.map((publicKey) => ({ publicKey }))),
     [WS_METHODS.serverWebPushSubscribe]: (input: WebPushSubscribeInput) =>
-      observeRpcEffect(WS_METHODS.serverWebPushSubscribe, webPushStore.subscribe(input), {
-        "rpc.aggregate": "server",
-      }),
+      webPushStore.subscribe(input),
     [WS_METHODS.serverWebPushUnsubscribe]: (input: { readonly endpoint: string }) =>
-      observeRpcEffect(
-        WS_METHODS.serverWebPushUnsubscribe,
-        webPushStore.unsubscribe(input.endpoint),
-        { "rpc.aggregate": "server" },
-      ),
+      webPushStore.unsubscribe(input.endpoint),
   };
 });

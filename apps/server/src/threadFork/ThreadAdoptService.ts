@@ -17,7 +17,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -37,7 +37,7 @@ import {
   TurnItemId,
 } from "@t3tools/contracts";
 
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import {
   buildCwdIndex,
@@ -158,7 +158,7 @@ export const make = Effect.gen(function* () {
   const instanceRegistry = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
   const externalSessionsWatcher = yield* ExternalSessionsWatcher.ExternalSessionsWatcher;
   const fs = yield* FileSystem.FileSystem;
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
   const sql = yield* SqlClient.SqlClient;
 
   const adoptExternalSession = Effect.fn("threadFork.adoptExternalSession")(function* (

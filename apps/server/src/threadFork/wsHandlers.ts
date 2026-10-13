@@ -11,7 +11,6 @@ import * as Effect from "effect/Effect";
 
 import {
   AuthOrchestrationOperateScope,
-  type EnvironmentAuthorizationError,
   THREAD_FORK_WS_METHODS,
   type ThreadAdoptExternalSessionInput,
 } from "@t3tools/contracts";
@@ -23,24 +22,16 @@ export const THREAD_FORK_RPC_SCOPES = {
   [THREAD_FORK_WS_METHODS.adoptExternalSession]: AuthOrchestrationOperateScope,
 } as const;
 
-/** Same per-module copy of ws.ts's observe wrapper type as the other fork
- * handler modules (see ../externalSessions/wsHandlers.ts for why). */
-export type ObserveRpcEffect = <A, E, R>(
-  method: string,
-  effect: Effect.Effect<A, E, R>,
-  traceAttributes?: Readonly<Record<string, unknown>>,
-) => Effect.Effect<A, E | EnvironmentAuthorizationError, R>;
+/** Aggregate labels to spread into observability/RpcInstrumentation.ts's RPC_AGGREGATES map. */
+export const THREAD_FORK_RPC_AGGREGATES = {
+  [THREAD_FORK_WS_METHODS.adoptExternalSession]: "thread-fork",
+} as const;
 
-export const makeThreadForkWsHandlers = Effect.fnUntraced(function* (deps: {
-  readonly observeRpcEffect: ObserveRpcEffect;
-}) {
-  const { observeRpcEffect } = deps;
+export const makeThreadForkWsHandlers = Effect.fnUntraced(function* () {
   const adoptService = yield* ThreadAdoptService;
 
   return {
     [THREAD_FORK_WS_METHODS.adoptExternalSession]: (input: ThreadAdoptExternalSessionInput) =>
-      observeRpcEffect(THREAD_FORK_WS_METHODS.adoptExternalSession, adoptService.adopt(input), {
-        "rpc.aggregate": "thread-fork",
-      }),
+      adoptService.adopt(input),
   };
 });

@@ -276,7 +276,10 @@ function looksLikeFilePath(path: string, authoredPath: string): boolean {
   if (isWindowsAbsolutePath(path) || RELATIVE_PATH_PREFIX_PATTERN.test(path)) return true;
   if (path.startsWith("/")) return looksLikePosixFilesystemPath(authoredPath);
   if (EXTENSIONLESS_FILE_NAMES.has(path)) return true;
-  return RELATIVE_FILE_PATH_PATTERN.test(authoredPath) || RELATIVE_FILE_NAME_PATTERN.test(path);
+  // A trailing separator marks a directory (`apps/server/src/`); the relative
+  // patterns require a segment after the last slash, so test without it.
+  const authored = authoredPath.replace(/[\/]+$/, "");
+  return RELATIVE_FILE_PATH_PATTERN.test(authored) || RELATIVE_FILE_NAME_PATTERN.test(path);
 }
 
 function hasExternalScheme(path: string): boolean {

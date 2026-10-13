@@ -5,6 +5,9 @@ import * as References from "effect/References";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 
+import { EXTERNAL_SESSIONS_RPC_AGGREGATES } from "../externalSessions/wsHandlers.ts";
+import { WEB_PUSH_RPC_AGGREGATES } from "../notifications/wsHandlers.ts";
+import { THREAD_FORK_RPC_AGGREGATES } from "../threadFork/wsHandlers.ts";
 import { rpcRequestDuration, rpcRequestsTotal, withMetrics } from "./Metrics.ts";
 
 type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
@@ -208,6 +211,10 @@ const RPC_AGGREGATES = {
   [WS_METHODS.subscribeServerLifecycle]: "server",
   [WS_METHODS.subscribeAuthAccess]: "auth",
   [WS_METHODS.subscribeBackgroundPolicy]: "server",
+  // Fork RPCs (radar + Web Push + thread fork) — labels live next to their handlers.
+  ...EXTERNAL_SESSIONS_RPC_AGGREGATES,
+  ...WEB_PUSH_RPC_AGGREGATES,
+  ...THREAD_FORK_RPC_AGGREGATES,
 } as const satisfies Readonly<Record<WsRpcMethod, string>>;
 
 const RPC_SPAN_PREFIX = "ws.rpc";

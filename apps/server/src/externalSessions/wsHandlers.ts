@@ -11,7 +11,6 @@ import * as Stream from "effect/Stream";
 import {
   AuthOrchestrationReadScope,
   EXTERNAL_SESSIONS_WS_METHODS,
-  type EnvironmentAuthorizationError,
   type ExternalSessionShell,
   ExternalSessionTranscriptError,
   type ExternalSessionTranscript,
@@ -21,7 +20,7 @@ import {
   ProjectId,
 } from "@t3tools/contracts";
 
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
@@ -36,33 +35,11 @@ export const EXTERNAL_SESSIONS_RPC_SCOPES = {
   [EXTERNAL_SESSIONS_WS_METHODS.getTranscript]: AuthOrchestrationReadScope,
 } as const;
 
-/**
- * ws.ts's per-connection instrumentation + authorization wrapper for
- * stream-returning RPCs. Mirrors the signature composed there from
- * RpcInstrumentation.observeRpcStreamEffect and authorizeEffect.
- */
-export type ObserveRpcStreamEffect = <A, StreamError, StreamContext, EffectError, EffectContext>(
-  method: string,
-  effect: Effect.Effect<Stream.Stream<A, StreamError, StreamContext>, EffectError, EffectContext>,
-  traceAttributes?: Readonly<Record<string, unknown>>,
-) => Stream.Stream<
-  A,
-  StreamError | EffectError | EnvironmentAuthorizationError,
-  StreamContext | EffectContext
->;
-
-/**
- * ws.ts's per-connection instrumentation + authorization wrapper for
- * effect-returning RPCs. Mirrors the signature composed there from
- * RpcInstrumentation.observeRpcEffect and authorizeEffect. Duplicated here
- * rather than imported from `../notifications/wsHandlers.ts` — each RPC
- * handler module declares its own copy of this type (see that file).
- */
-export type ObserveRpcEffect = <A, E, R>(
-  method: string,
-  effect: Effect.Effect<A, E, R>,
-  traceAttributes?: Readonly<Record<string, unknown>>,
-) => Effect.Effect<A, E | EnvironmentAuthorizationError, R>;
+/** Aggregate labels to spread into observability/RpcInstrumentation.ts's RPC_AGGREGATES map. */
+export const EXTERNAL_SESSIONS_RPC_AGGREGATES = {
+  [EXTERNAL_SESSIONS_WS_METHODS.subscribe]: "external-sessions",
+  [EXTERNAL_SESSIONS_WS_METHODS.getTranscript]: "external-sessions",
+} as const;
 
 const textDecoder = new TextDecoder();
 
@@ -71,11 +48,7 @@ const textDecoder = new TextDecoder();
  * Yields its own service dependencies so the caller only supplies the
  * connection-scoped observe wrapper.
  */
-export const makeExternalSessionsWsHandlers = Effect.fnUntraced(function* (deps: {
-  readonly observeRpcStreamEffect: ObserveRpcStreamEffect;
-  readonly observeRpcEffect: ObserveRpcEffect;
-}) {
-  const { observeRpcStreamEffect, observeRpcEffect } = deps;
+export const makeExternalSessionsWsHandlers = Effect.fnUntraced(function* () {
   const threadManagement = yield* ThreadManagement.ThreadManagementService;
   const projectService = yield* ProjectService.ProjectService;
   const externalSessionsWatcher = yield* ExternalSessionsWatcher.ExternalSessionsWatcher;
@@ -122,12 +95,11 @@ export const makeExternalSessionsWsHandlers = Effect.fnUntraced(function* (deps:
 
   return {
     [EXTERNAL_SESSIONS_WS_METHODS.subscribe]: (_input: unknown) =>
-      observeRpcStreamEffect(
-        EXTERNAL_SESSIONS_WS_METHODS.subscribe,
+      Stream.unwrap(
         Effect.gen(function* () {
           // Windows filesystems are case-insensitive; cwd matching must
           // normalize accordingly (cwdMatching.ts).
-          const caseInsensitive = (yield* HostProcessPlatform) === "win32";
+          const caseInsensitive = (yield* HostProcess.Platform) === "win32";
 
           // A snapshot load failure must not fail the subscription: the
           // radar is best-effort, so degrade to an empty snapshot (no
@@ -256,43 +228,38 @@ export const makeExternalSessionsWsHandlers = Effect.fnUntraced(function* (deps:
             Stream.fromQueue(liveBuffer),
           );
         }),
-        { "rpc.aggregate": "external-sessions" },
       ),
     [EXTERNAL_SESSIONS_WS_METHODS.getTranscript]: (input: { readonly sessionId: string }) =>
-      observeRpcEffect(
-        EXTERNAL_SESSIONS_WS_METHODS.getTranscript,
-        Effect.gen(function* () {
-          const sessions = yield* externalSessionsWatcher.snapshot;
-          const session = sessions.find((candidate) => candidate.sessionId === input.sessionId);
-          if (session === undefined) {
-            return yield* new ExternalSessionTranscriptError({
-              reason: "not-found",
-              message: "Session is not in the radar (unknown, aged out, or filtered).",
-            });
-          }
+      Effect.gen(function* () {
+        const sessions = yield* externalSessionsWatcher.snapshot;
+        const session = sessions.find((candidate) => candidate.sessionId === input.sessionId);
+        if (session === undefined) {
+          return yield* new ExternalSessionTranscriptError({
+            reason: "not-found",
+            message: "Session is not in the radar (unknown, aged out, or filtered).",
+          });
+        }
 
-          const { text, byteCapTripped } = yield* readTranscriptFile(session.filePath).pipe(
-            Effect.mapError(
-              () =>
-                new ExternalSessionTranscriptError({
-                  reason: "read-failed",
-                  message: "Failed to read the session transcript; it may have been deleted.",
-                }),
-            ),
-          );
-          const { entries, entryCapTripped } = mapTranscriptContent(text);
+        const { text, byteCapTripped } = yield* readTranscriptFile(session.filePath).pipe(
+          Effect.mapError(
+            () =>
+              new ExternalSessionTranscriptError({
+                reason: "read-failed",
+                message: "Failed to read the session transcript; it may have been deleted.",
+              }),
+          ),
+        );
+        const { entries, entryCapTripped } = mapTranscriptContent(text);
 
-          return {
-            sessionId: session.sessionId,
-            title: session.title,
-            state: session.state,
-            lastActivityAt: session.lastActivityAt,
-            cwd: session.cwd,
-            entries,
-            truncated: byteCapTripped || entryCapTripped,
-          } satisfies ExternalSessionTranscript;
-        }),
-        { "rpc.aggregate": "external-sessions" },
-      ),
+        return {
+          sessionId: session.sessionId,
+          title: session.title,
+          state: session.state,
+          lastActivityAt: session.lastActivityAt,
+          cwd: session.cwd,
+          entries,
+          truncated: byteCapTripped || entryCapTripped,
+        } satisfies ExternalSessionTranscript;
+      }),
   };
 });

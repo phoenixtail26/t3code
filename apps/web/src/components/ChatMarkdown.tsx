@@ -133,11 +133,8 @@ import {
   resolveExternalWebLinkHost,
   showExternalLinkContextMenu,
 } from "./chat/externalLinkContextMenu";
-import {
-  hasSpecificPierreIconForFileName,
-  inferEntryKindFromPath,
-  syntheticFileNameForLanguageId,
-} from "../pierre-icons";
+import { hasSpecificPierreIconForFileName, syntheticFileNameForLanguageId } from "../pierre-icons";
+import { inferEntryKindFromPath } from "../fork/inferEntryKind";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { Button } from "./ui/button";
 import { MorphIcon } from "~/components/MorphIcon";

@@ -7,7 +7,7 @@ import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } fr
 import { useClientSettings } from "~/hooks/useSettings";
 import { cn } from "../lib/utils";
 import { readLocalApi } from "../localApi";
-import { Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/reactivity";
 import { useExternalSessionsForProject } from "../state/entities";
 import { environmentExternalSessions } from "../state/externalSessions";
 import { primaryEnvironmentIdAtom } from "../state/primaryEnvironment";

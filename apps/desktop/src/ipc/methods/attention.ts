@@ -2,7 +2,7 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
-import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -33,8 +33,8 @@ export const listNotificationSounds = DesktopIpc.makeIpcMethod({
   payload: Schema.Void,
   result: Schema.Array(NotificationSoundSchema),
   handler: Effect.fn("desktop.ipc.attention.listNotificationSounds")(function* () {
-    const platform = yield* HostProcessPlatform;
-    const env = yield* HostProcessEnvironment;
+    const platform = yield* HostProcess.Platform;
+    const env = yield* HostProcess.Environment;
     return yield* Effect.sync(() => {
       if (platform !== "win32") return [];
       const directory = systemSoundDirectory(env);
@@ -58,7 +58,7 @@ export const readNotificationSound = DesktopIpc.makeIpcMethod({
   payload: Schema.String,
   result: Schema.NullOr(Schema.String),
   handler: Effect.fn("desktop.ipc.attention.readNotificationSound")(function* (soundPath) {
-    const env = yield* HostProcessEnvironment;
+    const env = yield* HostProcess.Environment;
     return yield* Effect.sync(() => {
       // Only ever read from the OS sound directory: this channel takes a path
       // from the renderer, so without this it would be an arbitrary file-read
