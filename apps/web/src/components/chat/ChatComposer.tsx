@@ -6258,6 +6258,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     [expandMobileComposer, insertComposerText, isComposerCollapsedMobile],
   );
 
+  // Fork (dictation): inserts transcribed text at the caret. It stays in ChatComposer
+  // because it needs the editor instance and insertComposerText, which are not exported.
   const insertComposerTextAtCursor = useCallback<ChatComposerHandle["insertTextAtCursor"]>(
     (text, options) => {
       const inserted = insertComposerText(text, "cursor", options);
