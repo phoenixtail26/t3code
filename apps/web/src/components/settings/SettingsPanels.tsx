@@ -148,6 +148,7 @@ import {
   PushNotificationSettingsSection,
   useForkSettingsDirtyLabels,
 } from "./fork/ForkSettings";
+import { VoiceSettingsSection } from "../../dictation/VoiceSettingsSection";
 import {
   canOneClickUpdateProviderCandidate,
   collectProviderUpdateCandidates,
@@ -3366,6 +3367,7 @@ export function GeneralSettingsPanel() {
         />
       </SettingsSection>
 
+      <VoiceSettingsSection />
       <PushNotificationSettingsSection />
 
       <SettingsSection id="about" title="About">

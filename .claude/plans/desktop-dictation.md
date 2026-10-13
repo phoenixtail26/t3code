@@ -79,7 +79,7 @@ Server (`apps/server/src/dictation/`):
 Contracts (`packages/contracts/src/settings.ts`, fork fields only):
 
 - [x] Server settings `dictation: { fillerCleanup: boolean (default true),
-  dictionary: string (default "") }` with `Schema.optionalKey` in the patch.
+dictionary: string (default "") }` with `Schema.optionalKey` in the patch.
 
 Web (`apps/web/src/dictation/` plus one-line mounts):
 
@@ -102,9 +102,9 @@ Web (`apps/web/src/dictation/` plus one-line mounts):
 - [x] One recording at a time: starting another, or switching threads, stops the
       current one and transcribes it.
 - [x] Failure: a `toastManager` error with the server's reason; audio discarded.
-- Settings: a "Voice" section on the Chat settings page with the filler
-  toggle, the dictionary text area (one `heard => wanted` per line), model
-  state with a Remove button, and the last transcription raw vs cleaned.
+- [x] Settings: a "Voice" section on the Chat settings page with the filler
+      toggle, the dictionary text area (one `heard => wanted` per line), model
+      state with a Remove button, and the last transcription raw vs cleaned.
 
 Docs:
 

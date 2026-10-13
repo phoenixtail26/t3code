@@ -16,8 +16,10 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+const FILE = { path: "/t3/models/dictation/model.gguf", sizeBytes: 1 };
+
 function ready(): DictationStatus {
-  return { model: { state: "ready" }, last: null };
+  return { model: { state: "ready" }, file: FILE, last: null };
 }
 
 class FakeRecorder implements ActiveRecorder {
@@ -57,7 +59,11 @@ function harness(options: { readonly samples?: Int16Array; readonly maxSeconds?:
     ok: true,
     value: undefined,
   }));
-  const api: DictationApi = { status, downloadModel, transcribe };
+  const removeModel = vi.fn(async (): Promise<DictationResult<void>> => ({
+    ok: true,
+    value: undefined,
+  }));
+  const api: DictationApi = { status, downloadModel, removeModel, transcribe };
   const recorders: Array<FakeRecorder> = [];
   const startRecorder = vi.fn(async () => {
     const recorder = new FakeRecorder(options.samples);
@@ -153,6 +159,7 @@ describe("DictationController", () => {
       ok: true,
       value: {
         model: percent === 0 ? { state: "missing" } : { state: "downloading", percent },
+        file: FILE,
         last: null,
       },
     }));

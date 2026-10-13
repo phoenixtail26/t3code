@@ -122,7 +122,11 @@ describe("DictationService", () => {
         yield* installModel;
         const dictation = yield* DictationService.DictationService;
 
-        expect(yield* dictation.status).toEqual({ model: { state: "ready" }, last: null });
+        expect(yield* dictation.status).toEqual({
+          model: { state: "ready" },
+          file: { path: yield* modelFile, sizeBytes: TEST_MODEL.sizeBytes },
+          last: null,
+        });
         expect(workers.counts.spawned).toBe(0);
 
         const transcript = yield* dictation.transcribe(pcm(7));

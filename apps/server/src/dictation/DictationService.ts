@@ -225,7 +225,11 @@ const make = Effect.fn("DictationService.make")(function* (model: DictationModel
       : (yield* modelPresent)
         ? { state: "ready" }
         : { state: "missing" };
-    return { model: state, last: yield* Ref.get(last) };
+    return {
+      model: state,
+      file: { path: paths.file, sizeBytes: model.sizeBytes },
+      last: yield* Ref.get(last),
+    };
   });
 
   const cancelDownload = Effect.gen(function* () {

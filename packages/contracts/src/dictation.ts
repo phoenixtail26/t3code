@@ -36,8 +36,16 @@ export const DictationTranscript = Schema.Struct({
 });
 export type DictationTranscript = typeof DictationTranscript.Type;
 
+/** Where the model lives and how big it is, reported whether or not it is present. */
+export const DictationModelFile = Schema.Struct({
+  path: Schema.String,
+  sizeBytes: Schema.Number,
+});
+export type DictationModelFile = typeof DictationModelFile.Type;
+
 export const DictationStatus = Schema.Struct({
   model: DictationModelState,
+  file: DictationModelFile,
   /** The last transcription since the server started; kept in memory only. */
   last: Schema.NullOr(DictationTranscript),
 });

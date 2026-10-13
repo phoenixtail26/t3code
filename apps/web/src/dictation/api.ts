@@ -32,6 +32,8 @@ export interface DictationApi {
   status(environmentId: EnvironmentId): Promise<DictationResult<DictationStatus>>;
   /** Starts or joins the model download and resolves when it is complete. */
   downloadModel(environmentId: EnvironmentId): Promise<DictationResult<void>>;
+  /** Cancels any download, unloads the model and deletes the file. */
+  removeModel(environmentId: EnvironmentId): Promise<DictationResult<void>>;
   transcribe(
     environmentId: EnvironmentId,
     pcm: Uint8Array,
@@ -165,6 +167,16 @@ export const dictationApi: DictationApi = {
         method: "POST",
         path: DICTATION_MODEL_PATH,
         timeoutMs: DOWNLOAD_TIMEOUT_MS,
+      },
+      () => undefined,
+    ),
+  removeModel: (environmentId) =>
+    send(
+      {
+        environmentId,
+        method: "DELETE",
+        path: DICTATION_MODEL_PATH,
+        timeoutMs: STATUS_TIMEOUT_MS,
       },
       () => undefined,
     ),
