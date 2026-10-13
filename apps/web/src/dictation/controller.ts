@@ -9,19 +9,34 @@ import {
 } from "@t3tools/contracts";
 
 import type { DictationApi } from "./api";
+import type { DictationField } from "./field";
 import type { ActiveRecorder, StartRecorder } from "./recorder";
 import { int16ToBytes } from "./resample";
 
+/**
+ * Present when the text goes to a field outside the composer. `inline` means a
+ * DictationFieldButton sits beside that field and shows the pill itself.
+ */
+export interface ActiveField {
+  readonly target: DictationField;
+  readonly inline: boolean;
+}
+
+interface ActiveState {
+  /** The composer the recording belongs to; the environment and fallback draft come from it. */
+  readonly ownerKey: string;
+  readonly field?: ActiveField;
+}
+
 export type DictationState =
   | { readonly phase: "idle" }
-  | { readonly phase: "downloading"; readonly ownerKey: string; readonly percent: number }
-  | {
+  | (ActiveState & { readonly phase: "downloading"; readonly percent: number })
+  | (ActiveState & {
       readonly phase: "recording";
-      readonly ownerKey: string;
       readonly elapsedSeconds: number;
       readonly level: number;
-    }
-  | { readonly phase: "transcribing"; readonly ownerKey: string };
+    })
+  | (ActiveState & { readonly phase: "transcribing" });
 
 /** A mounted composer that can receive dictated text. */
 export interface DictationComposer {
@@ -36,6 +51,8 @@ export interface DictationControllerDeps {
   readonly api: DictationApi;
   readonly startRecorder: StartRecorder;
   readonly notifyError: (title: string, description: string) => void;
+  /** The focused field outside the composer when the shortcut fires; DOM-free tests inject it. */
+  readonly captureField?: () => DictationField | null;
   readonly maxSeconds?: number;
 }
 
@@ -49,11 +66,14 @@ const MIN_SAMPLES = DICTATION_SAMPLE_RATE / 4;
 interface Owner {
   readonly key: string;
   readonly composer: DictationComposer;
+  readonly field: ActiveField | null;
 }
 
 export class DictationController {
   readonly #deps: DictationControllerDeps;
   readonly #composers = new Map<string, DictationComposer>();
+  /** Fields with a DictationFieldButton beside them, so the floating pill stays away. */
+  readonly #inlineFields = new Set<HTMLElement>();
   readonly #listeners = new Set<() => void>();
   #state: DictationState = IDLE;
   #owner: Owner | null = null;
@@ -97,17 +117,43 @@ export class DictationController {
     }
   }
 
-  toggle(key: string | null = this.#newestKey()): void {
+  /** A field with its own button; while registered, that button shows the pill. */
+  registerFieldButton(element: HTMLElement): () => void {
+    this.#inlineFields.add(element);
+    return () => {
+      this.#inlineFields.delete(element);
+    };
+  }
+
+  /**
+   * Without a key (the shortcut and the palette) the focused field outside the
+   * composer is the target when there is one; a composer's button passes its
+   * key and always targets that composer.
+   */
+  toggle(key?: string): void {
     switch (this.#state.phase) {
-      case "idle":
-        if (key !== null) void this.#start(key);
+      case "idle": {
+        const field = key === undefined ? (this.#deps.captureField?.() ?? null) : null;
+        const ownerKey = key ?? this.#newestKey();
+        if (ownerKey !== null) void this.#start(ownerKey, field);
         return;
+      }
       case "recording":
         void this.stopAndTranscribe();
         return;
       default:
         return;
     }
+  }
+
+  /** A DictationFieldButton's click: dictate into its field. */
+  toggleField(field: DictationField): void {
+    if (this.#state.phase === "idle") {
+      const ownerKey = this.#newestKey();
+      if (ownerKey !== null) void this.#start(ownerKey, field);
+      return;
+    }
+    this.toggle(this.#state.ownerKey);
   }
 
   /** Escape: drop the recording without transcribing it. */
@@ -130,7 +176,11 @@ export class DictationController {
       return;
     }
     const generation = this.#generation;
-    this.#setState({ phase: "transcribing", ownerKey: owner.key });
+    this.#setState(
+      owner.field === null
+        ? { phase: "transcribing", ownerKey: owner.key }
+        : { phase: "transcribing", ownerKey: owner.key, field: owner.field },
+    );
     const result = await this.#deps.api.transcribe(owner.composer.environmentId, int16ToBytes(pcm));
     if (result.ok) {
       this.#deliver(owner, result.value.text);
@@ -146,14 +196,17 @@ export class DictationController {
     return newest;
   }
 
-  async #start(key: string): Promise<void> {
+  async #start(key: string, target: DictationField | null): Promise<void> {
     const composer = this.#composers.get(key);
     if (composer === undefined) return;
-    const owner: Owner = { key, composer };
+    const field: ActiveField | null =
+      target === null ? null : { target, inline: this.#inlineFields.has(target.element) };
+    const owner: Owner = { key, composer, field };
     const generation = ++this.#generation;
     const stale = () => this.#generation !== generation;
     const environmentId = composer.environmentId;
     this.#owner = owner;
+    const active: ActiveState = field === null ? { ownerKey: key } : { ownerKey: key, field };
 
     const status = await this.#deps.api.status(environmentId);
     if (stale()) return;
@@ -164,7 +217,7 @@ export class DictationController {
     }
     if (status.value.model.state !== "ready") {
       const initial = status.value.model.state === "downloading" ? status.value.model.percent : 0;
-      this.#setState({ phase: "downloading", ownerKey: key, percent: initial });
+      this.#setState({ ...active, phase: "downloading", percent: initial });
       const poll = setInterval(() => {
         void this.#deps.api.status(environmentId).then((polled) => {
           if (stale() || !polled.ok || this.#state.phase !== "downloading") return;
@@ -199,7 +252,7 @@ export class DictationController {
     }
     this.#recorder = recorder;
     this.#clearTimers();
-    this.#setState({ phase: "recording", ownerKey: key, elapsedSeconds: 0, level: 0 });
+    this.#setState({ ...active, phase: "recording", elapsedSeconds: 0, level: 0 });
     this.#timers.push(
       setInterval(() => {
         if (this.#state.phase !== "recording") return;
@@ -219,6 +272,9 @@ export class DictationController {
   #deliver(owner: Owner, text: string): void {
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
+    // A field that left the DOM (a popover closed) falls through to the
+    // composer, then to the thread's draft, as a composer that left does.
+    if (owner.field?.target.insertAtSelection(trimmed)) return;
     const live = this.#composers.get(owner.key);
     if (live !== undefined && live.insertAtCursor(trimmed)) return;
     if (owner.composer.appendToDraft(trimmed)) return;

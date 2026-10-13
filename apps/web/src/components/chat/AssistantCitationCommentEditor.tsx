@@ -1,6 +1,7 @@
 import { ASSISTANT_CITATION_MAX_COMMENT_LENGTH, type AssistantCitation } from "@t3tools/contracts";
 import { useState, type Ref } from "react";
 
+import { DictationFieldButton } from "../../dictation/DictationFieldButton";
 import { Button } from "../ui/button";
 
 export function AssistantCitationCommentEditor({
@@ -80,6 +81,7 @@ export function AssistantCitationCommentEditor({
         </p>
       ) : null}
       <div className="mt-2 flex items-center justify-end gap-2">
+        <DictationFieldButton />
         <Button
           variant="outline"
           size="xs"

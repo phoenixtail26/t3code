@@ -29,8 +29,9 @@ Run log, status and the full decision record: `desktop-dictation-run.md`.
 - Languages other than English: the model is English Parakeet; swapping the
   model later changes no code shape.
 - Auto-send after transcription: the user reviews and sends.
-- Dictation in PR review forms, diff comments, preview annotations: each is
-  another upstream file to keep in sync.
+- A mic button in PR review forms, diff comments, preview annotations: each
+  is another upstream file to keep in sync. The shortcut reaches them anyway
+  (see the focused-field bullet under Web).
 - Hold-to-talk: no key to hold on the phone; toggle only.
 - LLM cleanup of the transcript: rule-based cleanup first; revisit only if
   the raw vs cleaned preview shows rules are not enough.
@@ -101,6 +102,14 @@ Web (`apps/web/src/dictation/` plus one-line mounts):
       navigated away, appended to that thread's draft in the draft store.
 - [x] One recording at a time: starting another, or switching threads, stops the
       current one and transcribes it.
+- [x] The shortcut dictates into whichever textarea, text input or
+      contenteditable has focus when that is not the composer, inserting at
+      its selection (native setter plus an `input` event so controlled fields
+      see it), with the pill floating above the field's top-right corner,
+      repositioned on scroll and resize only. A field gone by completion falls
+      back to the composer, then the thread's draft. The quote-comment popover
+      gets its own mic button (`DictationFieldButton`, one-line mount in
+      `AssistantCitationCommentEditor.tsx`).
 - [x] Failure: a `toastManager` error with the server's reason; audio discarded.
 - [x] Settings: a "Voice" section on the General settings page (no Chat page exists in current upstream) with the filler
       toggle, the dictionary text area (one `heard => wanted` per line), model

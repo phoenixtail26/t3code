@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 import type { DictationApi, DictationResult } from "./api";
 import { DictationController, type DictationComposer } from "./controller";
+import type { DictationField } from "./field";
 import type { ActiveRecorder } from "./recorder";
 
 const ENV = EnvironmentId.make("env-1");
@@ -41,7 +42,13 @@ class FakeRecorder implements ActiveRecorder {
   }
 }
 
-function harness(options: { readonly samples?: Int16Array; readonly maxSeconds?: number } = {}) {
+function harness(
+  options: {
+    readonly samples?: Int16Array;
+    readonly maxSeconds?: number;
+    readonly captureField?: () => DictationField | null;
+  } = {},
+) {
   const transcribe = vi.fn(
     async (
       _env: EnvironmentId,
@@ -76,6 +83,7 @@ function harness(options: { readonly samples?: Int16Array; readonly maxSeconds?:
     startRecorder,
     notifyError: (title, description) => errors.push({ title, description }),
     ...(options.maxSeconds === undefined ? {} : { maxSeconds: options.maxSeconds }),
+    ...(options.captureField === undefined ? {} : { captureField: options.captureField }),
   });
   const phases: Array<string> = [];
   controller.subscribe(() => {
@@ -111,6 +119,20 @@ function composer(overrides: Partial<DictationComposer> = {}) {
     ...overrides,
   };
   return { entry, inserted, appended };
+}
+
+/** A field outside the composer; `attached` false stands for an element that left the DOM. */
+function field(attached = true) {
+  const inserted: Array<string> = [];
+  const entry: DictationField = {
+    element: { tagName: "TEXTAREA" } as unknown as HTMLElement,
+    insertAtSelection: (text) => {
+      if (!attached) return false;
+      inserted.push(text);
+      return true;
+    },
+  };
+  return { entry, inserted };
 }
 
 const flush = () => vi.advanceTimersByTimeAsync(0);
@@ -364,5 +386,108 @@ describe("DictationController", () => {
     await flush();
     expect(h.status).not.toHaveBeenCalled();
     expect(h.controller.getState().phase).toBe("idle");
+  });
+  describe("fields outside the composer", () => {
+    it("toggle without a key dictates into the focused field and inserts at its selection", async () => {
+      const f = field();
+      const h = harness({ captureField: () => f.entry });
+      const a = composer();
+      h.controller.registerComposer("a", a.entry);
+
+      h.controller.toggle();
+      await flush();
+      expect(h.controller.getState()).toMatchObject({
+        phase: "recording",
+        ownerKey: "a",
+        field: { target: f.entry, inline: false },
+      });
+
+      h.controller.toggle();
+      await flush();
+      expect(h.transcribe.mock.calls[0]![0]).toBe(ENV);
+      expect(f.inserted).toEqual(["hello world"]);
+      expect(a.inserted).toEqual([]);
+      expect(a.appended).toEqual([]);
+      expect(h.controller.getState()).toEqual({ phase: "idle" });
+    });
+
+    it("a composer's own button targets that composer even while a field has focus", async () => {
+      const f = field();
+      const h = harness({ captureField: () => f.entry });
+      const a = composer();
+      h.controller.registerComposer("a", a.entry);
+
+      h.controller.toggle("a");
+      await flush();
+      expect(h.controller.getState()).toEqual({
+        phase: "recording",
+        ownerKey: "a",
+        elapsedSeconds: 0,
+        level: 0,
+      });
+      h.controller.toggle("a");
+      await flush();
+      expect(a.inserted).toEqual(["hello world"]);
+      expect(f.inserted).toEqual([]);
+    });
+
+    it("falls back to the composer, then its draft, when the field has left the DOM", async () => {
+      const gone = field(false);
+      const h = harness({ captureField: () => gone.entry });
+      const live = composer();
+      h.controller.registerComposer("a", live.entry);
+      h.controller.toggle();
+      await flush();
+      h.controller.toggle();
+      await flush();
+      expect(gone.inserted).toEqual([]);
+      expect(live.inserted).toEqual(["hello world"]);
+
+      const refusing = composer({ insertAtCursor: () => false });
+      h.controller.registerComposer("b", refusing.entry);
+      h.controller.toggle();
+      await flush();
+      h.controller.toggle();
+      await flush();
+      expect(refusing.inserted).toEqual([]);
+      expect(refusing.appended).toEqual(["hello world"]);
+      expect(h.errors).toEqual([]);
+    });
+
+    it("toggleField starts for the given field and marks it inline when it has a button", async () => {
+      const f = field();
+      const h = harness({ captureField: () => null });
+      const a = composer();
+      h.controller.registerComposer("a", a.entry);
+      const unregister = h.controller.registerFieldButton(f.entry.element);
+
+      h.controller.toggleField(f.entry);
+      await flush();
+      expect(h.controller.getState()).toMatchObject({
+        phase: "recording",
+        field: { target: f.entry, inline: true },
+      });
+      h.controller.toggleField(f.entry);
+      await flush();
+      expect(f.inserted).toEqual(["hello world"]);
+
+      unregister();
+      h.controller.toggleField(f.entry);
+      await flush();
+      expect(h.controller.getState()).toMatchObject({ field: { inline: false } });
+    });
+
+    it("leaving the thread mid-dictation still finishes into the field when it is attached", async () => {
+      const f = field();
+      const h = harness({ captureField: () => f.entry });
+      const a = composer();
+      const unregister = h.controller.registerComposer("a", a.entry);
+      h.controller.toggle();
+      await flush();
+      unregister();
+      await flush();
+      expect(f.inserted).toEqual(["hello world"]);
+      expect(a.appended).toEqual([]);
+    });
   });
 });
