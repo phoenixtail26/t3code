@@ -5,14 +5,14 @@ work is going. Workers read the spec, not this.
 
 ## Status (updated 2026-10-13, overnight run on branch `dictation`)
 
-| Package                  | Runs as  | Model | Branch / worktree          | State               | Waiting on                         |
-| ------------------------ | -------- | ----- | -------------------------- | ------------------- | ---------------------------------- |
-| 0 Spike                  | subagent | Opus  | `dictation-spike`          | merged `fe1000b024` | -                                  |
-| 1 Server service         | subagent | Opus  | `dictation` @ `50a5da8098` | done, reviewed      | -                                  |
-| 2 Composer button        | subagent | Fable | `dictation` @ `4ca322a22a` | done, reviewed      | owner: mic proof (Done 1)          |
-| 3 Cleanup and dictionary | subagent | Opus  | `dictation` @ `8902213d64` | done, reviewed      | -                                  |
-| 4 Settings section       | subagent | Fable | `dictation` @ `2b8bb494ac` | in review           | owner: section screenshot (Done 3) |
-| 5 Phone pass and docs    | -        | -     | -                          | not started         | -                                  |
+| Package                  | Runs as  | Model | Branch / worktree          | State                                | Waiting on                         |
+| ------------------------ | -------- | ----- | -------------------------- | ------------------------------------ | ---------------------------------- |
+| 0 Spike                  | subagent | Opus  | `dictation-spike`          | merged `fe1000b024`                  | -                                  |
+| 1 Server service         | subagent | Opus  | `dictation` @ `50a5da8098` | done, reviewed                       | -                                  |
+| 2 Composer button        | subagent | Fable | `dictation` @ `4ca322a22a` | done, reviewed                       | owner: mic proof (Done 1)          |
+| 3 Cleanup and dictionary | subagent | Opus  | `dictation` @ `8902213d64` | done, reviewed                       | -                                  |
+| 4 Settings section       | subagent | Fable | `dictation` @ `2b8bb494ac` | done, reviewed                       | owner: section screenshot (Done 3) |
+| 5 Phone pass and docs    | subagent | Opus  | `dictation`                | building (phone pass blocked: owner) | owner: phone (Done 2)              |
 
 Overnight run 2026-10-13: branch `dictation` cut from `g3code` @
 `6d957479d1` in `~/.t3/worktrees/t3code/dictation`. Base gates green except
@@ -24,6 +24,13 @@ route and recorder code, and unit tests. Phase 6 phone pass is blocked by
 design. Each worker starts and stops its own `pnpm dev:desktop` by PID.
 
 Decisions this wave:
+
+- 2026-10-13 phase 5 review: accepted. One carry-over fix into phase 6:
+  Remove must stay enabled while a download started from the section is in
+  progress, since Remove is the way to cancel a download. Docs must say
+  "Settings > General > Voice" (not in settings search; Restore defaults
+  does not cover it, rows have reset arrows) and that the last transcription
+  preview is in memory only.
 
 - 2026-10-13 phase 5 (settings) worker choices, accepted pending review:
   no Chat settings page exists in current upstream, so the Voice section is
