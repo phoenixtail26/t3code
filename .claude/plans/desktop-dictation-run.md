@@ -8,8 +8,8 @@ work is going. Workers read the spec, not this.
 | Package                  | Runs as  | Model | Branch / worktree          | State               | Waiting on |
 | ------------------------ | -------- | ----- | -------------------------- | ------------------- | ---------- |
 | 0 Spike                  | subagent | Opus  | `dictation-spike`          | merged `fe1000b024` | -          |
-| 1 Server service         | subagent | Opus  | `dictation` @ `1d46b8db89` | in review           | -          |
-| 2 Composer button        | -        | -     | -                          | not started         | -          |
+| 1 Server service         | subagent | Opus  | `dictation` @ `50a5da8098` | done, reviewed      | -          |
+| 2 Composer button        | subagent | Fable | `dictation`                | building            | -          |
 | 3 Cleanup and dictionary | -        | -     | -                          | not started         | -          |
 | 4 Settings section       | -        | -     | -                          | not started         | -          |
 | 5 Phone pass and docs    | -        | -     | -                          | not started         | -          |
@@ -24,6 +24,11 @@ route and recorder code, and unit tests. Phase 6 phone pass is blocked by
 design. Each worker starts and stops its own `pnpm dev:desktop` by PID.
 
 Decisions this wave:
+
+- 2026-10-13 phase 2 review: sent back once (remove must cancel a pending
+  download; proof lacked percent), fixed in `50a5da8098`, re-accepted.
+  `POST /api/dictation/model` (start or join the download) is an addition to
+  the spec's route list; phase 3 uses it for first-click download.
 
 - 2026-10-13 phase 2 (server) worker choices, accepted by the orchestrator:
   `POST /api/dictation/model` starts or joins the download and waits, the
