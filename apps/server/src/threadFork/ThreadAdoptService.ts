@@ -47,14 +47,14 @@ import {
 import * as ExternalSessionsWatcher from "../externalSessions/ExternalSessionsWatcher.ts";
 import { collectOwnSessionIds } from "../externalSessions/ownSessions.ts";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
-import * as IdAllocator from "../orchestration-v2/IdAllocator.ts";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import {
   type AgentSessionThreadMessage,
   parseAgentSessionTranscript,
 } from "../project/AgentSessionScanner.ts";
 import * as ProjectService from "../project/ProjectService.ts";
-import * as ProviderInstanceRegistry from "../provider/Services/ProviderInstanceRegistry.ts";
+import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 
 export class ThreadAdoptService extends Context.Service<
   ThreadAdoptService,

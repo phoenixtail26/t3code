@@ -2,14 +2,14 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
-import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { HttpClient, HttpClientRequest } from "effect/http";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 export const DEFAULT_TAILSCALE_SERVE_PORT = 443;
 export const TAILSCALE_STATUS_TIMEOUT = Duration.millis(1_500);
@@ -254,12 +254,12 @@ export const parseTailscaleStatus = (
 export const readTailscaleStatus = Effect.gen(function* () {
   const args = ["status", "--json"];
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const hostPlatform = yield* HostProcessPlatform;
+  const hostPlatform = yield* HostProcess.Platform;
   const executable = tailscaleCommandForPlatform(hostPlatform);
   const spawnTarget = resolveTailscaleSpawnTarget(
     executable,
     hostPlatform,
-    yield* HostProcessEnvironment,
+    yield* HostProcess.Environment,
   );
   const commandContext = {
     executable,
@@ -333,12 +333,12 @@ const runTailscaleCommand = (
 ): Effect.Effect<void, TailscaleCommandError, ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const hostPlatform = yield* HostProcessPlatform;
+    const hostPlatform = yield* HostProcess.Platform;
     const executable = tailscaleCommandForPlatform(hostPlatform);
     const spawnTarget = resolveTailscaleSpawnTarget(
       executable,
       hostPlatform,
-      yield* HostProcessEnvironment,
+      yield* HostProcess.Environment,
     );
     const commandContext = {
       executable,
