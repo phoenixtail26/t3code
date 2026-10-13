@@ -5,14 +5,14 @@ work is going. Workers read the spec, not this.
 
 ## Status (updated 2026-10-13, overnight run on branch `dictation`)
 
-| Package                  | Runs as  | Model | Branch / worktree                               | State               | Waiting on |
-| ------------------------ | -------- | ----- | ----------------------------------------------- | ------------------- | ---------- |
-| 0 Spike                  | subagent | Opus  | `dictation-spike`                               | merged `fe1000b024` | -          |
-| 1 Server service         | subagent | Opus  | `dictation`, `~/.t3/worktrees/t3code/dictation` | building            | -          |
-| 2 Composer button        | -        | -     | -                                               | not started         | -          |
-| 3 Cleanup and dictionary | -        | -     | -                                               | not started         | -          |
-| 4 Settings section       | -        | -     | -                                               | not started         | -          |
-| 5 Phone pass and docs    | -        | -     | -                                               | not started         | -          |
+| Package                  | Runs as  | Model | Branch / worktree          | State               | Waiting on |
+| ------------------------ | -------- | ----- | -------------------------- | ------------------- | ---------- |
+| 0 Spike                  | subagent | Opus  | `dictation-spike`          | merged `fe1000b024` | -          |
+| 1 Server service         | subagent | Opus  | `dictation` @ `1d46b8db89` | in review           | -          |
+| 2 Composer button        | -        | -     | -                          | not started         | -          |
+| 3 Cleanup and dictionary | -        | -     | -                          | not started         | -          |
+| 4 Settings section       | -        | -     | -                          | not started         | -          |
+| 5 Phone pass and docs    | -        | -     | -                          | not started         | -          |
 
 Overnight run 2026-10-13: branch `dictation` cut from `g3code` @
 `6d957479d1` in `~/.t3/worktrees/t3code/dictation`. Base gates green except
@@ -24,6 +24,20 @@ route and recorder code, and unit tests. Phase 6 phone pass is blocked by
 design. Each worker starts and stops its own `pnpm dev:desktop` by PID.
 
 Decisions this wave:
+
+- 2026-10-13 phase 2 (server) worker choices, accepted by the orchestrator:
+  `POST /api/dictation/model` starts or joins the download and waits, the
+  client polls status for percent; `transcribe` downloads a missing model
+  first; remove waits its FIFO turn and cancels a running download; "ready"
+  means the file is at the pinned size, SHA-256 checked once at download;
+  engine backend auto (Vulkan0 here); errors are `{ error }` with
+  400/413/500/502. Measured: download 70.6 s, first transcribe 1.37 s
+  headless / 7.0 s under Electron, warm 0.06-0.13 s. Packaged `server.asar`:
+  the engine DLL cannot load from inside the archive; the worker points
+  `TRANSCRIBE_LIBRARY` at `server.asar.unpacked` and that was proven in
+  packaged Electron 44. The single-executable `__dictation-worker` path is
+  untested. Workers cannot write report files under `~/.t3/dev` (harness
+  block), so reports are inline in this thread only.
 
 - 2026-10-13: upstream drift re-checked at wave start: 3 commits behind,
   dry-run merge clean. The sync pre-condition is satisfied for building; the
