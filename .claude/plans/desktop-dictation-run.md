@@ -3,7 +3,7 @@
 Spec: `desktop-dictation.md`. This file holds status, decisions and how the
 work is going. Workers read the spec, not this.
 
-## Status (updated 2026-10-13, overnight run finished; integrator opening the draft PR)
+## Status (updated 2026-10-13, overnight run finished; draft PR #1 open)
 
 | Package                  | Runs as  | Model | Branch / worktree          | State                                   | Waiting on                         |
 | ------------------------ | -------- | ----- | -------------------------- | --------------------------------------- | ---------------------------------- |
@@ -22,6 +22,15 @@ Unattended proof substitutes: Done 1-3 need a human voice and are left for
 the owner; workers prove the same paths with a synthesized WAV through the
 route and recorder code, and unit tests. Phase 6 phone pass is blocked by
 design. Each worker starts and stops its own `pnpm dev:desktop` by PID.
+
+Overnight run result: draft PR https://github.com/phoenixtail26/t3code/pull/1
+(`dictation` -> `g3code`, branch @ `9ec2642e18`). Whole-branch gates: lint,
+typecheck (t3, web, contracts), tests 311/312 (known symlink failure), eol
+43/43. Upstream files touched: 15; `ChatComposer.tsx` is +20 lines (over the
+~10-line guideline; the handle callback needs the editor internals).
+`upstream/main` moved to `8ac4b97dae` during the run. Owner's morning list:
+Done 1 mic recording, Done 2 phone pass, Done 3 section screenshot, Done 4
+click half, in-use check of the cleanup rules, then `/build`.
 
 Decisions this wave:
 
