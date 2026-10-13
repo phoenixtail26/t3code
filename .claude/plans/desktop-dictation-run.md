@@ -7,7 +7,7 @@ work is going. Workers read the spec, not this.
 
 | Package                  | Runs as  | Model | Branch / worktree | State       | Waiting on |
 | ------------------------ | -------- | ----- | ----------------- | ----------- | ---------- |
-| 0 Spike                  | subagent | Opus  | `dictation-spike` | sent back   | -          |
+| 0 Spike                  | subagent | Opus  | `dictation-spike` | in review   | -          |
 | 1 Server service         | -        | -     | -                 | not started | -          |
 | 2 Composer button        | -        | -     | -                 | not started | -          |
 | 3 Cleanup and dictionary | -        | -     | -                 | not started | -          |
