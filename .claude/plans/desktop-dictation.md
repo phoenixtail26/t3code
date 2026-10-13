@@ -83,25 +83,25 @@ dictionary: string (default "") }` with `Schema.optionalKey` in the patch.
 
 Web (`apps/web/src/dictation/` plus one-line mounts):
 
-- Mic button beside the paperclip in the composer footer, on existing and
-  new threads, keeping editor focus on click.
-- Keybinding `composer.dictate`, default `mod+shift+u`, `when:
+- [x] Mic button beside the paperclip in the composer footer, on existing and
+      new threads, keeping editor focus on click.
+- [x] Keybinding `composer.dictate`, default `mod+shift+u`, `when:
 !terminalFocus`, listed in Keybindings settings and the command palette.
-- Recorder: `getUserMedia` mono, resampled to 16 kHz Int16 in the browser.
-- Recording pill replacing the button: level meter (a few bars from an
-  `AnalyserNode`, about 15 updates/s, only while the mic is open) and an
-  elapsed timer ticking once a second.
-- Auto-stop at 5:00 with the captured audio transcribed.
-- Escape while recording cancels and discards.
-- Transcribing state: indeterminate progress bar in the pill until the
-  response lands; the composer stays editable.
-- Download state: when status is `missing`, the first click starts the
-  download and the pill shows percent until `ready`, then records.
-- Text inserted at the cursor of the composer it started in. If the user
-  navigated away, appended to that thread's draft in the draft store.
-- One recording at a time: starting another, or switching threads, stops the
-  current one and transcribes it.
-- Failure: a `toastManager` error with the server's reason; audio discarded.
+- [x] Recorder: `getUserMedia` mono, resampled to 16 kHz Int16 in the browser.
+- [x] Recording pill replacing the button: level meter (a few bars from an
+      `AnalyserNode`, about 15 updates/s, only while the mic is open) and an
+      elapsed timer ticking once a second.
+- [x] Auto-stop at 5:00 with the captured audio transcribed.
+- [x] Escape while recording cancels and discards.
+- [x] Transcribing state: indeterminate progress bar in the pill until the
+      response lands; the composer stays editable.
+- [x] Download state: when status is `missing`, the first click starts the
+      download and the pill shows percent until `ready`, then records.
+- [x] Text inserted at the cursor of the composer it started in. If the user
+      navigated away, appended to that thread's draft in the draft store.
+- [x] One recording at a time: starting another, or switching threads, stops the
+      current one and transcribes it.
+- [x] Failure: a `toastManager` error with the server's reason; audio discarded.
 - Settings: a "Voice" section on the Chat settings page with the filler
   toggle, the dictionary text area (one `heard => wanted` per line), model
   state with a Remove button, and the last transcription raw vs cleaned.

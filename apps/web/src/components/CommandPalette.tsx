@@ -77,8 +77,10 @@ import {
   SquarePenIcon,
   SunIcon,
   TextSearchIcon,
+  MicIcon,
 } from "lucide-react";
 import { requestThreadFindOpen } from "./chat/threadFindActionBus";
+import { toggleDictation } from "../dictation/useDictation";
 import {
   useCallback,
   useDeferredValue,
@@ -1854,6 +1856,20 @@ function OpenCommandPaletteDialog(props: {
       icon: <MessageSquareDashedIcon className={ITEM_ICON_CLASS} />,
       shortcutCommand: "chat.newWithoutProject",
       run: () => startScratchThread(scratchTargetEnvironmentId),
+    });
+  }
+
+  if (activeThreadId) {
+    actionItems.push({
+      kind: "action",
+      value: "action:dictate",
+      title: "Dictate into composer",
+      searchTerms: ["dictate", "voice", "speech", "microphone", "record", "talk"],
+      icon: <MicIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "composer.dictate",
+      run: async () => {
+        toggleDictation();
+      },
     });
   }
 

@@ -354,6 +354,7 @@ import { useFallbackDefaultModelSelection } from "../hooks/useFallbackDefaultMod
 import { confirmTerminalClose, isTerminalCloseConfirmPending } from "../lib/terminalCloseConfirm";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { getTerminalFocusOwner } from "../lib/terminalFocus";
+import { toggleDictation } from "../dictation/useDictation";
 import {
   preventRepeatedTerminalCloseShortcut,
   preventTerminalCloseShortcut,
@@ -8250,6 +8251,13 @@ export default function ChatView(props: ChatViewProps) {
         event.preventDefault();
         event.stopPropagation();
         if (!event.repeat) composerRef.current?.toggleModelPicker();
+        return;
+      }
+
+      if (command === "composer.dictate") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat) toggleDictation();
         return;
       }
 

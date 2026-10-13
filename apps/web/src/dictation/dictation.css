@@ -1,0 +1,11 @@
+/* Fork feature: dictation pill. The only animation is the transcribing bar,
+   and that element exists only while a transcription is in flight, so nothing
+   repaints when the composer is idle. The element sets the animation inline. */
+@keyframes dictation-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
