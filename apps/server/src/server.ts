@@ -181,6 +181,7 @@ import {
 import * as OrchestrationHttp from "./orchestration-v2/http.ts";
 import * as ProjectHttp from "./project/http.ts";
 import { forkHttpApiLayer } from "./fork/http.ts";
+import { layerDictationRoutes } from "./dictation/http.ts";
 import * as NetService from "@t3tools/shared/Net";
 import * as RelayClient from "@t3tools/shared/relayClient";
 import { disableTailscaleServe, ensureTailscaleServe } from "@t3tools/tailscale";
@@ -724,6 +725,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerOtlpTracesProxyRoute,
     ServerHttp.layerAssetRoute,
     ServerHttp.layerAttachmentUploadRoute,
+    layerDictationRoutes,
     DeviceHubProxy.layer,
     ServerBrowserStream.routeLayer,
     ServerHttp.layerStaticAndDevRoute,

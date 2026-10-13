@@ -51,28 +51,28 @@ no custom vocabulary and no filler cleanup.
 
 Server (`apps/server/src/dictation/`):
 
-- A `DictationService` with `transcribe(pcm: Int16 16 kHz mono) => text`,
-  running the model in a child process so native crashes do not take the
-  server down.
-- FIFO queue: requests run one at a time, none rejected as busy.
-- Model download on first use into `<T3 home>/models/dictation/`, SHA-256
-  verified, with progress reported to the client; remove on request.
-- Model unload after 60 minutes idle; reload on the next request (cold
-  load measured at ~6 s in the spike).
+- [x] A `DictationService` with `transcribe(pcm: Int16 16 kHz mono) => text`,
+      running the model in a child process so native crashes do not take the
+      server down.
+- [x] FIFO queue: requests run one at a time, none rejected as busy.
+- [x] Model download on first use into `<T3 home>/models/dictation/`, SHA-256
+      verified, with progress reported to the client; remove on request.
+- [x] Model unload after 60 minutes idle; reload on the next request (cold
+      load measured at ~6 s in the spike).
 - Filler cleanup pass (um, uh, er, ah, "you know", doubled words), on by
   default, toggle in settings.
 - Dictionary pass: `heard => wanted` lines, case-insensitive, whole-word,
   applied after filler cleanup.
-- The last transcription's raw and cleaned text kept in memory for the
-  settings preview (not persisted).
-- HTTP route `POST /api/dictation/transcribe`: body is raw PCM, response is
-  `{ text, raw }`; authenticated with the orchestration-operate scope; body
-  capped at 5 minutes of audio (9.6 MB).
-- HTTP route `GET /api/dictation/status` returning model state
-  (`missing | downloading { percent } | ready`) and the last raw/cleaned
-  pair; `DELETE /api/dictation/model` to remove the model.
-- Hidden CLI subcommand `__dictation-worker` and a Vite entry so the worker
-  exists inside the packed executable.
+- [x] The last transcription's raw and cleaned text kept in memory for the
+      settings preview (not persisted).
+- [x] HTTP route `POST /api/dictation/transcribe`: body is raw PCM, response is
+      `{ text, raw }`; authenticated with the orchestration-operate scope; body
+      capped at 5 minutes of audio (9.6 MB).
+- [x] HTTP route `GET /api/dictation/status` returning model state
+      (`missing | downloading { percent } | ready`) and the last raw/cleaned
+      pair; `DELETE /api/dictation/model` to remove the model.
+- [x] Hidden CLI subcommand `__dictation-worker` and a Vite entry so the worker
+      exists inside the packed executable.
 - `transcribe-cpp` listed as an external CLI runtime package and in the
   third-party license overrides if it lacks a LICENSE file.
 

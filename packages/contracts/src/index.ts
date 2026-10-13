@@ -46,6 +46,7 @@ export * from "./threadSearch.ts";
 export * from "./threadTitle.ts";
 export * from "./claudeUsage.ts";
 export * from "./externalSessions.ts";
+export * from "./dictation.ts";
 export * from "./threadFork.ts";
 export * from "./t3ProjectFile.ts";
 export * from "./editor.ts";
