@@ -3,16 +3,25 @@
 Spec: `desktop-dictation.md`. This file holds status, decisions and how the
 work is going. Workers read the spec, not this.
 
-## Status (updated 2026-10-13, wave 1 merged)
+## Status (updated 2026-10-13, overnight run on branch `dictation`)
 
-| Package                  | Runs as  | Model | Branch / worktree | State               | Waiting on |
-| ------------------------ | -------- | ----- | ----------------- | ------------------- | ---------- |
-| 0 Spike                  | subagent | Opus  | `dictation-spike` | merged `fe1000b024` | -          |
-| 1 Server service         | -        | -     | -                 | not started         | -          |
-| 2 Composer button        | -        | -     | -                 | not started         | -          |
-| 3 Cleanup and dictionary | -        | -     | -                 | not started         | -          |
-| 4 Settings section       | -        | -     | -                 | not started         | -          |
-| 5 Phone pass and docs    | -        | -     | -                 | not started         | -          |
+| Package                  | Runs as  | Model | Branch / worktree                               | State               | Waiting on |
+| ------------------------ | -------- | ----- | ----------------------------------------------- | ------------------- | ---------- |
+| 0 Spike                  | subagent | Opus  | `dictation-spike`                               | merged `fe1000b024` | -          |
+| 1 Server service         | subagent | Opus  | `dictation`, `~/.t3/worktrees/t3code/dictation` | building            | -          |
+| 2 Composer button        | -        | -     | -                                               | not started         | -          |
+| 3 Cleanup and dictionary | -        | -     | -                                               | not started         | -          |
+| 4 Settings section       | -        | -     | -                                               | not started         | -          |
+| 5 Phone pass and docs    | -        | -     | -                                               | not started         | -          |
+
+Overnight run 2026-10-13: branch `dictation` cut from `g3code` @
+`6d957479d1` in `~/.t3/worktrees/t3code/dictation`. Base gates green except
+`serverSettings.test.ts` > "reloads when a dangling settings link gets its
+destination", a pre-existing Windows symlink failure (242/243); ignore it.
+Unattended proof substitutes: Done 1-3 need a human voice and are left for
+the owner; workers prove the same paths with a synthesized WAV through the
+route and recorder code, and unit tests. Phase 6 phone pass is blocked by
+design. Each worker starts and stops its own `pnpm dev:desktop` by PID.
 
 Decisions this wave:
 
