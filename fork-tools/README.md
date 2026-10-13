@@ -37,6 +37,19 @@ hands off to it with the exact wording (`.claude/commands/build.md`). It
 refuses to start while the app is running, restores the previous artifacts if
 the build fails, and logs to `D:\Dev\tools\t3code-rebuild.log`.
 
+A Start Menu entry **"Rebuild T3 Code (fork)"** runs it in a window that stays
+open (`-NoExit`) so the result is readable. To (re-)create it:
+
+```powershell
+$dir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+$s = (New-Object -ComObject WScript.Shell).CreateShortcut("$dir\Rebuild T3 Code (fork).lnk")
+$s.TargetPath = (Get-Command pwsh.exe).Source
+$s.Arguments = '-NoProfile -ExecutionPolicy Bypass -NoExit -File D:\Dev\t3code\fork-tools\rebuild-after-close.ps1'
+$s.WorkingDirectory = 'D:\Dev\t3code'
+$s.IconLocation = 'D:\Dev\t3code\apps\desktop\resources\icon.ico,0'
+$s.Save()
+```
+
 It replaced a hidden scheduled task ("T3Code Fork Heal After Close") that
 waited for the app to close and did the same steps unattended. That task ran
 three times and failed three different ways (a build error, then twice a

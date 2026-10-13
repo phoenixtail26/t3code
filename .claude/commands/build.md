@@ -53,11 +53,9 @@ terminal instead. It refuses to start while the app is running, installs,
 builds, and relaunches the app, printing as it goes. Give the user this
 instruction in these words:
 
-> **Close T3 Code, then run this in a terminal:**
->
-> ```
-> pwsh -NoProfile -ExecutionPolicy Bypass -File D:\Dev\t3code\fork-tools\rebuild-after-close.ps1
-> ```
+> **Close T3 Code, then open "Rebuild T3 Code (fork)" from the Start Menu**
+> (or run `pwsh -NoProfile -ExecutionPolicy Bypass -File
+D:\Dev\t3code\fork-tools\rebuild-after-close.ps1` in a terminal).
 >
 > It takes about 20 minutes and reopens the app when it finishes. If it
 > fails, it says so and leaves the previous build runnable; keep the terminal
