@@ -3,16 +3,16 @@
 Spec: `desktop-dictation.md`. This file holds status, decisions and how the
 work is going. Workers read the spec, not this.
 
-## Status (updated 2026-10-13, overnight run on branch `dictation`)
+## Status (updated 2026-10-13, overnight run finished; integrator opening the draft PR)
 
-| Package                  | Runs as  | Model | Branch / worktree          | State                              | Waiting on                         |
-| ------------------------ | -------- | ----- | -------------------------- | ---------------------------------- | ---------------------------------- |
-| 0 Spike                  | subagent | Opus  | `dictation-spike`          | merged `fe1000b024`                | -                                  |
-| 1 Server service         | subagent | Opus  | `dictation` @ `50a5da8098` | done, reviewed                     | -                                  |
-| 2 Composer button        | subagent | Fable | `dictation` @ `4ca322a22a` | done, reviewed                     | owner: mic proof (Done 1)          |
-| 3 Cleanup and dictionary | subagent | Opus  | `dictation` @ `8902213d64` | done, reviewed                     | -                                  |
-| 4 Settings section       | subagent | Fable | `dictation` @ `2b8bb494ac` | done, reviewed                     | owner: section screenshot (Done 3) |
-| 5 Phone pass and docs    | subagent | Opus  | `dictation` @ `8c3074afe6` | docs in review; phone pass blocked | owner: phone (Done 2)              |
+| Package                  | Runs as  | Model | Branch / worktree          | State                                   | Waiting on                         |
+| ------------------------ | -------- | ----- | -------------------------- | --------------------------------------- | ---------------------------------- |
+| 0 Spike                  | subagent | Opus  | `dictation-spike`          | merged `fe1000b024`                     | -                                  |
+| 1 Server service         | subagent | Opus  | `dictation` @ `50a5da8098` | done, reviewed                          | -                                  |
+| 2 Composer button        | subagent | Fable | `dictation` @ `4ca322a22a` | done, reviewed                          | owner: mic proof (Done 1)          |
+| 3 Cleanup and dictionary | subagent | Opus  | `dictation` @ `8902213d64` | done, reviewed                          | -                                  |
+| 4 Settings section       | subagent | Fable | `dictation` @ `2b8bb494ac` | done, reviewed                          | owner: section screenshot (Done 3) |
+| 5 Phone pass and docs    | subagent | Opus  | `dictation` @ `8c3074afe6` | docs done, reviewed; phone pass blocked | owner: phone (Done 2)              |
 
 Overnight run 2026-10-13: branch `dictation` cut from `g3code` @
 `6d957479d1` in `~/.t3/worktrees/t3code/dictation`. Base gates green except
@@ -24,6 +24,12 @@ route and recorder code, and unit tests. Phase 6 phone pass is blocked by
 design. Each worker starts and stops its own `pnpm dev:desktop` by PID.
 
 Decisions this wave:
+
+- 2026-10-13 phase 6 review: accepted. Non-blocking notes for the owner:
+  `modelStatus.ts` hides any download error, not only "cancelled", when
+  Remove runs mid-download; the user doc's "beside the attachment button" is
+  a layout description. Spec Settings bullet reworded from Chat page to
+  General page.
 
 - 2026-10-13 phase 6 (docs) worker choices, accepted pending review: new
   page `docs/user/dictation.md` linked once from `docs/README.md` rather

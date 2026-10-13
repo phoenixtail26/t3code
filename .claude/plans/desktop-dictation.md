@@ -102,7 +102,7 @@ Web (`apps/web/src/dictation/` plus one-line mounts):
 - [x] One recording at a time: starting another, or switching threads, stops the
       current one and transcribes it.
 - [x] Failure: a `toastManager` error with the server's reason; audio discarded.
-- [x] Settings: a "Voice" section on the Chat settings page with the filler
+- [x] Settings: a "Voice" section on the General settings page (no Chat page exists in current upstream) with the filler
       toggle, the dictionary text area (one `heard => wanted` per line), model
       state with a Remove button, and the last transcription raw vs cleaned.
 
