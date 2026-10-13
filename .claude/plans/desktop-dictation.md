@@ -57,7 +57,8 @@ Server (`apps/server/src/dictation/`):
 - FIFO queue: requests run one at a time, none rejected as busy.
 - Model download on first use into `<T3 home>/models/dictation/`, SHA-256
   verified, with progress reported to the client; remove on request.
-- Model unload after 10 minutes idle; reload on the next request.
+- Model unload after 60 minutes idle; reload on the next request (cold
+  load measured at ~6 s in the spike).
 - Filler cleanup pass (um, uh, er, ah, "you know", doubled words), on by
   default, toggle in settings.
 - Dictionary pass: `heard => wanted` lines, case-insensitive, whole-word,

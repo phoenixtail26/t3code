@@ -3,16 +3,16 @@
 Spec: `desktop-dictation.md`. This file holds status, decisions and how the
 work is going. Workers read the spec, not this.
 
-## Status (updated 2026-10-13, wave 1 waiting on owner)
+## Status (updated 2026-10-13, wave 1 merged)
 
-| Package                  | Runs as  | Model | Branch / worktree | State          | Waiting on |
-| ------------------------ | -------- | ----- | ----------------- | -------------- | ---------- |
-| 0 Spike                  | subagent | Opus  | `dictation-spike` | ready to merge | user: go   |
-| 1 Server service         | -        | -     | -                 | not started    | -          |
-| 2 Composer button        | -        | -     | -                 | not started    | -          |
-| 3 Cleanup and dictionary | -        | -     | -                 | not started    | -          |
-| 4 Settings section       | -        | -     | -                 | not started    | -          |
-| 5 Phone pass and docs    | -        | -     | -                 | not started    | -          |
+| Package                  | Runs as  | Model | Branch / worktree | State               | Waiting on |
+| ------------------------ | -------- | ----- | ----------------- | ------------------- | ---------- |
+| 0 Spike                  | subagent | Opus  | `dictation-spike` | merged `fe1000b024` | -          |
+| 1 Server service         | -        | -     | -                 | not started         | -          |
+| 2 Composer button        | -        | -     | -                 | not started         | -          |
+| 3 Cleanup and dictionary | -        | -     | -                 | not started         | -          |
+| 4 Settings section       | -        | -     | -                 | not started         | -          |
+| 5 Phone pass and docs    | -        | -     | -                 | not started         | -          |
 
 Decisions this wave:
 
@@ -42,9 +42,11 @@ Decisions this wave:
   Upstream touched `.github/workflows`, so the push needs
   `gh auth refresh -s workflow` first. Waiting on the owner's go for the
   real sync and merge into `g3code`.
-- Open for the owner: the ~6 s cold load means the first dictation after the
-  10-minute idle unload takes ~7 s, not ~2 s. Options: accept, or lengthen
-  the idle window (e.g. 60 min). Not blocking phase 1.
+- 2026-10-13: owner decided: model idle unload after 60 minutes, not 10,
+  because the ~6 s cold load would make the first dictation after a short
+  idle take ~7 s. Owner gave go; `g3code` fast-forwarded to `fe1000b024` (upstream sync
+  `e7f0b57f49` + spike). Main checkout `node_modules` is stale until the
+  next `vp i` / `/build`.
 
 ## Decisions
 
@@ -118,7 +120,8 @@ wanted`, case-insensitive, whole-word. Works with any model so Parakeet
 
 - **Model download?** No setup step; first mic click downloads (~600 MB) with
   progress on the button. Settings shows model state and a Remove button.
-- **Memory?** Model stays loaded, unloads after 10 minutes idle.
+- **Memory?** Model stays loaded, unloads after 60 minutes idle (was 10;
+  raised 2026-10-13 after the spike measured a ~6 s cold load).
 - **Concurrency?** FIFO queue, one at a time, no busy error. The user runs
   many threads so overlapping requests are a real workload; each takes ~1 s
   and loading the model per request would multiply memory. (Overturned the
