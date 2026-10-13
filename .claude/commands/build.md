@@ -15,7 +15,7 @@ desktop app runs the current `g3code` code.
   to lives in that instance's database (`~\.t3\userdata`); restarting kills it
   mid-task. Tell the user to restart when convenient — that is their call.
   The exception is a build that needs a dependency install: then the user
-  closes the app and must **not** reopen it (see the heal task below).
+  closes the app and runs the rebuild script themselves (see below).
 
 ## Build in the MAIN worktree
 
@@ -31,7 +31,7 @@ To exercise unmerged work, the documented path is a second instance from the
 worktree (`pnpm dev:desktop`, uses the isolated `~\.t3\dev` store), not this
 command.
 
-## If dependencies changed: hand off to the heal task, do not build here
+## If dependencies changed: hand off to the user, do not build here
 
 The daily driver runs in place out of this worktree's `node_modules` and holds
 `electron.exe` locked. When the lockfile has moved since the last install
@@ -44,26 +44,27 @@ The daily driver runs in place out of this worktree's `node_modules` and holds
 ```
 
 `deps current`, or the app is not running: continue with the command below.
-`install needed` while the app is running: do **not** run the build. Start the
-heal task instead. It waits for the app to close, installs, builds, and
-reopens the app by itself:
+`install needed` while the app is running: do **not** run the build and do not
+touch `node_modules`. Nothing can be automated from inside the app here: the
+install needs the app closed, and every unattended attempt so far (a hidden
+scheduled task that waited for the app to close) failed a different way with
+nobody watching. The user runs `fork-tools/rebuild-after-close.ps1` in a
+terminal instead. It refuses to start while the app is running, installs,
+builds, and relaunches the app, printing as it goes. Give the user this
+instruction in these words:
 
-```powershell
-schtasks /create /f /sc once /st 00:00 /tn "T3Code Fork Heal After Close" /tr "pwsh -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File D:\Dev\t3code\fork-tools\heal-after-close.ps1"
-schtasks /run /tn "T3Code Fork Heal After Close"
-```
-
-Then give the user this instruction in these words. "Restart when convenient"
-is wrong here: on 2026-10-03 the app was reopened seconds after closing, the
-install died, and the app could not start at all afterwards.
-
-> **Close T3 Code and leave it closed. Do not open it yourself.** It reopens
-> on its own when the update finishes, usually 20 to 30 minutes later. Opening
-> it early stalls or breaks the update. If it has not come back after 45
-> minutes, check `D:\Dev\tools\t3code-heal.log` before launching anything.
+> **Close T3 Code, then run this in a terminal:**
+>
+> ```
+> pwsh -NoProfile -ExecutionPolicy Bypass -File D:\Dev\t3code\fork-tools\rebuild-after-close.ps1
+> ```
+>
+> It takes about 20 minutes and reopens the app when it finishes. If it
+> fails, it says so and leaves the previous build runnable; keep the terminal
+> output and the log at `D:\Dev\tools\t3code-rebuild.log` for the next session.
 
 Report that nothing has been rebuilt yet and stop; the rest of this command
-does not apply. The script deletes its own task when it finishes.
+does not apply.
 
 ## The command
 
@@ -146,5 +147,5 @@ things instead of rebuilding:
 
 State what was rebuilt (with the before/after timestamps as evidence), which
 branch was built, and remind the user the change is live only after they
-restart the app themselves. After a heal-task handoff the reminder is the
-opposite: close the app and do not reopen it, in the exact words above.
+restart the app themselves. After a rebuild-script handoff the reminder is
+instead the instruction block above, in those words.

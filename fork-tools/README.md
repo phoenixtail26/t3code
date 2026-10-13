@@ -28,12 +28,18 @@ The task runs against the MAIN worktree on purpose: fetch and merge-tree are
 read-only for the working tree, and remote-tracking refs are shared across
 all worktrees, so every agent's drift check benefits from the fresh fetch.
 
-## heal-after-close.ps1
+## rebuild-after-close.ps1
 
-One-shot install, build and relaunch of the daily driver for builds that need
-a dependency install, which cannot run while the app holds `electron.exe`.
-`/build` registers and starts it (`.claude/commands/build.md` has the commands
-and the wording to give the user); it waits for the app to close, and the app
-must stay closed until the script reopens it. Logs to
-`D:\Dev\tools\t3code-heal.log` and deletes its own task
-(**"T3Code Fork Heal After Close"**) when done.
+Foreground install, build and relaunch of the daily driver for builds that
+need a dependency install, which cannot run while the app holds
+`electron.exe`. The user closes the app and runs it in a terminal; `/build`
+hands off to it with the exact wording (`.claude/commands/build.md`). It
+refuses to start while the app is running, restores the previous artifacts if
+the build fails, and logs to `D:\Dev\tools\t3code-rebuild.log`.
+
+It replaced a hidden scheduled task ("T3Code Fork Heal After Close") that
+waited for the app to close and did the same steps unattended. That task ran
+three times and failed three different ways (a build error, then twice a
+`pnpm install` that hung after the build scripts), each needing a person to
+read the output. A terminal the user is watching is the fix; nothing from
+inside the app can be.
