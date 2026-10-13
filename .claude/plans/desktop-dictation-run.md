@@ -5,14 +5,14 @@ work is going. Workers read the spec, not this.
 
 ## Status (updated 2026-10-13, wave 1 running)
 
-| Package                  | Runs as  | Model | Branch / worktree | State       | Waiting on |
-| ------------------------ | -------- | ----- | ----------------- | ----------- | ---------- |
-| 0 Spike                  | subagent | Opus  | `dictation-spike` | in review   | -          |
-| 1 Server service         | -        | -     | -                 | not started | -          |
-| 2 Composer button        | -        | -     | -                 | not started | -          |
-| 3 Cleanup and dictionary | -        | -     | -                 | not started | -          |
-| 4 Settings section       | -        | -     | -                 | not started | -          |
-| 5 Phone pass and docs    | -        | -     | -                 | not started | -          |
+| Package                  | Runs as  | Model | Branch / worktree | State          | Waiting on |
+| ------------------------ | -------- | ----- | ----------------- | -------------- | ---------- |
+| 0 Spike                  | subagent | Opus  | `dictation-spike` | ready to merge | user: go   |
+| 1 Server service         | -        | -     | -                 | not started    | -          |
+| 2 Composer button        | -        | -     | -                 | not started    | -          |
+| 3 Cleanup and dictionary | -        | -     | -                 | not started    | -          |
+| 4 Settings section       | -        | -     | -                 | not started    | -          |
+| 5 Phone pass and docs    | -        | -     | -                 | not started    | -          |
 
 Decisions this wave:
 
@@ -28,6 +28,10 @@ Decisions this wave:
   list updated. The full desktop artifact could not be built in the worktree
   (Rust missing); only the external staging and license manifest were
   proven.
+- 2026-10-13: review accepted the spike branch (`8c8917f167`) with no
+  changes. Phase 1 verification item added: prove the engine loads from
+  inside the packaged `server.asar` (`ELECTRON_RUN_AS_NODE`); the spike
+  only proved the files are staged.
 - Open for the owner: the ~6 s cold load means the first dictation after the
   10-minute idle unload takes ~7 s, not ~2 s. Options: accept, or lengthen
   the idle window (e.g. 60 min). Not blocking phase 1.
