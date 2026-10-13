@@ -3,19 +3,23 @@
 Spec: `desktop-dictation.md`. This file holds status, decisions and how the
 work is going. Workers read the spec, not this.
 
-## Status
+## Status (updated 2026-10-13, wave 1 running)
 
-| Phase                    | State       | Notes                                         |
-| ------------------------ | ----------- | --------------------------------------------- |
-| 0 Spike                  | not started | `transcribe-cpp` on Windows, license manifest |
-| 1 Server service         | not started |                                               |
-| 2 Composer button        | not started |                                               |
-| 3 Cleanup and dictionary | not started |                                               |
-| 4 Settings page          | not started |                                               |
-| 5 Docs                   | not started |                                               |
+| Package                  | Runs as  | Model | Branch / worktree | State       | Waiting on |
+| ------------------------ | -------- | ----- | ----------------- | ----------- | ---------- |
+| 0 Spike                  | subagent | Opus  | `dictation-spike` | building    | -          |
+| 1 Server service         | -        | -     | -                 | not started | -          |
+| 2 Composer button        | -        | -     | -                 | not started | -          |
+| 3 Cleanup and dictionary | -        | -     | -                 | not started | -          |
+| 4 Settings section       | -        | -     | -                 | not started | -          |
+| 5 Phone pass and docs    | -        | -     | -                 | not started | -          |
 
-Pre-conditions: run `/sync-upstream` first; g3code was 839 commits behind
-`upstream/main` on 2026-10-13.
+Decisions this wave:
+
+- 2026-10-13: upstream drift re-checked at wave start: 3 commits behind,
+  dry-run merge clean. The sync pre-condition is satisfied for building; the
+  integrator runs `/sync-upstream` before merging the spike branch so the
+  worker's base stays fixed while it builds.
 
 ## Decisions
 
