@@ -7,7 +7,7 @@ work is going. Workers read the spec, not this.
 
 | Package                  | Runs as  | Model | Branch / worktree | State       | Waiting on |
 | ------------------------ | -------- | ----- | ----------------- | ----------- | ---------- |
-| 0 Spike                  | subagent | Opus  | `dictation-spike` | building    | -          |
+| 0 Spike                  | subagent | Opus  | `dictation-spike` | sent back   | -          |
 | 1 Server service         | -        | -     | -                 | not started | -          |
 | 2 Composer button        | -        | -     | -                 | not started | -          |
 | 3 Cleanup and dictionary | -        | -     | -                 | not started | -          |
@@ -20,6 +20,17 @@ Decisions this wave:
   dry-run merge clean. The sync pre-condition is satisfied for building; the
   integrator runs `/sync-upstream` before merging the spike branch so the
   worker's base stays fixed while it builds.
+- 2026-10-13: spike verdict: transcribe-cpp works on this machine (exact
+  transcript; warm transcribe 89 ms Vulkan, 255 ms CPU; cold load ~6 s).
+  Approved for the spike branch: `allowBuilds: koffi: false` in
+  `pnpm-workspace.yaml`; `koffi` and `@koromix/` added to the external
+  CLI prefixes with `transcribe-cpp`; the external-packages test expected
+  list updated. The full desktop artifact could not be built in the worktree
+  (Rust missing); only the external staging and license manifest were
+  proven.
+- Open for the owner: the ~6 s cold load means the first dictation after the
+  10-minute idle unload takes ~7 s, not ~2 s. Options: accept, or lengthen
+  the idle window (e.g. 60 min). Not blocking phase 1.
 
 ## Decisions
 
