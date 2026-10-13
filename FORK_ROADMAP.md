@@ -509,12 +509,33 @@ delivers both surfaces the owner asked for at once.
   the new thread rather than a draft, which was seen once under synthetic
   events and never reproduced by hand.
 
-## 11. Desktop dictation (voice-to-text in the composer)
+## 11. Desktop dictation (voice-to-text in the composer) — BUILT on branch `dictation`, pending owner checks
 
-Decided 2026-10-13, not started. Spec with the full decision list:
-`.claude/plans/desktop-dictation.md`. Local transcription on the environment
-server (`transcribe-cpp`, English Parakeet), mic button + shortcut in the web
-composer so desktop and the phone PWA share one implementation, batch (no
-streaming), rule-based filler cleanup and a global correction dictionary in
-Settings → Voice. Upstream's #14882 was rejected as too large to carry across
-syncs; if upstream ships dictation we delete ours and take theirs.
+Spec: `.claude/plans/desktop-dictation.md`; decisions, status and review notes:
+`.claude/plans/desktop-dictation-run.md`. Local transcription on the
+environment server (`transcribe-cpp`, English Parakeet), so desktop and the
+phone PWA share one web implementation. If upstream ships dictation we delete
+ours and take theirs (upstream #14882 was rejected as too large to carry).
+
+Built (phases 1-6, overnight 2026-10-13): server service in a child process
+with a FIFO queue, model download on first use into
+`<T3 home>/models/dictation/` (SHA-256 checked, cancellable), 60-minute idle
+unload, routes under `/api/dictation/`; mic button, `mod+shift+u`, and a
+command palette item in the composer with level meter, 5-minute cap, Escape to
+cancel, insertion at the cursor or into the originating thread's draft;
+rule-based filler cleanup and a `heard => wanted` dictionary; a Voice section
+on Settings → General (toggle, dictionary, model Download/Remove, last raw vs
+cleaned transcription); user doc `docs/user/dictation.md`.
+
+Pending the owner before merging to `g3code`:
+
+- Mic proof (spec Done 1): dictate a sentence in `pnpm dev:desktop`; the
+  unattended run only proved the path with a synthesized WAV.
+- Phone pass (Done 2): dictate from the Pixel PWA over Tailscale HTTPS.
+- Done 3 with a term Parakeet actually mishears (it already writes "tee
+  three" as "T3").
+- In-use validation of the cleanup rules: "apples, uh, pears" loses both
+  commas; "bye bye", "no no", "very very" collapse as doubles; dictionary
+  entries apply in order. An LLM pass is the fallback if rules fall short.
+- Untested: the single-executable `__dictation-worker` path (packaged Electron
+  `server.asar` was proven).

@@ -126,7 +126,7 @@ export function VoiceSettingsSection() {
             <Button
               size="sm"
               variant="outline"
-              disabled={model.busy}
+              disabled={model.downloading || model.removing}
               onClick={() => void store.downloadModel(environmentId)}
             >
               Download
@@ -135,7 +135,7 @@ export function VoiceSettingsSection() {
             <Button
               size="sm"
               variant="destructive-outline"
-              disabled={model.busy}
+              disabled={model.removing}
               onClick={() => setConfirmRemove(true)}
             >
               Remove

@@ -200,6 +200,28 @@ describe("VoiceSettingsSection", () => {
     expect(() => buttonNamed("Download")).not.toThrow();
   });
 
+  it("keeps Remove available during a download started here, so it can cancel it", async () => {
+    h.status.mockResolvedValue(statusOf({ state: "missing" }));
+    h.downloadModel.mockImplementation(() => new Promise(() => {}));
+    await render();
+    h.status.mockResolvedValue(statusOf({ state: "downloading", percent: 12 }));
+    await click(buttonNamed("Download"));
+    expect(h.downloadModel).toHaveBeenCalledWith(ENV);
+    expect(document.body.textContent).toContain("12%");
+
+    const remove = buttonNamed("Remove");
+    expect(remove.disabled).toBe(false);
+    await click(remove);
+    const confirm = Array.from(document.querySelectorAll("[role=alertdialog] button")).find(
+      (button) => button.textContent?.trim() === "Remove",
+    ) as HTMLButtonElement | undefined;
+    if (!confirm) throw new Error("No confirm button in the dialog");
+    h.removeModel.mockImplementation(() => new Promise(() => {}));
+    await click(confirm);
+    expect(h.removeModel).toHaveBeenCalledWith(ENV);
+    expect(buttonNamed("Remove").disabled).toBe(true);
+  });
+
   it("re-reads the status when a dictation finishes", async () => {
     await render();
     expect(h.status).toHaveBeenCalledTimes(1);

@@ -11,8 +11,10 @@ export interface DictationModelStatusState {
   readonly status: DictationStatus | null;
   /** The last status read or remove/download request that failed, cleared by the next one that succeeds. */
   readonly error: string | null;
-  /** A remove or download request is in flight. */
-  readonly busy: boolean;
+  /** A download request from this store is in flight. */
+  readonly downloading: boolean;
+  /** A remove request is in flight. Remove stays available while downloading, since it cancels the download. */
+  readonly removing: boolean;
 }
 
 export interface DictationModelStatusDeps {
@@ -20,7 +22,12 @@ export interface DictationModelStatusDeps {
   readonly pollMs?: number;
 }
 
-const INITIAL: DictationModelStatusState = { status: null, error: null, busy: false };
+const INITIAL: DictationModelStatusState = {
+  status: null,
+  error: null,
+  downloading: false,
+  removing: false,
+};
 const DEFAULT_POLL_MS = 1_000;
 
 export class DictationModelStatusStore {
@@ -32,6 +39,7 @@ export class DictationModelStatusStore {
   // A failed remove must outlive the status re-read that follows it.
   #actionError: string | null = null;
   #statusError: string | null = null;
+  #cancelledDownload = false;
 
   constructor(deps: DictationModelStatusDeps) {
     this.#deps = deps;
@@ -61,8 +69,16 @@ export class DictationModelStatusStore {
     if (result.value.model.state === "downloading") this.#schedule(environmentId);
   }
 
+  /** Deletes the model, cancelling a download in progress. */
   async removeModel(environmentId: EnvironmentId): Promise<void> {
-    await this.#request(environmentId, () => this.#deps.api.removeModel(environmentId));
+    if (this.#state.removing) return;
+    this.#cancelledDownload = this.#state.downloading;
+    this.#setState({ ...this.#state, removing: true });
+    const result = await this.#deps.api.removeModel(environmentId);
+    if (this.#disposed) return;
+    this.#actionError = result.ok ? null : result.error;
+    this.#setState({ ...this.#state, removing: false, error: this.#error() });
+    await this.refresh(environmentId);
   }
 
   /**
@@ -70,29 +86,24 @@ export class DictationModelStatusStore {
    * re-read right away to pick up the `downloading` state and its polling.
    */
   async downloadModel(environmentId: EnvironmentId): Promise<void> {
-    await this.#request(environmentId, () => {
-      const request = this.#deps.api.downloadModel(environmentId);
-      void this.refresh(environmentId);
-      return request;
-    });
+    if (this.#state.downloading || this.#state.removing) return;
+    this.#cancelledDownload = false;
+    this.#setState({ ...this.#state, downloading: true });
+    const request = this.#deps.api.downloadModel(environmentId);
+    void this.refresh(environmentId);
+    const result = await request;
+    if (this.#disposed) return;
+    // A remove issued mid-download makes the route fail as cancelled; that
+    // is the outcome the user asked for, not an error to show.
+    if (!this.#cancelledDownload) this.#actionError = result.ok ? null : result.error;
+    this.#cancelledDownload = false;
+    this.#setState({ ...this.#state, downloading: false, error: this.#error() });
+    await this.refresh(environmentId);
   }
 
   dispose(): void {
     this.#disposed = true;
     this.#clearPoll();
-  }
-
-  async #request(
-    environmentId: EnvironmentId,
-    send: () => Promise<{ readonly ok: true } | { readonly ok: false; readonly error: string }>,
-  ): Promise<void> {
-    if (this.#state.busy) return;
-    this.#setState({ ...this.#state, busy: true });
-    const result = await send();
-    if (this.#disposed) return;
-    this.#actionError = result.ok ? null : result.error;
-    this.#setState({ ...this.#state, busy: false, error: this.#error() });
-    await this.refresh(environmentId);
   }
 
   #error(): string | null {

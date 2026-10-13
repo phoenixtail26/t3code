@@ -89,10 +89,10 @@ describe("DictationModelStatusStore", () => {
     const h = harness([status({ state: "ready" }), status({ state: "missing" })]);
     await h.store.refresh(ENV);
     const removal = h.store.removeModel(ENV);
-    expect(h.store.getState().busy).toBe(true);
+    expect(h.store.getState().removing).toBe(true);
     await removal;
     expect(h.removeModel).toHaveBeenCalledWith(ENV);
-    expect(h.store.getState()).toMatchObject({ busy: false, error: null });
+    expect(h.store.getState()).toMatchObject({ removing: false, error: null });
     expect(h.store.getState().status?.model).toEqual({ state: "missing" });
   });
 
@@ -125,5 +125,26 @@ describe("DictationModelStatusStore", () => {
     expect(h.removeModel).toHaveBeenCalledTimes(1);
     finish({ ok: true, value: undefined });
     await first;
+  });
+
+  it("removes during its own download and does not report the cancellation", async () => {
+    const h = harness([status({ state: "downloading", percent: 5 }), status({ state: "missing" })]);
+    let finishDownload!: (value: DictationResult<void>) => void;
+    h.downloadModel.mockImplementationOnce(
+      () =>
+        new Promise<DictationResult<void>>((resolve) => {
+          finishDownload = resolve;
+        }),
+    );
+    const download = h.store.downloadModel(ENV);
+    await flush();
+    expect(h.store.getState()).toMatchObject({ downloading: true, removing: false });
+
+    const removal = h.store.removeModel(ENV);
+    expect(h.removeModel).toHaveBeenCalledWith(ENV);
+    finishDownload({ ok: false, error: "The dictation model download was cancelled." });
+    await Promise.all([download, removal]);
+    expect(h.store.getState()).toMatchObject({ downloading: false, removing: false, error: null });
+    expect(h.store.getState().status?.model).toEqual({ state: "missing" });
   });
 });

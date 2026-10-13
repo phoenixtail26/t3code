@@ -108,8 +108,8 @@ Web (`apps/web/src/dictation/` plus one-line mounts):
 
 Docs:
 
-- `docs/user/` section: how to start, the shortcut, the dictionary format,
-  where the model lives and how to remove it.
+- [x] `docs/user/` section: how to start, the shortcut, the dictionary format,
+      where the model lives and how to remove it.
 
 ## Architecture
 
