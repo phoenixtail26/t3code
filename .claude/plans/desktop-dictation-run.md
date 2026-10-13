@@ -34,6 +34,17 @@ click half, in-use check of the cleanup rules, then `/build`.
 
 Decisions this wave:
 
+- 2026-10-14 owner, after trying the branch: "it all feels good" but dictation
+  is also needed in the quote-comment popover (the "Add an optional
+  comment..." box on a quoted reply). Decision: the `composer.dictate`
+  shortcut dictates into whichever text field has focus (textarea, input or
+  contenteditable) when that is not the composer, inserting at its
+  selection, with a small floating pill anchored to the field for feedback;
+  the quote-comment popover also gets the mic button by a one-line mount.
+  The spec's "other inputs out of scope" line is narrowed to PR review
+  forms, diff comments and preview annotations without a button; the
+  shortcut path covers them for free.
+
 - 2026-10-13 phase 6 review: accepted. Non-blocking notes for the owner:
   `modelStatus.ts` hides any download error, not only "cancelled", when
   Remove runs mid-download; the user doc's "beside the attachment button" is
