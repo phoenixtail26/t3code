@@ -13,6 +13,7 @@ work is going. Workers read the spec, not this.
 | 3 Cleanup and dictionary | subagent | Opus  | `dictation` @ `8902213d64` | done, reviewed                          | -                                  |
 | 4 Settings section       | subagent | Fable | `dictation` @ `2b8bb494ac` | done, reviewed                          | owner: section screenshot (Done 3) |
 | 5 Phone pass and docs    | subagent | Opus  | `dictation` @ `8c3074afe6` | docs done, reviewed; phone pass blocked | owner: phone (Done 2)              |
+| 6 Any focused field      | subagent | Fable | `dictation` @ `93aa84a117` | done, reviewed                          | owner: try the quote-comment box   |
 
 Overnight run 2026-10-13: branch `dictation` cut from `g3code` @
 `6d957479d1` in `~/.t3/worktrees/t3code/dictation`. Base gates green except
@@ -33,6 +34,13 @@ Done 1 mic recording, Done 2 phone pass, Done 3 section screenshot, Done 4
 click half, in-use check of the cleanup rules, then `/build`.
 
 Decisions this wave:
+
+- 2026-10-14 phase 7 review: accepted. Keybinding reaches the popover
+  textarea via ChatView's capture-phase window listener. Two notes for the
+  owner's try: after insertion the field is refocused, so focus jumps back if
+  you moved to the composer while transcribing; the native value setter
+  ignores `maxLength` on the comment box (the editor's own limit handling
+  covers it).
 
 - 2026-10-14 owner, after trying the branch: "it all feels good" but dictation
   is also needed in the quote-comment popover (the "Add an optional
