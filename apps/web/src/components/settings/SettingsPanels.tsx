@@ -146,6 +146,7 @@ import {
   NotificationSoundRow,
   ExternalSessionsSettingRow,
   PushNotificationSettingsSection,
+  StaleClaudeCompactionSettingRow,
   useForkSettingsDirtyLabels,
 } from "./fork/ForkSettings";
 import {
@@ -2905,6 +2906,8 @@ export function GeneralSettingsPanel() {
             </Select>
           }
         />
+
+        <StaleClaudeCompactionSettingRow />
 
         <SettingsRow
           serverScoped
