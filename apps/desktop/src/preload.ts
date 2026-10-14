@@ -11,6 +11,7 @@ import { exposeClerkBridge } from "@clerk/electron/preload";
 import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
 
 import * as IpcChannels from "./ipc/channels.ts";
+import { makeDictationPreloadBridge } from "./dictation/preload.ts";
 import { mergeLegacyLocalStorage } from "./legacyLocalStorageMerge.ts";
 
 const SNAP_SHOT_EVENT_TYPES = new Set([
@@ -226,6 +227,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.removeListener(IpcChannels.MENU_ACTION_CHANNEL, wrappedListener);
     };
   },
+  dictation: makeDictationPreloadBridge(ipcRenderer),
   onSnapShotEvent: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, event: unknown) => {
       if (!isSnapShotEvent(event)) return;

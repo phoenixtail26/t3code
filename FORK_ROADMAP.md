@@ -520,7 +520,7 @@ ours and take theirs (upstream #14882 was rejected as too large to carry).
 Built (phases 1-6, overnight 2026-10-13): server service in a child process
 with a FIFO queue, model download on first use into
 `<T3 home>/models/dictation/` (SHA-256 checked, cancellable), 60-minute idle
-unload, routes under `/api/dictation/`; mic button, `mod+shift+u`, and a
+unload, routes under `/api/dictation/`; mic button, `ctrl+alt+shift+u`, and a
 command palette item in the composer with level meter, 5-minute cap, Escape to
 cancel, insertion at the cursor or into the originating thread's draft;
 rule-based filler cleanup and a `heard => wanted` dictionary; a Voice section

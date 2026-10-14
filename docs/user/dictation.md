@@ -8,13 +8,18 @@ Dictation is English only.
 ## Dictate a prompt
 
 Start and stop recording with the microphone button beside the attachment
-button, with `mod+shift+u`, or with **Dictate into composer** in the command
-palette. Press `Escape` while recording to discard it. Recordings stop on their
+button, with `ctrl+alt+shift+u`, or with **Dictate into composer** in the
+command palette. Press `Escape` while recording to discard it. Recordings stop on their
 own after 5 minutes and are transcribed.
 
 If you switch threads or start dictating in another composer while recording,
 the current recording stops and its text goes into the thread where you started
 it.
+
+On desktop the shortcut also stops a recording while you are in another app,
+and the text lands where the dictation started. Turn this off with **Stop
+dictation from other apps** in **Settings → General → Voice** if another app
+needs that key; the shortcut then works only inside T3 Code.
 
 A browser only allows the microphone over HTTPS or on `localhost`. To dictate
 from a phone, open T3 Code over an HTTPS address, such as a Tailscale HTTPS

@@ -113,7 +113,7 @@ Web (`apps/web/src/dictation/` plus one-line mounts):
       gets its own mic button (`DictationFieldButton`, one-line mount in
       `AssistantCitationCommentEditor.tsx`).
 - [x] Failure: a `toastManager` error with the server's reason; audio discarded.
-- [ ] Desktop global stop: the Electron main process registers the
+- [x] Desktop global stop: the Electron main process registers the
       `composer.dictate` chord as a system-wide accelerator (`globalShortcut`,
       the way `DesktopSnapShot.ts` registers the snapshot shortcut) so pressing
       it while another app has focus stops a running dictation and transcribes

@@ -14,6 +14,7 @@ import { ExecutionEnvironmentDescriptor } from "./environment.ts";
 import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from "./settings.ts";
 import type { EditorId } from "./editor.ts";
 import type { PreviewForwardedShortcut } from "./keybindings.ts";
+import type { DesktopDictationBridge } from "./dictation.ts";
 
 import type {
   DesktopAppActivationRequest,
@@ -1254,6 +1255,8 @@ export interface DesktopBridge {
   pasteAsText?: () => Promise<void>;
   onMenuAction: (listener: (action: string) => void) => () => void;
   onSnapShotEvent?: (listener: (event: DesktopSnapShotEvent) => void) => () => void;
+  /** Fork: dictation global stop; absent on web and older desktop builds. */
+  dictation?: DesktopDictationBridge;
   /**
    * Quit-confirmation hint pushes. Optional: older desktop builds never emit
    * them.

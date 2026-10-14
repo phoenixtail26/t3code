@@ -36,6 +36,15 @@ click half, in-use check of the cleanup rules, then `/build`.
 
 Decisions this wave:
 
+- 2026-10-14 phase 8 worker choice, pending review: the main process does
+  not read keybindings itself (overrides are server settings it never sees).
+  The renderer resolves the effective `composer.dictate` chord and the Voice
+  toggle and pushes them over one invoke (`desktop:set-dictation-global-stop`,
+  null releases the key); presses come back over
+  `desktop:dictation-global-stop`. The toggle is the client setting
+  `dictationGlobalStop` (`Schema.optionalKey`, absent means on). A chord with
+  no modifier is refused with a message rather than registered.
+
 - 2026-10-14 owner: PR #1 merged into `g3code` (fast-forward to
   `4729823094`). Owner asked for the shortcut to work while another app has
   focus, to stop a dictation started in T3 Code and continued while working

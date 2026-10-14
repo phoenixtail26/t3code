@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import type { KeybindingShortcut } from "./keybindings.ts";
 
 /**
  * Dictation: the client records 16 kHz mono Int16 PCM and posts the raw bytes
@@ -67,3 +68,25 @@ export const DictationSettingsPatch = Schema.Struct({
   fillerCleanup: Schema.optionalKey(Schema.Boolean),
   dictionary: Schema.optionalKey(Schema.String),
 });
+
+/**
+ * Desktop only: the main process holds the `composer.dictate` chord as a
+ * system-wide accelerator so a recording can be stopped from another app. The
+ * renderer owns the chord (keybindings are server settings) and the toggle
+ * (a client setting), and pushes the shortcut to register, or null to release
+ * it; the result says whether the OS granted the key.
+ */
+export const DesktopDictationGlobalStopResult = Schema.Struct({
+  registered: Schema.Boolean,
+  /** Why the key is not held, for the Voice section; null when registered or released. */
+  message: Schema.NullOr(Schema.String),
+});
+export type DesktopDictationGlobalStopResult = typeof DesktopDictationGlobalStopResult.Type;
+
+export interface DesktopDictationBridge {
+  readonly setGlobalStop: (
+    shortcut: KeybindingShortcut | null,
+  ) => Promise<DesktopDictationGlobalStopResult>;
+  /** Fires when the accelerator is pressed while registered, whichever app has focus. */
+  readonly onGlobalStop: (listener: () => void) => () => void;
+}

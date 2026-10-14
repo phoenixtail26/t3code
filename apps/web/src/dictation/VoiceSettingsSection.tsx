@@ -23,10 +23,16 @@ import {
 import { Button } from "../components/ui/button";
 import { Switch } from "../components/ui/switch";
 import { Textarea } from "../components/ui/textarea";
+import { isElectron } from "../env";
 import { usePrimarySettings, useUpdatePrimarySettings } from "../hooks/useSettings";
 import { formatBytes } from "../lib/formatBytes";
 import { usePrimaryEnvironment } from "../state/environments";
 import { dictationApi } from "./api";
+import {
+  DICTATION_GLOBAL_STOP_DEFAULT,
+  useDictationGlobalStopEnabled,
+  useDictationGlobalStopStatus,
+} from "./DictationGlobalStopCoordinator";
 import { DictationModelStatusStore } from "./modelStatus";
 import { dictation } from "./useDictation";
 
@@ -62,6 +68,8 @@ export function VoiceSettingsSection() {
 
   const [confirmRemove, setConfirmRemove] = useState(false);
   const status = model.status;
+  const globalStopEnabled = useDictationGlobalStopEnabled();
+  const globalStop = useDictationGlobalStopStatus();
 
   return (
     <SettingsSection id="voice" title="Voice">
@@ -111,6 +119,33 @@ export function VoiceSettingsSection() {
           />
         </div>
       </SettingsRow>
+      {isElectron ? (
+        <SettingsRow
+          title="Stop dictation from other apps"
+          description="Hold the dictation shortcut system-wide while T3 Code runs, so pressing it in another app stops a recording and transcribes it. It never starts one."
+          status={
+            globalStopEnabled && globalStop.message !== null ? (
+              <span className="text-destructive">{globalStop.message}</span>
+            ) : null
+          }
+          resetAction={
+            settings.dictationGlobalStop !== undefined &&
+            settings.dictationGlobalStop !== DICTATION_GLOBAL_STOP_DEFAULT ? (
+              <SettingResetButton
+                label="stop dictation from other apps"
+                onClick={() => updateSettings({ dictationGlobalStop: DICTATION_GLOBAL_STOP_DEFAULT })}
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={globalStopEnabled}
+              onCheckedChange={(checked) => updateSettings({ dictationGlobalStop: Boolean(checked) })}
+              aria-label="Stop dictation from other apps"
+            />
+          }
+        />
+      ) : null}
       <SettingsRow
         title="Transcription model"
         description={modelDescription(status)}
