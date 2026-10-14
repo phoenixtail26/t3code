@@ -122,7 +122,7 @@ export function VoiceSettingsSection() {
       {isElectron ? (
         <SettingsRow
           title="Stop dictation from other apps"
-          description="Hold the dictation shortcut system-wide while T3 Code runs, so pressing it in another app stops a recording and transcribes it. It never starts one."
+          description="While T3 Code is in the background, hold the dictation shortcut system-wide so pressing it in another app stops a recording and transcribes it. It never starts one, and inside T3 Code the normal keybinding applies."
           status={
             globalStopEnabled && globalStop.message !== null ? (
               <span className="text-destructive">{globalStop.message}</span>

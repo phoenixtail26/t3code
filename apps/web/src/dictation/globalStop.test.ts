@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { DictationApi, DictationResult } from "./api";
 import { DictationController, type DictationComposer } from "./controller";
-import { dictationGlobalStopStatus, handleDictationGlobalStop } from "./globalStop";
+import { GlobalStopStatusStore, handleDictationGlobalStop } from "./globalStop";
 import type { ActiveRecorder } from "./recorder";
 
 const ENV = EnvironmentId.make("env-1");
@@ -85,17 +85,16 @@ describe("handleDictationGlobalStop", () => {
   });
 });
 
-describe("dictationGlobalStopStatus", () => {
+describe("GlobalStopStatusStore", () => {
   it("notifies only when the result changes", () => {
+    const store = new GlobalStopStatusStore();
     const listener = vi.fn();
-    const unsubscribe = dictationGlobalStopStatus.subscribe(listener);
-    dictationGlobalStopStatus.set({ registered: false, message: null });
+    store.subscribe(listener);
+    store.set({ registered: false, message: null });
     expect(listener).not.toHaveBeenCalled();
-    dictationGlobalStopStatus.set({ registered: false, message: "taken" });
-    dictationGlobalStopStatus.set({ registered: false, message: "taken" });
+    store.set({ registered: false, message: "taken" });
+    store.set({ registered: false, message: "taken" });
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(dictationGlobalStopStatus.getState().message).toBe("taken");
-    dictationGlobalStopStatus.set({ registered: true, message: null });
-    unsubscribe();
+    expect(store.getState().message).toBe("taken");
   });
 });

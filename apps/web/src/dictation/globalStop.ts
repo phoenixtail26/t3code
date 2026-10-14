@@ -1,7 +1,8 @@
 // Fork feature: dictation. The renderer half of the desktop global stop. The
-// main process forwards every press of the system-wide chord; this decides
-// what it means. While the window is focused the in-app keybinding already
-// handled the same keystroke, so the event is ignored. Unfocused, it stops a
+// main process holds the system-wide chord only while no T3 Code window is
+// focused (a held key takes the keystroke before the in-app keybinding can
+// see it) and forwards each press here. The focus check below is a cheap
+// backstop for a press that races a focus change. Unfocused, a press stops a
 // recording and transcribes it, and never starts one.
 import type { DesktopDictationGlobalStopResult } from "@t3tools/contracts";
 
@@ -20,7 +21,7 @@ export function handleDictationGlobalStop(
 }
 
 /** The last registration result, for the Voice section's failure message. */
-class GlobalStopStatusStore {
+export class GlobalStopStatusStore {
   readonly #listeners = new Set<() => void>();
   #state: DesktopDictationGlobalStopResult = { registered: false, message: null };
 
