@@ -500,6 +500,11 @@ export const ClientSettingsSchema = Schema.Struct({
   // project in the sidebar. Client-side because it's purely a display
   // preference; the server-side watcher runs regardless.
   showExternalSessions: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  // Fork: whether the composer's Compact chip for stale Claude threads starts
+  // on ("always"), starts off ("ask"), or never shows. See fork/staleClaudeCompaction.ts.
+  staleClaudeCompaction: Schema.Literals(["ask", "always", "never"]).pipe(
+    Schema.withDecodingDefault(Effect.succeed("ask" as const)),
+  ),
   timestampFormat: TimestampFormat.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TIMESTAMP_FORMAT)),
   ),
@@ -1797,6 +1802,7 @@ export const ClientSettingsPatch = Schema.Struct({
   sidebarThreadSortOrder: Schema.optionalKey(SidebarThreadSortOrder),
   sidebarThreadPreviewCount: Schema.optionalKey(SidebarThreadPreviewCount),
   showExternalSessions: Schema.optionalKey(Schema.Boolean),
+  staleClaudeCompaction: Schema.optionalKey(Schema.Literals(["ask", "always", "never"])),
   timestampFormat: Schema.optionalKey(TimestampFormat),
   snapShotEnabled: Schema.optionalKey(Schema.Boolean),
   snapShotIncludeAccessibility: Schema.optionalKey(Schema.Boolean),

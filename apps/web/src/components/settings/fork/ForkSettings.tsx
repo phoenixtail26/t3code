@@ -11,6 +11,10 @@ import {
   type UnifiedSettings,
 } from "@t3tools/contracts/settings";
 
+import {
+  clearResumeCompactionDismissals,
+  type StaleClaudeCompaction,
+} from "../../../fork/staleClaudeCompaction";
 import { usePrimarySettings, useUpdatePrimarySettings } from "../../../hooks/useSettings";
 import { useWebPushDevice } from "../../../hooks/useWebPush";
 import { usePrimaryEnvironment } from "../../../state/environments";
@@ -19,6 +23,7 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { hasNotificationSound } from "../../../threadNotifications";
 import { Button } from "../../ui/button";
 import { DraftInput } from "../../ui/draft-input";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../../ui/select";
 import { Switch } from "../../ui/switch";
 import { NotificationSoundControl } from "../NotificationSoundControl";
 import { SettingResetButton, SettingsRow, SettingsSection } from "../settingsLayout";
@@ -64,6 +69,62 @@ export function ExternalSessionsSettingRow() {
           onCheckedChange={(checked) => updateSettings({ showExternalSessions: Boolean(checked) })}
           aria-label="Show external Claude Code sessions in the sidebar"
         />
+      }
+    />
+  );
+}
+
+const STALE_CLAUDE_COMPACTION_LABELS: Record<StaleClaudeCompaction, string> = {
+  ask: "Ask",
+  always: "Always",
+  never: "Never",
+};
+
+/**
+ * Fork feature: whether a stale Claude thread compacts before the next send.
+ * Mounted under the follow-up behavior row.
+ */
+export function StaleClaudeCompactionSettingRow() {
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  const setMode = (mode: StaleClaudeCompaction) => {
+    if (mode !== "never") clearResumeCompactionDismissals();
+    updateSettings({ staleClaudeCompaction: mode });
+  };
+  return (
+    <SettingsRow
+      title="Compact stale Claude threads"
+      description="When a Claude thread over 100k tokens has sat long enough for its prompt cache to expire, the composer offers to summarize the history before sending. Ask starts that offer off, Always starts it on, Never hides it."
+      resetAction={
+        settings.staleClaudeCompaction !== DEFAULT_UNIFIED_SETTINGS.staleClaudeCompaction ? (
+          <SettingResetButton
+            label="stale Claude thread compaction"
+            onClick={() => setMode(DEFAULT_UNIFIED_SETTINGS.staleClaudeCompaction)}
+          />
+        ) : null
+      }
+      control={
+        <Select
+          value={settings.staleClaudeCompaction}
+          onValueChange={(value) => {
+            if (value === "ask" || value === "always" || value === "never") setMode(value);
+          }}
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-auto min-w-0"
+            aria-label="Compact stale Claude threads"
+          >
+            <SelectValue>
+              {STALE_CLAUDE_COMPACTION_LABELS[settings.staleClaudeCompaction]}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            <SelectItem value="ask">Ask</SelectItem>
+            <SelectItem value="always">Always</SelectItem>
+            <SelectItem value="never">Never</SelectItem>
+          </SelectPopup>
+        </Select>
       }
     />
   );

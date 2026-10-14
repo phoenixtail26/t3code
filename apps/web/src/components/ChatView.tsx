@@ -341,6 +341,7 @@ import {
   useEnvironmentSettings,
 } from "../hooks/useSettings";
 import { useNowMinute } from "../hooks/useNowMinute";
+import { useStaleClaudeCompaction } from "../fork/staleClaudeCompaction";
 import { usePanelAnimationSettings, usePanelPresence } from "../panelAnimations";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useRemoveClonedProject } from "../hooks/useRemoveClonedProject";
@@ -7766,8 +7767,10 @@ export default function ChatView(props: ChatViewProps) {
   // the composer shows a Compact chip and Enter compacts first; turning the
   // chip off sends the next message with full history. Held queues and
   // multi-model sends never compact first, so the offer hides for them.
+  const staleClaudeCompaction = useStaleClaudeCompaction();
   const resumeCompactionTokens =
     activeContextWindow &&
+    staleClaudeCompaction !== "never" &&
     !resumeCompactionPermanentlyDismissed &&
     !nativeResumeCompactionDismissed &&
     !compactDisabled &&
@@ -7783,12 +7786,14 @@ export default function ChatView(props: ChatViewProps) {
     })
       ? activeContextWindow.usedTokens
       : null;
-  // Threads whose Compact chip is turned off. A send that starts its turn
-  // clears its thread's entry; a failed send keeps it for the retry.
+  // Threads whose Compact chip is flipped from its default (on, or off under the
+  // fork's "ask" mode). A send that starts its turn clears its thread's entry; a
+  // failed send keeps it for the retry.
   const [fullHistoryThreadKeys, setFullHistoryThreadKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-  const keepFullHistory = fullHistoryThreadKeys.has(routeThreadKey);
+  const keepFullHistory =
+    fullHistoryThreadKeys.has(routeThreadKey) !== (staleClaudeCompaction === "ask");
   const setKeepFullHistory = useCallback((threadKey: string, keep: boolean) => {
     setFullHistoryThreadKeys((current) => {
       if (current.has(threadKey) === keep) return current;
@@ -7799,8 +7804,8 @@ export default function ChatView(props: ChatViewProps) {
     });
   }, []);
   const toggleKeepFullHistory = useCallback(
-    () => setKeepFullHistory(routeThreadKey, !keepFullHistory),
-    [keepFullHistory, routeThreadKey, setKeepFullHistory],
+    () => setKeepFullHistory(routeThreadKey, !fullHistoryThreadKeys.has(routeThreadKey)),
+    [fullHistoryThreadKeys, routeThreadKey, setKeepFullHistory],
   );
   const handleRestoreThreadBranch = useCallback(() => {
     if (!canWriteSourceControl) return;
