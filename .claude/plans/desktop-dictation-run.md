@@ -3,7 +3,7 @@
 Spec: `desktop-dictation.md`. This file holds status, decisions and how the
 work is going. Workers read the spec, not this.
 
-## Status (updated 2026-10-14, phases 0-7 merged to `g3code` via PR #1; phase 8 building)
+## Status (updated 2026-10-14, phases 0-7 merged to `g3code` via PR #1; phase 8 done on `dictation`, not yet shipped)
 
 | Package                  | Runs as  | Model | Branch / worktree          | State                                   | Waiting on                         |
 | ------------------------ | -------- | ----- | -------------------------- | --------------------------------------- | ---------------------------------- |
@@ -14,7 +14,7 @@ work is going. Workers read the spec, not this.
 | 4 Settings section       | subagent | Fable | `dictation` @ `2b8bb494ac` | done, reviewed                          | owner: section screenshot (Done 3) |
 | 5 Phone pass and docs    | subagent | Opus  | `dictation` @ `8c3074afe6` | docs done, reviewed; phone pass blocked | owner: phone (Done 2)              |
 | 6 Any focused field      | subagent | Fable | `dictation` @ `93aa84a117` | done, reviewed                          | owner: try the quote-comment box   |
-| 7 Desktop global stop    | subagent | Fable | `dictation`                | building                                | -                                  |
+| 7 Desktop global stop    | subagent | Fable | `dictation` @ `5510488aff` | done, reviewed                          | owner: Done 6 try                  |
 
 Overnight run 2026-10-13: branch `dictation` cut from `g3code` @
 `6d957479d1` in `~/.t3/worktrees/t3code/dictation`. Base gates green except
@@ -35,6 +35,23 @@ Done 1 mic recording, Done 2 phone pass, Done 3 section screenshot, Done 4
 click half, in-use check of the cleanup rules, then `/build`.
 
 Decisions this wave:
+
+- 2026-10-14 phase 8 second review (`5510488aff`): accepted. Key is held
+  only while no app window has focus; probe at apply time keeps the
+  held-by-another-app message. Low, non-blocking, left for later: the Voice
+  row's status only refreshes on the renderer's push, so a key grabbed by
+  another app after launch is not reported until the next settings or
+  keybinding change; the header comment's claim that a detached DevTools
+  window counts as ours is unverified. Owner proof: Done 6.
+
+- 2026-10-14 phase 8 review (`0c1cc4034e`): sent back. Blocking: a held
+  Electron `globalShortcut` takes the keystroke at the OS level, so with the
+  toggle on the in-app `composer.dictate` keybinding never fires while T3
+  Code is focused and the global event is dropped as focused. Fix: hold the
+  key only while no app window has focus (register on `browser-window-blur`
+  when `getFocusedWindow()` is null, release on `browser-window-focus`),
+  probe at apply time for the held-by-another-app message. Smaller: comment
+  the multi-window and context-free chord resolution choices.
 
 - 2026-10-14 phase 8 worker choice, pending review: the main process does
   not read keybindings itself (overrides are server settings it never sees).
