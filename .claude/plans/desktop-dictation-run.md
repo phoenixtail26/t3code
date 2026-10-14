@@ -3,7 +3,7 @@
 Spec: `desktop-dictation.md`. This file holds status, decisions and how the
 work is going. Workers read the spec, not this.
 
-## Status (updated 2026-10-13, overnight run finished; draft PR #1 open)
+## Status (updated 2026-10-14, phases 0-7 merged to `g3code` via PR #1; phase 8 building)
 
 | Package                  | Runs as  | Model | Branch / worktree          | State                                   | Waiting on                         |
 | ------------------------ | -------- | ----- | -------------------------- | --------------------------------------- | ---------------------------------- |
@@ -14,6 +14,7 @@ work is going. Workers read the spec, not this.
 | 4 Settings section       | subagent | Fable | `dictation` @ `2b8bb494ac` | done, reviewed                          | owner: section screenshot (Done 3) |
 | 5 Phone pass and docs    | subagent | Opus  | `dictation` @ `8c3074afe6` | docs done, reviewed; phone pass blocked | owner: phone (Done 2)              |
 | 6 Any focused field      | subagent | Fable | `dictation` @ `93aa84a117` | done, reviewed                          | owner: try the quote-comment box   |
+| 7 Desktop global stop    | subagent | Fable | `dictation`                | building                                | -                                  |
 
 Overnight run 2026-10-13: branch `dictation` cut from `g3code` @
 `6d957479d1` in `~/.t3/worktrees/t3code/dictation`. Base gates green except
@@ -34,6 +35,16 @@ Done 1 mic recording, Done 2 phone pass, Done 3 section screenshot, Done 4
 click half, in-use check of the cleanup rules, then `/build`.
 
 Decisions this wave:
+
+- 2026-10-14 owner: PR #1 merged into `g3code` (fast-forward to
+  `4729823094`). Owner asked for the shortcut to work while another app has
+  focus, to stop a dictation started in T3 Code and continued while working
+  elsewhere. Decision: phase 8, a global accelerator in the Electron main
+  process (same mechanism as SnapShot) that only stops; desktop only; toggle
+  in the Voice section; renderer ignores the global event while the window is
+  focused. Owner set the new default chord to `ctrl+alt+shift+u` for both the
+  in-app keybinding and the global hook, since `mod+shift+u` collided with
+  other apps already on the machine.
 
 - 2026-10-14 phase 7 review: accepted. Keybinding reaches the popover
   textarea via ChatView's capture-phase window listener. Two notes for the

@@ -86,8 +86,10 @@ Web (`apps/web/src/dictation/` plus one-line mounts):
 
 - [x] Mic button beside the paperclip in the composer footer, on existing and
       new threads, keeping editor focus on click.
-- [x] Keybinding `composer.dictate`, default `mod+shift+u`, `when:
-!terminalFocus`, listed in Keybindings settings and the command palette.
+- [x] Keybinding `composer.dictate`, default `ctrl+alt+shift+u` (was
+      `mod+shift+u`, which collided with other apps on the owner's machine),
+      `when: !terminalFocus`, listed in Keybindings settings and the command
+      palette.
 - [x] Recorder: `getUserMedia` mono, resampled to 16 kHz Int16 in the browser.
 - [x] Recording pill replacing the button: level meter (a few bars from an
       `AnalyserNode`, about 15 updates/s, only while the mic is open) and an
@@ -111,6 +113,18 @@ Web (`apps/web/src/dictation/` plus one-line mounts):
       gets its own mic button (`DictationFieldButton`, one-line mount in
       `AssistantCitationCommentEditor.tsx`).
 - [x] Failure: a `toastManager` error with the server's reason; audio discarded.
+- [ ] Desktop global stop: the Electron main process registers the
+      `composer.dictate` chord as a system-wide accelerator (`globalShortcut`,
+      the way `DesktopSnapShot.ts` registers the snapshot shortcut) so pressing
+      it while another app has focus stops a running dictation and transcribes
+      it. It never starts one. The main process forwards the press to the
+      renderer over a fork preload channel; the renderer ignores the global
+      event while the window is focused, because the in-app keybinding already
+      handles that press. Registration follows the user's rebinding of
+      `composer.dictate`. A toggle in the Voice section, shown only in the
+      desktop shell, turns the global hook off and releases the key (default
+      on). Registration failure shows a message in that section, as SnapShot
+      does. Web and mobile keep the in-app keybinding only.
 - [x] Settings: a "Voice" section on the General settings page (no Chat page exists in current upstream) with the filler
       toggle, the dictionary text area (one `heard => wanted` per line), model
       state with a Remove button, and the last transcription raw vs cleaned.
@@ -193,7 +207,7 @@ notice` and `apps/web/dist/third-party-licenses.json` lists
 
 ## Done when
 
-1. In the `pnpm dev:desktop` instance, pressing `mod+shift+u`, saying a
+1. In the `pnpm dev:desktop` instance, pressing `ctrl+alt+shift+u`, saying a
    sentence, and pressing it again puts that sentence at the cursor within
    about 2 seconds of stopping. Proof: a short recording,
    `~/.t3/dev/dictation-desktop.mp4` (not committed).
@@ -209,6 +223,11 @@ notice` and `apps/web/dist/third-party-licenses.json` lists
 5. Three composers dictating back to back all receive their text; none shows
    an error. Proof: `DictationService.test.ts` queue test plus the dogfood
    pass.
+6. With a dictation running in the `pnpm dev:desktop` instance and another
+   app focused, pressing `ctrl+alt+shift+u` stops it and the text lands in
+   the field it started in. With the Voice toggle off, the chord reaches the
+   other app instead. Proof: owner's try plus a unit test of the renderer
+   side (global event ignored while the window is focused).
 
 ## Phases
 
@@ -230,6 +249,14 @@ notice` and `apps/web/dist/third-party-licenses.json` lists
    Remove, raw vs cleaned preview. Proof: Done 3 and Done 4.
 6. **Phone pass and docs.** Verify over Tailscale, write the user doc
    section, update `FORK_ROADMAP.md` item 11. Proof: Done 2.
+7. **Any focused field.** Shortcut dictates into the focused text field
+   outside the composer; mic button in the quote-comment popover. Added
+   2026-10-14 after the owner tried the branch.
+8. **Desktop global stop.** Global accelerator in the Electron main process
+   stops a running dictation from any app; shortcut default moves to
+   `ctrl+alt+shift+u`. Added 2026-10-14. Proof: start a dictation in the
+   `pnpm dev:desktop` instance, focus another app, press the chord, text
+   lands in the field. Done 6 below.
 
 ## Verification
 
