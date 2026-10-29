@@ -226,7 +226,7 @@ Fetched locally as branch `pr-14882` for reference. Worth copying: the engine
   already drops most fillers. **To be validated in use**; an LLM pass is the
   fallback.
 - **Dictionary mechanics?** Post-transcription correction list, `heard =>
-wanted`, case-insensitive, whole-word. Works with any model so Parakeet
+  wanted`, case-insensitive, whole-word. Works with any model so Parakeet
   stays; Whisper prompt biasing would force a slower, less accurate model.
 - **Dictionary scope?** One global list, plain text in Settings. Per-project
   later if vocab conflicts.

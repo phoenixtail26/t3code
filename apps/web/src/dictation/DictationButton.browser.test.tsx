@@ -1,10 +1,9 @@
-// @vitest-environment jsdom
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { act, useSyncExternalStore } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { useSyncExternalStore } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { composerTargetKey } from "../composerDraftStore";
+import { act, render } from "../../test/render";
 import type { DictationState } from "./controller";
 
 const h = vi.hoisted(() => {
@@ -47,32 +46,35 @@ const target = {
 };
 const ownerKey = composerTargetKey(target);
 
-let root: Root | null = null;
+// The mocked dictation store is module state; leave it idle with no listeners or calls.
+function resetDictationMock(): Disposable {
+  const reset = () => {
+    h.state = { phase: "idle" };
+    h.listeners.clear();
+    h.toggle.mockReset();
+  };
+  reset();
+  return { [Symbol.dispose]: reset };
+}
 
-async function render() {
+function renderButton() {
   const container = document.createElement("div");
   container.id = "composer";
-  document.body.appendChild(container);
-  root = createRoot(container);
-  await act(async () =>
-    root!.render(
-      <DictationButton
-        target={target}
-        environmentId={target.environmentId}
-        insertTextAtCursor={() => true}
-      />,
-    ),
+  return render(
+    <DictationButton
+      target={target}
+      environmentId={target.environmentId}
+      insertTextAtCursor={() => true}
+    />,
+    { container, router: false },
   );
 }
 
-afterEach(async () => {
-  await act(async () => root?.unmount());
-  root = null;
-  document.body.innerHTML = "";
-  h.state = { phase: "idle" };
-  h.listeners.clear();
-  h.toggle.mockReset();
-});
+function mountTextarea() {
+  const textarea = document.createElement("textarea");
+  document.body.appendChild(textarea);
+  return Object.assign(textarea, { [Symbol.dispose]: () => textarea.remove() });
+}
 
 const inComposer = (testId: string) =>
   document.querySelector(`#composer [data-testid="${testId}"]`);
@@ -90,7 +92,8 @@ function fieldState(phase: "recording" | "transcribing", element: HTMLElement, i
 
 describe("DictationButton", () => {
   it("shows the button when idle and the in-place pill for its own composer dictation", async () => {
-    await render();
+    using _reset = resetDictationMock();
+    await using _screen = await renderButton();
     expect(inComposer("dictation-button")).not.toBeNull();
     expect(inComposer("dictation-pill")).toBeNull();
     expect(floating()).toBeNull();
@@ -102,11 +105,11 @@ describe("DictationButton", () => {
   });
 
   it("floats the pill beside a field while a field dictation runs, then removes it", async () => {
-    const textarea = document.createElement("textarea");
-    document.body.appendChild(textarea);
+    using _reset = resetDictationMock();
+    using textarea = mountTextarea();
     textarea.getBoundingClientRect = () =>
       ({ top: 300, bottom: 340, left: 100, right: 400 }) as DOMRect;
-    await render();
+    await using _screen = await renderButton();
 
     await act(async () => h.emit(fieldState("recording", textarea)));
     const pill = floating();
@@ -127,26 +130,26 @@ describe("DictationButton", () => {
   });
 
   it("leaves the floating pill out when the field has its own button", async () => {
-    const textarea = document.createElement("textarea");
-    document.body.appendChild(textarea);
-    await render();
+    using _reset = resetDictationMock();
+    using textarea = mountTextarea();
+    await using _screen = await renderButton();
     await act(async () => h.emit(fieldState("recording", textarea, true)));
     expect(floating()).toBeNull();
     expect(inComposer("dictation-pill")).toBeNull();
   });
 
   it("does not float a pill for another composer's field dictation", async () => {
-    const textarea = document.createElement("textarea");
-    document.body.appendChild(textarea);
-    await render();
+    using _reset = resetDictationMock();
+    using textarea = mountTextarea();
+    await using _screen = await renderButton();
     await act(async () => h.emit({ ...fieldState("recording", textarea), ownerKey: "other" }));
     expect(floating()).toBeNull();
   });
 
   it("stopping from the floating pill toggles this composer's dictation", async () => {
-    const textarea = document.createElement("textarea");
-    document.body.appendChild(textarea);
-    await render();
+    using _reset = resetDictationMock();
+    using textarea = mountTextarea();
+    await using _screen = await renderButton();
     await act(async () => h.emit(fieldState("recording", textarea)));
     const stop = floating()?.querySelector<HTMLButtonElement>('[data-testid="dictation-pill"]');
     await act(async () => stop!.click());

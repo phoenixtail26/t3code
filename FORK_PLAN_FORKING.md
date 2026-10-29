@@ -29,7 +29,7 @@ throwaway scratch sessions only — see "Dogfooding hazard").
   Claude-transcript-UUID mapping that doesn't exist; deferred to a later
   increment (an optionalKey field addition when it comes).
 - **Config-dir stance follows the radar**: default `CLAUDE_CONFIG_DIR ??
-~/.claude` only; custom per-instance homePath sessions fail with a clear
+  ~/.claude` only; custom per-instance homePath sessions fail with a clear
   fork error, same as they're invisible to the radar.
 - **A fork notice is injected into the copied session** (2026-07-31, after
   dogfooding found a fork resuming its parent's in-flight plan — two threads
@@ -79,7 +79,7 @@ versions of both halves of the feature. The fork now rides those:
   per-thread `resume_cursor_json` for live threads.
 - Files now: `packages/contracts/src/threadFork.ts` (adopt only),
   `apps/server/src/threadFork/wsHandlers.ts`, web `threadFork/{useForkThread,
-useAdoptExternalSession,useThreadForkOutcome,state,gate,menu}.ts`.
+  useAdoptExternalSession,useThreadForkOutcome,state,gate,menu}.ts`.
   Upstream-file mounts: ws.ts and RpcAuthorization.ts (unchanged), rpc.ts (one
   Rpc), Sidebar.tsx (menu wrap + `case "fork"`). The F1 schema fields
   (`resumeCursor`/`forkedFromThreadId`) no longer exist.
@@ -119,7 +119,7 @@ matches our checkpoint stance below.
   thread.create (:988) → optional worktree create (:1018-1024) →
   thread.meta.update (:1026-1032) → the original thread.turn.start.
 - Claude cursor JSON: `{ threadId?, resume? (session UUID; legacy alias
-sessionId), resumeSessionAt? (last assistant msg UUID), turnCount? }`.
+  sessionId), resumeSessionAt? (last assistant msg UUID), turnCount? }`.
   Read: `readClaudeResumeState` (ClaudeAdapter.ts:563-599). Written:
   `updateResumeCursor` (:1452-1470) and at session start (:3537-3542).
   Persisted in `provider_session_runtime.resume_cursor_json` via

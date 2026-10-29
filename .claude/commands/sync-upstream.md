@@ -28,7 +28,7 @@ flow with these substitutions — read them before step 1:
 - **Remotes.** The container has only `origin`. Add upstream first, with the
   push URL disabled the same way the owner's checkout does:
   `git remote add upstream https://github.com/pingdotgg/t3code.git &&
-git remote set-url --push upstream DISABLED_PUSH_TO_ORIGIN_INSTEAD`.
+  git remote set-url --push upstream DISABLED_PUSH_TO_ORIGIN_INSTEAD`.
 - **Branches.** `g3code` and `main` are not checked out; use
   `origin/g3code` / `origin/main` in the measurements, then
   `git checkout -b g3code origin/g3code` (there is no separate main worktree;
@@ -45,7 +45,7 @@ git remote set-url --push upstream DISABLED_PUSH_TO_ORIGIN_INSTEAD`.
   ignore the Windows-only `ProviderRegistry.test.ts` exemption.
 - **rerere.** Recorded resolutions live in the owner's local git config, not
   the repo; enable it fresh (`git config rerere.enabled true &&
-git config rerere.autoUpdate true`) but expect no replays.
+  git config rerere.autoUpdate true`) but expect no replays.
 - **Scratch files.** Write the tripwire snapshots to the session scratchpad
   instead of `/tmp`.
 - **Verification scale.** A repo-wide `vp check` on a merge this size is the

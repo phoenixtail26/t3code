@@ -159,13 +159,17 @@ Per-file tail state: `{ offset: number, carry: string, meta: ExternalSessionMeta
   projects accumulate hundreds of transcripts and the radar is for current
   work, not history. Resuming an ancient session is done by touching it
   (any activity in the CLI) — it reappears on the next dir event.
-- Known edge (surfaced by the test harness): `start`/`watchDir` fork the
-  `fs.watch` reader and return before it has attached, and the watcher is
-  purely event-driven with no reconciliation pass — a change landing in that
-  sub-second window is missed until an unrelated later event re-triggers a
-  refresh. Unrealistic in production (sessions aren't created microseconds
-  after server boot); the cheap fix if it ever matters is to piggyback a
-  `syncDirs` + watched-dir refresh onto the 30s decay tick.
+- Known edge: `start`/`watchDir` fork the `fs.watch` reader and return before
+  it has attached, and the watcher is purely event-driven with no
+  reconciliation pass — a change landing in that sub-second window is missed
+  until an unrelated later event re-triggers a refresh. Unrealistic in
+  production (sessions aren't created microseconds after server boot); the
+  cheap fix if it ever matters is to piggyback a `syncDirs` + watched-dir
+  refresh onto the 30s decay tick.
+- Test seam: the directory-change source is the `DirectoryWatch` reference
+  (default `fs.watch`). The watcher test feeds it Queue-backed streams so the
+  debounces and the decay tick run on the TestClock instead of real
+  `fs.watch` events and wall time.
 
 Emissions: `PubSub` carries full per-session snapshots
 (`ExternalSessionShell`-shaped, see contracts task 2.1) plus removal

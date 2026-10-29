@@ -80,14 +80,14 @@ Server (`apps/server/src/dictation/`):
 Contracts (`packages/contracts/src/settings.ts`, fork fields only):
 
 - [x] Server settings `dictation: { fillerCleanup: boolean (default true),
-dictionary: string (default "") }` with `Schema.optionalKey` in the patch.
+  dictionary: string (default "") }` with `Schema.optionalKey` in the patch.
 
 Web (`apps/web/src/dictation/` plus one-line mounts):
 
 - [x] Mic button beside the paperclip in the composer footer, on existing and
       new threads, keeping editor focus on click.
 - [x] Keybinding `composer.dictate`, default `mod+shift+u`, `when:
-!terminalFocus`, listed in Keybindings settings and the command palette.
+  !terminalFocus`, listed in Keybindings settings and the command palette.
 - [x] Recorder: `getUserMedia` mono, resampled to 16 kHz Int16 in the browser.
 - [x] Recording pill replacing the button: level meter (a few bars from an
       `AnalyserNode`, about 15 updates/s, only while the mic is open) and an
@@ -188,7 +188,7 @@ settings files load unchanged.
   animates. Gate: visual check in the dogfood pass.
 - `/build` and the desktop artifact still produce a working executable with
   the native dependency staged. Gate: build log has no `invalid package
-notice` and `apps/web/dist/third-party-licenses.json` lists
+  notice` and `apps/web/dist/third-party-licenses.json` lists
   `transcribe-cpp`.
 
 ## Done when

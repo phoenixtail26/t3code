@@ -1,16 +1,7 @@
 /**
- * ExternalSessionsWatcher — discovers Claude Code sessions on this machine
- * (fork feature: "the radar"; see DESIGN.md in this directory and
- * FORK_PLAN_RADAR.md at the repo root).
- *
- * Watches `<claude-config>/projects/<slug>/*.jsonl` for directories whose
- * slug corresponds to a workspace root t3code knows about, tails appended
- * bytes through the lenient parser, and exposes a snapshot plus change
- * stream of external session state.
- *
- * Follows the `serverSettings.ts` / `keybindings.ts` watcher-service
- * pattern: Context.Service + PubSub + dedicated watcher Scope closed by a
- * layer finalizer + idempotent `start`.
+ * Discovers Claude Code sessions (fork "radar"; see DESIGN.md) by watching
+ * `<claude-config>/projects/<slug>/*.jsonl` for slugs of known workspace roots.
+ * Follows the `serverSettings.ts` watcher pattern: PubSub, own Scope, idempotent `start`.
  */
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -21,6 +12,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
@@ -101,6 +93,15 @@ export class ExternalSessionsWatcher extends Context.Service<
   }
 >()("t3/externalSessions/ExternalSessionsWatcher") {}
 
+/** The change source for a watched directory. Defaults to `fs.watch`; tests
+ * substitute a Queue-backed stream so the debounces run on the TestClock. */
+export const DirectoryWatch = Context.Reference<
+  (
+    fs: FileSystem.FileSystem,
+    path: string,
+  ) => Stream.Stream<FileSystem.WatchEvent, PlatformError.PlatformError>
+>("t3/externalSessions/DirectoryWatch", { defaultValue: () => (fs, path) => fs.watch(path) });
+
 const snapshotEquals = (a: ExternalSessionSnapshot, b: ExternalSessionSnapshot): boolean =>
   a.sessionId === b.sessionId &&
   a.projectSlug === b.projectSlug &&
@@ -113,6 +114,7 @@ const snapshotEquals = (a: ExternalSessionSnapshot, b: ExternalSessionSnapshot):
 const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
+  const watchDirectory = yield* DirectoryWatch;
   const mutex = yield* Semaphore.make(1);
   const eventsPubSub = yield* PubSub.unbounded<ExternalSessionsEvent>();
   const startedRef = yield* Ref.make(false);
@@ -160,13 +162,14 @@ const make = Effect.gen(function* () {
     lastActivityAt: DateTime.formatIso(DateTime.makeUnsafe(tail.mtimeMs)),
   });
 
-  const applyUpsert = (next: ExternalSessionSnapshot) =>
-    Effect.gen(function* () {
-      const prev = sessions.get(next.sessionId);
-      if (prev !== undefined && snapshotEquals(prev, next)) return;
-      sessions.set(next.sessionId, next);
-      yield* PubSub.publish(eventsPubSub, { kind: "upsert", session: next });
-    }).pipe(Effect.asVoid);
+  const applyUpsert = Effect.fn("ExternalSessionsWatcher.applyUpsert")(function* (
+    next: ExternalSessionSnapshot,
+  ) {
+    const prev = sessions.get(next.sessionId);
+    if (prev !== undefined && snapshotEquals(prev, next)) return;
+    sessions.set(next.sessionId, next);
+    yield* PubSub.publish(eventsPubSub, { kind: "upsert", session: next });
+  }, Effect.asVoid);
 
   const foldLines = (tail: FileTailState, lines: ReadonlyArray<string>): void => {
     for (const line of lines) {
@@ -319,7 +322,7 @@ const make = Effect.gen(function* () {
     const dirPath = pathService.join(sessionsRoot, slug);
     // Debounce so a burst of appends coalesces into one refresh (the same
     // reasoning as the settings watcher, serverSettings.ts).
-    const dirEvents = fs.watch(dirPath).pipe(Stream.debounce(Duration.millis(100)));
+    const dirEvents = watchDirectory(fs, dirPath).pipe(Stream.debounce(Duration.millis(100)));
     yield* Stream.runForEach(dirEvents, () =>
       refreshDir(slug).pipe(Effect.ignoreCause({ log: true })),
     ).pipe(Effect.ignoreCause({ log: true }), Effect.forkIn(watcherScope), Effect.asVoid);
@@ -366,7 +369,9 @@ const make = Effect.gen(function* () {
     if (rootExists) {
       // Watch the sessions root itself so project dirs created after boot
       // (first Claude session in a known workspace) get picked up.
-      const rootEvents = fs.watch(sessionsRoot).pipe(Stream.debounce(Duration.millis(500)));
+      const rootEvents = watchDirectory(fs, sessionsRoot).pipe(
+        Stream.debounce(Duration.millis(500)),
+      );
       yield* Stream.runForEach(rootEvents, () =>
         syncDirs.pipe(Effect.ignoreCause({ log: true })),
       ).pipe(Effect.ignoreCause({ log: true }), Effect.forkIn(watcherScope), Effect.asVoid);
@@ -380,13 +385,16 @@ const make = Effect.gen(function* () {
     }).pipe(Effect.forkIn(watcherScope), Effect.asVoid);
   }).pipe(Effect.asVoid);
 
-  const ensureRoots = (roots: ReadonlyArray<string>) =>
-    Effect.gen(function* () {
+  const ensureRoots = Effect.fn("ExternalSessionsWatcher.ensureRoots")(
+    function* (roots: ReadonlyArray<string>) {
       for (const root of roots) {
         candidateSlugs.add(encodeProjectSlug(pathService.resolve(root)));
       }
       yield* syncDirs;
-    }).pipe(Effect.ignoreCause({ log: true }), Effect.asVoid);
+    },
+    Effect.ignoreCause({ log: true }),
+    Effect.asVoid,
+  );
 
   return ExternalSessionsWatcher.of({
     start,

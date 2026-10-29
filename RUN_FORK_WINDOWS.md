@@ -284,7 +284,7 @@ Completed on this machine 2026-07-18; the values below are the live ones.
 5. **Tailscale HTTPS row** → switch on → confirm "Set up Tailscale HTTPS?".
    Verify with `tailscale serve status`: expect
    `https://viki.tailae8de0.ts.net (tailnet only) |-- / proxy
-http://127.0.0.1:3773`, and a 200 from that URL.
+   http://127.0.0.1:3773`, and a 200 from that URL.
 6. **Pair the phone**: Authorized clients → **Create link**, label it (e.g.
    "Pixel 9"), keep the **Standard** permission preset — the four checked
    scopes let the phone drive threads; leave **Manage access** and **Manage

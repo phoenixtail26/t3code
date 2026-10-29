@@ -1,11 +1,12 @@
-// @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { captureFocusedField, findNearestField, insertIntoField } from "./field";
 
-afterEach(() => {
+// Tests share one document; each one starts empty and leaves it empty.
+function cleanBody(): Disposable {
   document.body.innerHTML = "";
-});
+  return { [Symbol.dispose]: () => void (document.body.innerHTML = "") };
+}
 
 function mountTextarea(value = "", selection?: [number, number]) {
   const textarea = document.createElement("textarea");
@@ -18,11 +19,13 @@ function mountTextarea(value = "", selection?: [number, number]) {
 
 describe("captureFocusedField", () => {
   it("captures a focused textarea outside the composer", () => {
+    using _body = cleanBody();
     const textarea = mountTextarea();
     expect(captureFocusedField()?.element).toBe(textarea);
   });
 
   it("captures a focused text input and a contenteditable host", () => {
+    using _body = cleanBody();
     const input = document.createElement("input");
     input.type = "text";
     document.body.appendChild(input);
@@ -38,6 +41,7 @@ describe("captureFocusedField", () => {
   });
 
   it("returns null when the composer editor has focus, so the composer path runs", () => {
+    using _body = cleanBody();
     const editor = document.createElement("div");
     editor.dataset.testid = "composer-editor";
     const host = document.createElement("div");
@@ -50,6 +54,7 @@ describe("captureFocusedField", () => {
   });
 
   it("returns null for the body, a button, a checkbox and a read-only textarea", () => {
+    using _body = cleanBody();
     expect(captureFocusedField()).toBeNull();
 
     const button = document.createElement("button");
@@ -71,6 +76,7 @@ describe("captureFocusedField", () => {
 
 describe("insertIntoField", () => {
   it("inserts at the selection, moves the caret after the text and fires input", () => {
+    using _body = cleanBody();
     const textarea = mountTextarea("alpha gamma", [6, 6]);
     const events: Array<string> = [];
     textarea.addEventListener("input", (event) => events.push(event.type));
@@ -84,6 +90,7 @@ describe("insertIntoField", () => {
   });
 
   it("replaces a selection and adds a space on each side that touches a word", () => {
+    using _body = cleanBody();
     const textarea = mountTextarea("one XXX two", [4, 7]);
     expect(insertIntoField(textarea, "and")).toBe(true);
     expect(textarea.value).toBe("one and two");
@@ -94,6 +101,7 @@ describe("insertIntoField", () => {
   });
 
   it("bypasses React's instance value tracker so the input event reads as a change", () => {
+    using _body = cleanBody();
     const textarea = mountTextarea("", [0, 0]);
     // React defines an own `value` property on the node to remember what it
     // last wrote; a write through that property would make it ignore the event.
@@ -118,6 +126,7 @@ describe("insertIntoField", () => {
   });
 
   it("refuses a detached field", () => {
+    using _body = cleanBody();
     const textarea = mountTextarea("keep");
     const field = captureFocusedField();
     textarea.remove();
@@ -126,6 +135,7 @@ describe("insertIntoField", () => {
   });
 
   it("inserts into a contenteditable host at its selection", () => {
+    using _body = cleanBody();
     const host = document.createElement("div");
     host.setAttribute("contenteditable", "true");
     host.tabIndex = 0;
@@ -146,6 +156,7 @@ describe("insertIntoField", () => {
 
 describe("findNearestField", () => {
   it("finds the textarea in the nearest ancestor that has one", () => {
+    using _body = cleanBody();
     document.body.innerHTML = `
       <textarea id="outer"></textarea>
       <div id="popover">
@@ -157,6 +168,7 @@ describe("findNearestField", () => {
   });
 
   it("returns null when no ancestor holds a field", () => {
+    using _body = cleanBody();
     document.body.innerHTML = `<div><span id="host"></span></div>`;
     expect(findNearestField(document.getElementById("host"))).toBeNull();
   });

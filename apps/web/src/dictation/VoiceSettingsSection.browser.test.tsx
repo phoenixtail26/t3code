@@ -1,14 +1,13 @@
-// @vitest-environment jsdom
 import {
   DEFAULT_UNIFIED_SETTINGS,
   EnvironmentId,
   type DictationStatus,
   type UnifiedSettings,
 } from "@t3tools/contracts";
-import { act, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { ReactNode } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
 
+import { act, render } from "../../test/render";
 import type { DictationResult } from "./api";
 import type { DictationState } from "./controller";
 
@@ -88,15 +87,7 @@ const statusOf = (
   last: DictationStatus["last"] = null,
 ): DictationResult<DictationStatus> => ({ ok: true, value: { model, file: FILE, last } });
 
-let root: Root | null = null;
-let container: HTMLDivElement | null = null;
-
-async function render() {
-  container = document.createElement("div");
-  document.body.appendChild(container);
-  root = createRoot(container);
-  await act(async () => root!.render(<VoiceSettingsSection />));
-}
+const renderSection = () => render(<VoiceSettingsSection />, { router: false });
 
 const byLabel = <T extends HTMLElement>(label: string) => {
   const element = document.querySelector<T>(`[aria-label="${label}"]`);
@@ -110,10 +101,9 @@ const buttonNamed = (name: string) => {
   if (!button) throw new Error(`No button named ${name}`);
   return button;
 };
-const click = (element: HTMLElement) => act(async () => element.click());
-
-describe("VoiceSettingsSection", () => {
-  beforeEach(() => {
+// The mocks are module state; each test starts from defaults and leaves them behind.
+function resetMocks(): Disposable {
+  const reset = () => {
     h.settings = {
       ...DEFAULT_UNIFIED_SETTINGS,
       dictation: { fillerCleanup: true, dictionary: "" },
@@ -124,23 +114,24 @@ describe("VoiceSettingsSection", () => {
     h.downloadModel.mockReset().mockResolvedValue({ ok: true, value: undefined });
     h.phase = { phase: "idle" };
     h.listeners.clear();
-  });
-  afterEach(async () => {
-    await act(async () => root?.unmount());
-    container?.remove();
-    root = null;
-    container = null;
-  });
+  };
+  reset();
+  return { [Symbol.dispose]: reset };
+}
+const click = (element: HTMLElement) => act(async () => element.click());
 
+describe("VoiceSettingsSection", () => {
   it("writes fillerCleanup through the settings patch", async () => {
-    await render();
+    using _mocks = resetMocks();
+    await using _screen = await renderSection();
     await click(byLabel("Filler cleanup"));
     expect(h.updateSettings).toHaveBeenCalledWith({ dictation: { fillerCleanup: false } });
   });
 
   it("commits the dictionary text as one string on blur, and only when it changed", async () => {
+    using _mocks = resetMocks();
     h.settings = { ...h.settings!, dictation: { fillerCleanup: true, dictionary: "a => b" } };
-    await render();
+    await using _screen = await renderSection();
     const textarea = byLabel<HTMLTextAreaElement>("Dictionary");
     expect(textarea.value).toBe("a => b");
 
@@ -174,10 +165,11 @@ describe("VoiceSettingsSection", () => {
   });
 
   it("shows the last transcription's raw and cleaned text from the status", async () => {
+    using _mocks = resetMocks();
     h.status.mockResolvedValue(
       statusOf({ state: "ready" }, { raw: "Um, T3 code is great.", text: "T3 Code is great." }),
     );
-    await render();
+    await using _screen = await renderSection();
     const cells = Array.from(document.querySelectorAll("dd")).map((cell) => cell.textContent);
     expect(cells).toEqual(["Um, T3 code is great.", "T3 Code is great."]);
     expect(document.body.textContent).toContain(FILE.path);
@@ -185,7 +177,8 @@ describe("VoiceSettingsSection", () => {
   });
 
   it("removes the model after confirmation and re-reads the status", async () => {
-    await render();
+    using _mocks = resetMocks();
+    await using _screen = await renderSection();
     await click(buttonNamed("Remove"));
     expect(h.removeModel).not.toHaveBeenCalled();
     const confirm = Array.from(document.querySelectorAll("[role=alertdialog] button")).find(
@@ -201,9 +194,10 @@ describe("VoiceSettingsSection", () => {
   });
 
   it("keeps Remove available during a download started here, so it can cancel it", async () => {
+    using _mocks = resetMocks();
     h.status.mockResolvedValue(statusOf({ state: "missing" }));
     h.downloadModel.mockImplementation(() => new Promise(() => {}));
-    await render();
+    await using _screen = await renderSection();
     h.status.mockResolvedValue(statusOf({ state: "downloading", percent: 12 }));
     await click(buttonNamed("Download"));
     expect(h.downloadModel).toHaveBeenCalledWith(ENV);
@@ -223,7 +217,8 @@ describe("VoiceSettingsSection", () => {
   });
 
   it("re-reads the status when a dictation finishes", async () => {
-    await render();
+    using _mocks = resetMocks();
+    await using _screen = await renderSection();
     expect(h.status).toHaveBeenCalledTimes(1);
     await act(async () => h.emit({ phase: "recording" }));
     await act(async () => h.emit({ phase: "transcribing" }));
