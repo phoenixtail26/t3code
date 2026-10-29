@@ -16,19 +16,10 @@ import * as Schema from "effect/Schema";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 
 /**
- * Proxy for Anthropic's OAuth usage endpoint — the data behind the Claude
- * Code `/usage` screen (per-window utilization percent, severity, reset
- * times). Authenticates with the Claude CLI's stored OAuth token, so the
- * numbers are the official plan-limit percentages, covering all Claude Code
- * usage on the account, not just sessions started from T3 Code.
- *
- * Credential notes: the CLI persists the token at
- * `<claude-config-dir>/.credentials.json` on Windows and Linux; on macOS it
- * lives in the login keychain instead, so this proxy degrades to
- * `unavailable (no-credentials)` there until a keychain reader is added.
- * Only the default config dir (`~/.claude`) is consulted — a custom
- * `CLAUDE_CONFIG_DIR`/homePath instance would need the instance settings
- * plumbed through here.
+ * Proxy for Anthropic's OAuth usage endpoint (the Claude Code `/usage` data),
+ * authenticated with the CLI's stored token. The token is read from the default
+ * `~/.claude/.credentials.json` only (not custom config dirs); on macOS it is in
+ * the keychain, so this degrades to `unavailable (no-credentials)` there.
  */
 
 const USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage";
@@ -64,13 +55,10 @@ const decodeSharedUsageCacheEntryJson = Schema.decodeUnknownOption(
 );
 
 /**
- * Path of the cross-process usage cache — a sibling of the credentials file it
- * is keyed by, so each account (config dir) gets its own shared entry. Every
- * T3 server on the machine (the daily driver, a second desktop window, the
- * phone's paired server, a thread's spawned dev instance) reads and writes
- * this file, collapsing what would otherwise be one independent poller per
- * process into ~one upstream fetch per minute for the whole account. Without
- * it the shared per-account rate limit is trivially tripped during dogfooding.
+ * Path of the cross-process usage cache, a sibling of the credentials file so
+ * each account gets its own entry. Every T3 server on the machine shares it,
+ * collapsing per-process pollers into ~one upstream fetch per minute and
+ * avoiding the per-account rate limit.
  */
 export function resolveUsageCacheFilePath(credentialsPath: string): string {
   return NodePath.join(NodePath.dirname(credentialsPath), ".t3-usage-cache.json");

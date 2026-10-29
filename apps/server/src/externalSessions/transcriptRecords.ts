@@ -1,11 +1,7 @@
 /**
- * Pure parsing of Claude Code session JSONL lines. No Effect, no IO — see
- * `DESIGN.md` ("Pure parser modules") for the full spec this mirrors.
- *
- * The on-disk format is undocumented and every line's key set is
- * independent (a mid-file CLI upgrade can add/remove fields), so parsing
- * here follows the defensive `typeof`-guard style used by
- * `../provider/claudeUsage.ts` rather than a schema library.
+ * Pure parsing of Claude Code session JSONL lines (DESIGN.md "Pure parser
+ * modules"). The on-disk format is undocumented and per-line, so parsing uses
+ * defensive `typeof` guards like `../provider/claudeUsage.ts`, not a schema library.
  */
 
 /** Lines longer than this are skipped without ever reaching `JSON.parse` —
@@ -95,12 +91,9 @@ export function parseTranscriptLine(line: string): ExternalSessionRecord | null 
     record.permissionMode = obj.permissionMode;
   }
 
-  // Waiting-state signal: an assistant record that issues `tool_use` blocks
-  // leaves the session blocked until *any* later conversational record
-  // (`tool_result`s arrive as `type:"user"` records; a fresh prompt or a
-  // plain-text assistant turn equally supersedes). Sidechain records belong
-  // to inline subagent conversations, not the session's own turn — no
-  // opinion from those.
+  // An assistant record issuing `tool_use` blocks leaves the session blocked until
+  // any later conversational record. Sidechain (subagent) records say nothing
+  // about the session's own turn.
   if (obj.isSidechain !== true) {
     if (type === "assistant") {
       record.pendingToolUse = hasToolUseBlock(obj.message);
@@ -113,13 +106,9 @@ export function parseTranscriptLine(line: string): ExternalSessionRecord | null 
 }
 
 /**
- * Carry-aware line splitter for the byte-offset tailer: prepend `carry`,
- * split on `\n`, return the complete lines plus the trailing partial
- * segment as the new carry (may be `""`). Tolerates `\r\n` by stripping a
- * trailing `\r` from each complete line (real files are LF-only, but the
- * on-disk format is unversioned, so this is defensive tolerance rather
- * than a normalization guarantee). Lines are otherwise returned verbatim
- * — no trimming here.
+ * Carry-aware line splitter for the byte-offset tailer: splits `carry + chunk`
+ * on `\n`, returns the complete lines plus the trailing partial segment as the
+ * new carry. Strips a trailing `\r` (the format is unversioned); otherwise verbatim.
  */
 export function splitJsonlChunk(chunk: string, carry: string): { lines: string[]; carry: string } {
   const combined = carry + chunk;

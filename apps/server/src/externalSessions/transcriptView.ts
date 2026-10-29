@@ -1,14 +1,8 @@
 /**
- * Pure mapping of a Claude Code session JSONL file's contents to the
- * read-only transcript view. No Effect, no IO — see `DESIGN.md`
- * ("Transcript view mapping (Phase 4)") for the full spec this implements.
- *
- * Deliberately separate from `transcriptRecords.ts` (the hot-path metadata
- * parser used by the watcher): this module retains `message.content` and
- * only runs on demand, when a client asks to view one session's transcript.
- * It mirrors that module's defensive parsing style — every line is parsed
- * independently, oversized/invalid/truncated lines are skipped without ever
- * throwing.
+ * Pure mapping of a session JSONL file to the read-only transcript view
+ * (DESIGN.md "Transcript view mapping (Phase 4)"). Separate from
+ * `transcriptRecords.ts` because it retains `message.content` and runs only on
+ * demand. Every line parses independently; bad lines are skipped, never thrown.
  */
 import type { ExternalTranscriptEntry } from "@t3tools/contracts";
 
@@ -51,11 +45,9 @@ function isRecordObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Parse a single JSONL line into its raw object form (unlike
- * `transcriptRecords.parseTranscriptLine`, this keeps every field — the
- * transcript view needs `message.content`). Never throws: trims the line,
- * then returns `null` for anything that is not a usable JSON object (empty,
- * oversized, invalid JSON, non-object, array).
+ * Parse one JSONL line into its raw object, keeping every field (the transcript
+ * view needs `message.content`). Never throws; returns `null` for empty,
+ * oversized, invalid, non-object, or array lines.
  */
 function safeParseLine(line: string): Record<string, unknown> | null {
   const trimmed = line.trim();
@@ -153,11 +145,9 @@ function summarizeToolInput(
   }
 }
 
-/** `type:"user"` records: string content is the message verbatim; array
- *  content concatenates `text` blocks into one message entry (in block
- *  order, so interleaving with `tool_result` blocks is preserved) and turns
- *  `tool_result` blocks with `is_error:true` into error work entries.
- *  Non-error `tool_result` blocks are dropped. */
+/** `type:"user"` records: string content is the message verbatim; array content
+ *  joins `text` blocks in order into one message and turns `is_error:true`
+ *  `tool_result` blocks into error work entries. Other `tool_result`s are dropped. */
 function processUserRecord(obj: Record<string, unknown>): PendingEntry[] {
   const message = obj.message;
   if (!isRecordObject(message)) return [];

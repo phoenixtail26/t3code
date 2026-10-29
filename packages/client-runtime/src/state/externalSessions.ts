@@ -60,40 +60,38 @@ function applyExternalSessionsItem(
 }
 
 /**
- * Per-environment external-sessions state: a live-updated map of Claude Code
- * sessions driven outside t3code, keyed by session id. Mirrors the
- * connection/reconnect lifecycle of `makeEnvironmentShellState` (shell.ts)
- * via the shared `subscribe()` helper, without its snapshot cache/HTTP
- * warm-start — the stream has no sequence numbers, so the only base state is
- * the `snapshot` item the server always sends first.
+ * Per-environment external-sessions state: a live map of Claude Code sessions
+ * driven outside t3code, keyed by session id. Follows `makeEnvironmentShellState`
+ * but has no snapshot cache: the stream is unsequenced, so the server's first
+ * `snapshot` item is the only base state.
  */
-export const makeEnvironmentExternalSessionsState = Effect.fn(
-  "EnvironmentExternalSessionsState.make",
-)(function* () {
-  const state = yield* SubscriptionRef.make<EnvironmentExternalSessionsState>(
-    EMPTY_EXTERNAL_SESSIONS_STATE,
-  );
+const makeEnvironmentExternalSessionsState = Effect.fn("EnvironmentExternalSessionsState.make")(
+  function* () {
+    const state = yield* SubscriptionRef.make<EnvironmentExternalSessionsState>(
+      EMPTY_EXTERNAL_SESSIONS_STATE,
+    );
 
-  const applyItem = (item: ExternalSessionsStreamItem) =>
-    SubscriptionRef.update(state, (current) => applyExternalSessionsItem(current, item));
+    const applyItem = (item: ExternalSessionsStreamItem) =>
+      SubscriptionRef.update(state, (current) => applyExternalSessionsItem(current, item));
 
-  yield* Effect.forkScoped(
-    subscribe(
-      EXTERNAL_SESSIONS_WS_METHODS.subscribe,
-      {},
-      {
-        onExpectedFailure: (cause) =>
-          Effect.logWarning("Could not synchronize external sessions.").pipe(
-            Effect.annotateLogs({ ...safeErrorLogAttributes(Cause.squash(cause)) }),
-          ),
-      },
-    ).pipe(Stream.runForEach(applyItem)),
-  );
+    yield* Effect.forkScoped(
+      subscribe(
+        EXTERNAL_SESSIONS_WS_METHODS.subscribe,
+        {},
+        {
+          onExpectedFailure: (cause) =>
+            Effect.logWarning("Could not synchronize external sessions.").pipe(
+              Effect.annotateLogs({ ...safeErrorLogAttributes(Cause.squash(cause)) }),
+            ),
+        },
+      ).pipe(Stream.runForEach(applyItem)),
+    );
 
-  return state;
-});
+    return state;
+  },
+);
 
-export function externalSessionsStateChanges(environmentId: EnvironmentId) {
+function externalSessionsStateChanges(environmentId: EnvironmentId) {
   return followStreamInEnvironment(
     environmentId,
     Stream.unwrap(makeEnvironmentExternalSessionsState().pipe(Effect.map(SubscriptionRef.changes))),

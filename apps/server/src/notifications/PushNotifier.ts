@@ -2,32 +2,17 @@ import type { PushNotificationSettings, ThreadId } from "@t3tools/contracts";
 import type { AgentAwarenessPhase, AgentAwarenessState } from "@t3tools/shared/agentAwareness";
 
 /**
- * Phone notifications for thread events, delivered over ntfy (https://ntfy.sh
- * or a private ntfy server) and/or Web Push to the installed PWA, so the
- * owner learns a thread needs them without watching the UI.
- *
- * Why ntfy rather than T3 Connect's relay push: this fork is driven from a
- * tailnet with no cloud account, and ntfy is a single POST with a
- * first-class mobile app. The awareness phase ladder
- * (`@t3tools/shared/agentAwareness`) is shared with the relay path, so both
- * transports agree on what "needs attention" means. Web Push (roadmap #6)
- * removes even the ntfy hop for devices that register a subscription.
- *
- * This module decides WHETHER a notification fires and renders it; it is
- * channel-agnostic. Delivery — to which channels, with what transport —
- * lives in `PushNotifierService`.
- *
- * Notifications fire on phase TRANSITIONS: a thread sitting at
- * `waiting_for_approval` across many domain events notifies once, and the
- * same phase notifies again only after the thread has moved away and back.
+ * Phone notifications for thread events over ntfy and/or Web Push. Decides
+ * WHETHER a notification fires and renders it; delivery lives in
+ * `PushNotifierService`. Fires on phase TRANSITIONS: a thread sitting in one
+ * phase notifies once, and again only after moving away and back.
  */
 
 /**
  * How long a completion push waits before delivery. The last background task
- * finishing lands a few seconds before the agent
- * resumes with a fresh turn, so the thread reads "completed" in that window;
- * the recheck re-reads the thread after this delay and delivers only if it is
- * still settled. Mirrors the web client's COMPLETION_DEBOUNCE_MS.
+ * finishing lands seconds before the agent resumes, so the thread briefly reads
+ * "completed"; the recheck delivers only if it is still settled. Mirrors the
+ * web client's COMPLETION_DEBOUNCE_MS.
  */
 export const COMPLETION_RECHECK_MS = 10_000;
 

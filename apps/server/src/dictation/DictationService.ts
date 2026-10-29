@@ -1,12 +1,7 @@
 /**
- * DictationService - local speech-to-text for the chat composer.
- *
- * Requests run one at a time in arrival order. The model is downloaded on
- * first use and loaded into a worker process on the first request, never at
- * server start; the worker is stopped after an hour without requests. Each
- * transcript goes through the cleanup passes the server settings ask for.
- *
- * @module DictationService
+ * Local speech-to-text for the chat composer. Requests run one at a time; the
+ * model downloads on first use, loads into a worker on the first request (never
+ * at server start), and the worker stops after an hour idle.
  */
 import {
   DEFAULT_SERVER_SETTINGS,
@@ -168,55 +163,54 @@ const make = Effect.fn("DictationService.make")(function* (model: DictationModel
     return started;
   });
 
-  const runTranscription = (samples: Int16Array) =>
-    Effect.gen(function* () {
-      yield* cancelIdleTimer;
-      yield* ensureModel;
-      const loaded = yield* loadedWorker;
-      const raw = yield* loaded.transcribe(samples).pipe(
-        // A failed worker is replaced on the next request.
-        Effect.tapError((error) =>
-          Effect.logWarning("dictation worker failed", { error }).pipe(
-            Effect.andThen(unloadWorker),
-          ),
-        ),
-      );
-      // Unreadable settings fall back to the defaults rather than losing the transcript.
-      const cleanup = yield* serverSettings.getSettings.pipe(
-        Effect.map((settings) => settings.dictation),
-        Effect.orElseSucceed(() => DEFAULT_SERVER_SETTINGS.dictation),
-      );
-      const transcript: DictationTranscript = { text: cleanTranscript(raw, cleanup), raw };
-      yield* Ref.set(last, transcript);
-      return transcript;
-    }).pipe(Effect.ensuring(startIdleTimer));
+  const runTranscription = Effect.fn("DictationService.runTranscription")(function* (
+    samples: Int16Array,
+  ) {
+    yield* cancelIdleTimer;
+    yield* ensureModel;
+    const loaded = yield* loadedWorker;
+    const raw = yield* loaded.transcribe(samples).pipe(
+      // A failed worker is replaced on the next request.
+      Effect.tapError((error) =>
+        Effect.logWarning("dictation worker failed", { error }).pipe(Effect.andThen(unloadWorker)),
+      ),
+    );
+    // Unreadable settings fall back to the defaults rather than losing the transcript.
+    const cleanup = yield* serverSettings.getSettings.pipe(
+      Effect.map((settings) => settings.dictation),
+      Effect.orElseSucceed(() => DEFAULT_SERVER_SETTINGS.dictation),
+    );
+    const transcript: DictationTranscript = { text: cleanTranscript(raw, cleanup), raw };
+    yield* Ref.set(last, transcript);
+    return transcript;
+  }, Effect.ensuring(startIdleTimer));
 
   // Every job runs on this one fiber, so requests never overlap and finish in
   // the order they arrived.
-  const enqueue = <A, E>(job: Effect.Effect<A, E>) =>
-    Effect.gen(function* () {
-      const done = yield* Deferred.make<A, E>();
-      yield* Queue.offer(jobs, job.pipe(Deferred.into(done), Effect.asVoid));
-      return yield* Deferred.await(done);
-    });
+  const enqueue = Effect.fn("DictationService.enqueue")(function* <A, E>(job: Effect.Effect<A, E>) {
+    const done = yield* Deferred.make<A, E>();
+    yield* Queue.offer(jobs, job.pipe(Deferred.into(done), Effect.asVoid));
+    return yield* Deferred.await(done);
+  });
 
   yield* Queue.take(jobs).pipe(Effect.flatten, Effect.forever, Effect.forkIn(scope));
   yield* Effect.addFinalizer(() => cancelIdleTimer.pipe(Effect.andThen(unloadWorker)));
 
-  const transcribe: DictationService["Service"]["transcribe"] = (pcm) =>
-    Effect.gen(function* () {
-      if (
-        pcm.byteLength === 0 ||
-        pcm.byteLength % 2 !== 0 ||
-        pcm.byteLength > DICTATION_MAX_AUDIO_BYTES
-      ) {
-        return yield* new DictationInvalidAudioError({ byteLength: pcm.byteLength });
-      }
-      // Copy into an aligned buffer; the request body may start at any offset.
-      const samples = new Int16Array(pcm.byteLength / 2);
-      new Uint8Array(samples.buffer).set(pcm);
-      return yield* enqueue(runTranscription(samples));
-    });
+  const transcribe: DictationService["Service"]["transcribe"] = Effect.fn(
+    "DictationService.transcribe",
+  )(function* (pcm: Uint8Array) {
+    if (
+      pcm.byteLength === 0 ||
+      pcm.byteLength % 2 !== 0 ||
+      pcm.byteLength > DICTATION_MAX_AUDIO_BYTES
+    ) {
+      return yield* new DictationInvalidAudioError({ byteLength: pcm.byteLength });
+    }
+    // Copy into an aligned buffer; the request body may start at any offset.
+    const samples = new Int16Array(pcm.byteLength / 2);
+    new Uint8Array(samples.buffer).set(pcm);
+    return yield* enqueue(runTranscription(samples));
+  });
 
   const status: DictationService["Service"]["status"] = Effect.gen(function* () {
     const running = yield* Ref.get(download);

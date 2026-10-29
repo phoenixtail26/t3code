@@ -1,12 +1,7 @@
-// Fork feature: external-session adoption (FORK_PLAN_FORKING.md). WebSocket
-// RPC handler for `threads.adoptExternalSession`. Lives here rather than
-// inline in ws.ts so the fork's contact surface in that upstream-owned file
-// stays at one import and one spread line (same pattern as
-// ../externalSessions/wsHandlers.ts). The work is in ./ThreadAdoptService.ts.
-//
-// Forking a t3 thread no longer goes through here: the sidebar's "Fork thread"
-// dispatches upstream's native `thread.fork` command from the client
-// (apps/web/src/threadFork/useForkThread.ts).
+// Fork feature: WebSocket handler for `threads.adoptExternalSession` (the work
+// is in ./ThreadAdoptService.ts). Lives here so ws.ts, which is upstream-owned,
+// needs only one import and one spread line. Forking a t3 thread uses upstream's
+// native `thread.fork` command from the client, not this file.
 import * as Effect from "effect/Effect";
 
 import {

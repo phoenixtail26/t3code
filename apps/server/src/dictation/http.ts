@@ -28,27 +28,26 @@ import {
 import * as DictationService from "./DictationService.ts";
 import * as DictationWorker from "./worker.ts";
 
-const authenticate = (
+const authenticate = Effect.fn("dictation.authenticate")(function* (
   scope: typeof AuthOrchestrationReadScope | typeof AuthOrchestrationOperateScope,
-) =>
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
-    const session = yield* serverAuth.authenticateHttpRequest(request).pipe(
-      Effect.catchIf(EnvironmentAuth.isServerAuthCredentialError, (error) =>
-        failEnvironmentAuthInvalid(
-          EnvironmentAuth.serverAuthCredentialReason(error),
-          EnvironmentAuth.serverAuthDpopFailureReason(error),
-        ),
+) {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+  const session = yield* serverAuth.authenticateHttpRequest(request).pipe(
+    Effect.catchIf(EnvironmentAuth.isServerAuthCredentialError, (error) =>
+      failEnvironmentAuthInvalid(
+        EnvironmentAuth.serverAuthCredentialReason(error),
+        EnvironmentAuth.serverAuthDpopFailureReason(error),
       ),
-      Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
-        failEnvironmentInternal("internal_error", error),
-      ),
-    );
-    if (!session.scopes.includes(scope)) {
-      return yield* failEnvironmentScopeRequired(scope);
-    }
-  });
+    ),
+    Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
+      failEnvironmentInternal("internal_error", error),
+    ),
+  );
+  if (!session.scopes.includes(scope)) {
+    return yield* failEnvironmentScopeRequired(scope);
+  }
+});
 
 const errorResponse = (status: number, error: { readonly message: string }) =>
   HttpServerResponse.jsonUnsafe({ error: error.message } satisfies DictationErrorResponse, {

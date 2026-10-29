@@ -4,12 +4,9 @@ import { ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { ModelSelection } from "./modelSelection.ts";
 
 /**
- * External-session adoption — fork feature (FORK_PLAN_FORKING.md).
- *
- * Turns a Claude Code CLI session the radar found into a t3 thread bound to
- * that same session, with its visible transcript imported as history. Forking
- * a t3 thread uses upstream's native `thread.fork` command instead and has no
- * fork-owned contract.
+ * External-session adoption (fork feature, FORK_PLAN_FORKING.md): turns a radar-found
+ * Claude CLI session into a t3 thread bound to that session, transcript imported as
+ * history. Forking a t3 thread uses upstream's `thread.fork` and has no contract here.
  */
 
 export const THREAD_FORK_WS_METHODS = {
@@ -35,11 +32,9 @@ export type ThreadAdoptExternalSessionInput = typeof ThreadAdoptExternalSessionI
 
 export class ThreadForkError extends Schema.TaggedError<ThreadForkError>()("ThreadForkError", {
   /**
-   * "not-found": unknown external session. "unsupported": the target provider
-   * is not Claude, or the session already belongs to a t3 thread.
-   * "no-project": the session's cwd matches no t3 project. "fork-failed": the
-   * session transcript could not be read. "create-failed": the thread events
-   * could not be written (no thread was left behind).
+   * "not-found": unknown session. "unsupported": target provider is not Claude,
+   * or the session already belongs to a t3 thread. "no-project": cwd matches no
+   * project. "fork-failed": transcript unreadable. "create-failed": thread events not written.
    */
   reason: Schema.Literals([
     "not-found",

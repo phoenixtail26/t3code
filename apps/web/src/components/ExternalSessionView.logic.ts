@@ -4,11 +4,8 @@ import type { TimelineEntry, WorkLogEntry } from "../session-logic";
 import type { ChatMessage } from "../types";
 
 /**
- * Maps a transcript's `ExternalTranscriptEntry[]` (server order) to
- * `TimelineEntry[]` for `MessagesTimeline`. Pure and order-preserving — the
- * server already interleaves messages and work items in file order, so this
- * must NOT re-sort (unlike `deriveTimelineEntries`, which merges several
- * live-session lists and has to).
+ * Maps transcript entries to `TimelineEntry[]`. The server already interleaves
+ * messages and work items in file order, so this must not re-sort.
  */
 export function mapExternalTranscriptEntriesToTimeline(
   entries: ReadonlyArray<ExternalTranscriptEntry>,

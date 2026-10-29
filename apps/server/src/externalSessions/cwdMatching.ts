@@ -1,12 +1,7 @@
 /**
- * Pure helpers matching an external session's recorded `cwd` to a t3
- * project (via project `workspaceRoot` or thread `worktreePath`). See
- * DESIGN.md, "Own-session filter".
- *
- * Junction/symlink resolution is deliberately out of scope: both sides of
- * the comparison come from the same filesystem, so plain lexical
- * normalization (separators, trailing slashes, case on Windows) is enough
- * in practice.
+ * Pure helpers matching an external session's `cwd` to a t3 project (see
+ * DESIGN.md, "Own-session filter"). Lexical normalization only: both sides come
+ * from the same filesystem, so junction/symlink resolution is out of scope.
  */
 
 export function normalizeCwdKey(rawPath: string, caseInsensitive: boolean): string {

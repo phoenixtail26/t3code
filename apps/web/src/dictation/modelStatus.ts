@@ -1,8 +1,6 @@
-// Fork feature: dictation. Model state for the Voice settings section. The
-// section reads it through useSyncExternalStore; the store owns the one
-// timer that polls `GET /api/dictation/status` while a download is running
-// and lets it lapse the moment the state is anything else, so an idle
-// settings page makes no requests.
+// Fork feature: dictation. Model state for the Voice settings section. The one
+// timer polling `GET /api/dictation/status` runs only while a download is
+// running, so an idle settings page makes no requests.
 import type { DictationStatus, EnvironmentId } from "@t3tools/contracts";
 
 import type { DictationApi } from "./api";

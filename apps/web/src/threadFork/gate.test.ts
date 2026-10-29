@@ -1,4 +1,4 @@
-import type { EnvironmentId, ProviderInstanceId, ServerConfig } from "@t3tools/contracts";
+import type { EnvironmentId, ProviderInstanceId, ServerProvider } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { canForkThread, resolveThreadForkDriverKind } from "./gate";
@@ -7,10 +7,10 @@ const environmentId = "env-1" as EnvironmentId;
 const claudeInstanceId = "claude" as ProviderInstanceId;
 const codexInstanceId = "codex" as ProviderInstanceId;
 
-function serverConfigWithProviders(
+function providerList(
   providers: ReadonlyArray<{ instanceId: ProviderInstanceId; driver: string }>,
-): ServerConfig {
-  return { providers } as unknown as ServerConfig;
+): ReadonlyArray<ServerProvider> {
+  return providers as unknown as ReadonlyArray<ServerProvider>;
 }
 
 describe("threadFork gate", () => {
@@ -18,7 +18,7 @@ describe("threadFork gate", () => {
     const serverConfigs = new Map([
       [
         environmentId,
-        serverConfigWithProviders([
+        providerList([
           { instanceId: claudeInstanceId, driver: "claudeAgent" },
           { instanceId: codexInstanceId, driver: "codex" },
         ]),
@@ -35,10 +35,7 @@ describe("threadFork gate", () => {
 
   it("returns null for an unknown instance or environment", () => {
     const serverConfigs = new Map([
-      [
-        environmentId,
-        serverConfigWithProviders([{ instanceId: claudeInstanceId, driver: "claudeAgent" }]),
-      ],
+      [environmentId, providerList([{ instanceId: claudeInstanceId, driver: "claudeAgent" }])],
     ]);
 
     expect(
@@ -51,7 +48,7 @@ describe("threadFork gate", () => {
     const serverConfigs = new Map([
       [
         environmentId,
-        serverConfigWithProviders([
+        providerList([
           { instanceId: claudeInstanceId, driver: "claudeAgent" },
           { instanceId: codexInstanceId, driver: "codex" },
         ]),

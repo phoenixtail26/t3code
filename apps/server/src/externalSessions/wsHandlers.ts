@@ -169,12 +169,10 @@ export const makeExternalSessionsWsHandlers = Effect.fnUntraced(function* () {
                 return Effect.succeed(Option.none<ExternalSessionsStreamItem>());
               }
               sent.delete(event.sessionId);
-              return Effect.succeed(
-                Option.some<ExternalSessionsStreamItem>({
-                  kind: "removed",
-                  sessionId: event.sessionId,
-                }),
-              );
+              return Effect.succeedSome<ExternalSessionsStreamItem>({
+                kind: "removed",
+                sessionId: event.sessionId,
+              });
             }
             // Recomputed per event (cheap: small SQL table + in-memory
             // list) so a thread created mid-connection is not reported as
@@ -229,37 +227,38 @@ export const makeExternalSessionsWsHandlers = Effect.fnUntraced(function* () {
           );
         }),
       ),
-    [EXTERNAL_SESSIONS_WS_METHODS.getTranscript]: (input: { readonly sessionId: string }) =>
-      Effect.gen(function* () {
-        const sessions = yield* externalSessionsWatcher.snapshot;
-        const session = sessions.find((candidate) => candidate.sessionId === input.sessionId);
-        if (session === undefined) {
-          return yield* new ExternalSessionTranscriptError({
-            reason: "not-found",
-            message: "Session is not in the radar (unknown, aged out, or filtered).",
-          });
-        }
+    [EXTERNAL_SESSIONS_WS_METHODS.getTranscript]: Effect.fn(
+      "externalSessions.wsHandlers.getTranscript",
+    )(function* (input: { readonly sessionId: string }) {
+      const sessions = yield* externalSessionsWatcher.snapshot;
+      const session = sessions.find((candidate) => candidate.sessionId === input.sessionId);
+      if (session === undefined) {
+        return yield* new ExternalSessionTranscriptError({
+          reason: "not-found",
+          message: "Session is not in the radar (unknown, aged out, or filtered).",
+        });
+      }
 
-        const { text, byteCapTripped } = yield* readTranscriptFile(session.filePath).pipe(
-          Effect.mapError(
-            () =>
-              new ExternalSessionTranscriptError({
-                reason: "read-failed",
-                message: "Failed to read the session transcript; it may have been deleted.",
-              }),
-          ),
-        );
-        const { entries, entryCapTripped } = mapTranscriptContent(text);
+      const { text, byteCapTripped } = yield* readTranscriptFile(session.filePath).pipe(
+        Effect.mapError(
+          () =>
+            new ExternalSessionTranscriptError({
+              reason: "read-failed",
+              message: "Failed to read the session transcript; it may have been deleted.",
+            }),
+        ),
+      );
+      const { entries, entryCapTripped } = mapTranscriptContent(text);
 
-        return {
-          sessionId: session.sessionId,
-          title: session.title,
-          state: session.state,
-          lastActivityAt: session.lastActivityAt,
-          cwd: session.cwd,
-          entries,
-          truncated: byteCapTripped || entryCapTripped,
-        } satisfies ExternalSessionTranscript;
-      }),
+      return {
+        sessionId: session.sessionId,
+        title: session.title,
+        state: session.state,
+        lastActivityAt: session.lastActivityAt,
+        cwd: session.cwd,
+        entries,
+        truncated: byteCapTripped || entryCapTripped,
+      } satisfies ExternalSessionTranscript;
+    }),
   };
 });

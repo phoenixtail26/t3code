@@ -1,19 +1,8 @@
 /**
- * Collects the Claude session UUIDs that t3code itself is driving, so the
- * external-sessions radar can exclude its own threads (DESIGN.md,
- * "Own-session filter").
- *
- * Orchestration v2 records every provider conversation it owns as a provider
- * thread whose `nativeThreadRef.nativeId` is the CLI's session id (for Claude,
- * the JSONL filename). One read over the projection table covers every
- * thread, live or idle, including threads adopted from the radar. The payload
- * JSON is provider-specific and treated as untrusted: only a string
- * `nativeThreadRef.nativeId` on a `claudeAgent` row is read.
- *
- * Read directly rather than through `ProjectionStore`, whose provider-thread
- * queries are scoped to one thread: the radar needs the whole set per
- * snapshot, and a per-thread fan-out would make a radar refresh cost
- * proportional to how many threads exist.
+ * Collects the Claude session UUIDs t3code itself drives so the radar can
+ * exclude them (DESIGN.md, "Own-session filter"). Reads the projection table
+ * directly: the radar needs the whole set per snapshot. The payload JSON is
+ * untrusted; only a string `nativeThreadRef.nativeId` on `claudeAgent` rows is read.
  */
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";

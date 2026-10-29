@@ -29,77 +29,67 @@ import * as WebPushStore from "./WebPushStore.ts";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
-export class PushNotifier extends Context.Service<
+class PushNotifier extends Context.Service<
   PushNotifier,
   {
     readonly start: () => Effect.Effect<void, never, Scope.Scope>;
   }
 >()("t3/notifications/PushNotifierService/PushNotifier") {}
 
-const sendNtfyNotification = (topicUrl: string, notification: PushNotification) =>
-  Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient;
-    const request = HttpClientRequest.post(topicUrl).pipe(
-      HttpClientRequest.setHeader("title", notification.title),
-      HttpClientRequest.setHeader("priority", notification.priority),
-      HttpClientRequest.setHeader("tags", notification.tags),
-      notification.clickUrl
-        ? HttpClientRequest.setHeader("click", notification.clickUrl)
-        : (unchanged) => unchanged,
-      HttpClientRequest.bodyText(notification.body, "text/plain"),
-    );
-    const response = yield* client.execute(request).pipe(Effect.timeoutOption(REQUEST_TIMEOUT_MS));
-    if (Option.isNone(response)) {
-      yield* Effect.logWarning("push notification timed out");
-      return;
-    }
-    if (response.value.status < 200 || response.value.status >= 300) {
-      // Response body omitted: it can echo request content back into logs.
-      yield* Effect.logWarning("push notification rejected", { status: response.value.status });
-    }
-  }).pipe(Effect.provide(FetchHttpClient.layer));
+const sendNtfyNotification = Effect.fn("PushNotifier.sendNtfyNotification")(function* (
+  topicUrl: string,
+  notification: PushNotification,
+) {
+  const client = yield* HttpClient.HttpClient;
+  const request = HttpClientRequest.post(topicUrl).pipe(
+    HttpClientRequest.setHeader("title", notification.title),
+    HttpClientRequest.setHeader("priority", notification.priority),
+    HttpClientRequest.setHeader("tags", notification.tags),
+    notification.clickUrl
+      ? HttpClientRequest.setHeader("click", notification.clickUrl)
+      : (unchanged) => unchanged,
+    HttpClientRequest.bodyText(notification.body, "text/plain"),
+  );
+  const response = yield* client.execute(request).pipe(Effect.timeoutOption(REQUEST_TIMEOUT_MS));
+  if (Option.isNone(response)) {
+    yield* Effect.logWarning("push notification timed out");
+    return;
+  }
+  if (response.value.status < 200 || response.value.status >= 300) {
+    // Response body omitted: it can echo request content back into logs.
+    yield* Effect.logWarning("push notification rejected", { status: response.value.status });
+  }
+}, Effect.provide(FetchHttpClient.layer));
 
-const sendWebPushToSnapshot = (input: {
+const sendWebPushToSnapshot = Effect.fn("PushNotifier.sendWebPushToSnapshot")(function* (input: {
   readonly settings: PushNotificationSettings;
   readonly webPush: WebPushStore.WebPushSnapshot;
   readonly notification: PushNotification;
-}) =>
-  Effect.gen(function* () {
-    const vapidKeys = input.webPush.vapidKeys;
-    if (Option.isNone(vapidKeys) || input.webPush.subscriptions.length === 0) {
-      return [];
-    }
-    return yield* sendWebPushNotifications({
-      vapidKeys: vapidKeys.value,
-      vapidSubject: vapidSubjectFor(input.settings.publicBaseUrl),
-      payload: {
-        title: input.notification.title,
-        body: input.notification.body,
-        url: input.notification.clickUrl ?? "",
-        tag: input.notification.threadTag,
-      },
-      subscriptions: input.webPush.subscriptions,
-    });
+}) {
+  const vapidKeys = input.webPush.vapidKeys;
+  if (Option.isNone(vapidKeys) || input.webPush.subscriptions.length === 0) {
+    return [];
+  }
+  return yield* sendWebPushNotifications({
+    vapidKeys: vapidKeys.value,
+    vapidSubject: vapidSubjectFor(input.settings.publicBaseUrl),
+    payload: {
+      title: input.notification.title,
+      body: input.notification.body,
+      url: input.notification.clickUrl ?? "",
+      tag: input.notification.threadTag,
+    },
+    subscriptions: input.webPush.subscriptions,
   });
+});
 
 /**
- * Fire a test push over every configured channel so the user can verify the
- * setup from the settings UI. Deliberately bypasses presence suppression —
- * the user is at the machine clicking the button. Failures are returned as
- * values, not errors, so the UI can show them inline. `goneEndpoints` lists
- * Web Push subscriptions the push service reported dead; the caller prunes
- * them (this function has no store access by design, so it stays trivially
- * testable).
+ * Fire a test push over every configured channel. Bypasses presence suppression;
+ * failures are returned as values. `goneEndpoints` lists dead Web Push
+ * subscriptions for the caller to prune (no store access here).
  */
-export const sendTestPushNotification = (
-  settings: PushNotificationSettings,
-  webPush: WebPushStore.WebPushSnapshot,
-): Effect.Effect<{
-  readonly sent: boolean;
-  readonly detail: string;
-  readonly goneEndpoints: ReadonlyArray<string>;
-}> =>
-  Effect.gen(function* () {
+export const sendTestPushNotification = Effect.fn("PushNotifierService.sendTestPushNotification")(
+  function* (settings: PushNotificationSettings, webPush: WebPushStore.WebPushSnapshot) {
     const hasNtfy = settings.topicUrl.length > 0;
     const webPushReady = Option.isSome(webPush.vapidKeys) && webPush.subscriptions.length > 0;
     if (!hasNtfy && !webPushReady) {
@@ -146,12 +136,11 @@ export const sendTestPushNotification = (
     }
 
     return { sent, detail: parts.join(" · "), goneEndpoints };
-  });
+  },
+);
 
-const sendTestNtfyNotification = (
-  settings: PushNotificationSettings,
-): Effect.Effect<{ readonly sent: boolean; readonly detail: string }> =>
-  Effect.gen(function* () {
+const sendTestNtfyNotification = Effect.fn("PushNotifierService.sendTestNtfyNotification")(
+  function* (settings: PushNotificationSettings) {
     const client = yield* HttpClient.HttpClient;
     const request = HttpClientRequest.post(settings.topicUrl).pipe(
       HttpClientRequest.setHeader("title", "Test notification"),
@@ -181,9 +170,11 @@ const sendTestNtfyNotification = (
         detail: "Could not reach the topic URL.",
       })),
     );
-  }).pipe(Effect.provide(FetchHttpClient.layer));
+  },
+  Effect.provide(FetchHttpClient.layer),
+);
 
-export const make = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
   const threads = yield* ThreadManagement.ThreadManagementService;
   const projects = yield* ProjectService.ProjectService;

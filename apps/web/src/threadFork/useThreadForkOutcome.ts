@@ -7,7 +7,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ScopedThreadRef, ThreadForkResult } from "@t3tools/contracts";
 import { useRouter } from "@tanstack/react-router";
-import { useCallback, useRef } from "react";
+import { useRef } from "react";
 
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -16,12 +16,10 @@ import { buildThreadRouteParams } from "../threadRoutes";
 import { useAtomCommand } from "../state/use-atom-command";
 
 /**
- * The fork RPC returns before the new thread's shell reaches this client over
- * the shell stream. Navigating to the canonical thread route in that window
- * makes the route resolve to "missing" and bounce to "/", which lands on a
- * fresh empty draft instead of the fork. Wait for the shell (same pattern as
- * waitForStartedServerThread in ChatView.logic.ts); on timeout navigate
- * anyway — the thread exists server-side.
+ * The fork RPC returns before the new thread's shell reaches this client.
+ * Navigating in that window bounces to "/" and a fresh empty draft, so wait for
+ * the shell (like waitForStartedServerThread in ChatView.logic.ts). On timeout
+ * navigate anyway: the thread exists server-side.
  */
 export function waitForThreadShell(
   threadRef: ScopedThreadRef,
@@ -66,12 +64,9 @@ export function waitForThreadShell(
 }
 
 /**
- * Dispatch -> navigate -> toast choreography behind `useAdoptExternalSession`
- * (FORK_PLAN_FORKING.md); `useForkThread` mirrors it over upstream's fork
- * command. Adoption is non-destructive (the CLI session is never touched), so
- * it does not gate on a confirmation dialog — the success toast carries the
- * one fact worth knowing instead. A ref-based guard keeps a second call a
- * no-op while one is already in flight.
+ * Dispatch, navigate, toast behind `useAdoptExternalSession`. Adoption is
+ * non-destructive, so there is no confirmation dialog. A ref guard makes a
+ * second call a no-op while one is in flight.
  */
 export function useThreadForkOutcome<W extends { readonly environmentId: EnvironmentId }, E>(
   mutation: AtomCommand<W, ThreadForkResult, E>,
@@ -84,55 +79,52 @@ export function useThreadForkOutcome<W extends { readonly environmentId: Environ
   const router = useRouter();
   const pendingRef = useRef(false);
 
-  return useCallback(
-    async (target: W) => {
-      if (pendingRef.current) return;
+  return async (target: W) => {
+    if (pendingRef.current) return;
 
-      pendingRef.current = true;
-      try {
-        const result = await runMutation(target);
-        if (result._tag === "Failure") {
-          if (isAtomCommandInterrupted(result)) return;
-          const error = squashAtomCommandFailure(result);
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: options.failureTitle,
-              description: error instanceof Error ? error.message : "An error occurred.",
-            }),
-          );
-          return;
-        }
-
+    pendingRef.current = true;
+    try {
+      const result = await runMutation(target);
+      if (result._tag === "Failure") {
+        if (isAtomCommandInterrupted(result)) return;
+        const error = squashAtomCommandFailure(result);
         toastManager.add(
           stackedThreadToast({
-            type: "success",
-            title: options.successToast.title,
-            description: options.successToast.description,
+            type: "error",
+            title: options.failureTitle,
+            description: error instanceof Error ? error.message : "An error occurred.",
           }),
         );
-        const threadRef = scopeThreadRef(target.environmentId, result.value.threadId);
-        await waitForThreadShell(threadRef);
-        const navigationResult = await settlePromise(() =>
-          router.navigate({
-            to: "/$environmentId/$threadId",
-            params: buildThreadRouteParams(threadRef),
-          }),
-        );
-        if (navigationResult._tag === "Failure") {
-          const error = squashAtomCommandFailure(navigationResult);
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Created the thread, but could not open it",
-              description: error instanceof Error ? error.message : "An error occurred.",
-            }),
-          );
-        }
-      } finally {
-        pendingRef.current = false;
+        return;
       }
-    },
-    [runMutation, router, options.failureTitle, options.successToast],
-  );
+
+      toastManager.add(
+        stackedThreadToast({
+          type: "success",
+          title: options.successToast.title,
+          description: options.successToast.description,
+        }),
+      );
+      const threadRef = scopeThreadRef(target.environmentId, result.value.threadId);
+      await waitForThreadShell(threadRef);
+      const navigationResult = await settlePromise(() =>
+        router.navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams(threadRef),
+        }),
+      );
+      if (navigationResult._tag === "Failure") {
+        const error = squashAtomCommandFailure(navigationResult);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Created the thread, but could not open it",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      }
+    } finally {
+      pendingRef.current = false;
+    }
+  };
 }

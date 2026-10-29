@@ -25,12 +25,9 @@ const EMPTY_EXTERNAL_SESSION_ATOM = Atom.make<ExternalSessionShell | null>(null)
 );
 
 /**
- * Look up a single external session shell by id within an environment. The
- * radar only watches the local filesystem, so this is scoped to the
- * environment that owns the transcript file — usually the primary
- * environment, but the read-only transcript route carries its own
- * `environmentId` param, so callers pass it explicitly rather than assuming
- * primary.
+ * Look up one external session shell. Scoped to the environment that owns the
+ * transcript file; callers pass `environmentId` explicitly rather than
+ * assuming the primary environment.
  */
 export function useExternalSessionShell(
   environmentId: EnvironmentId | null,
@@ -62,11 +59,9 @@ function isExternalSessionTranscriptError(error: unknown): error is ExternalSess
 }
 
 /**
- * Fetch the read-only transcript for one external session. A thin wrapper
- * around the client-runtime SWR query atom — `refresh()` is exposed so
- * `ExternalSessionView` can force a refetch when the session shell's
- * `lastActivityAt` changes, since the query key (environmentId + sessionId)
- * doesn't change on its own between polls.
+ * Fetch the read-only transcript for one external session. `refresh()` lets
+ * `ExternalSessionView` refetch when `lastActivityAt` changes, since the query
+ * key (environmentId + sessionId) does not.
  */
 export function useExternalSessionTranscript(
   environmentId: EnvironmentId,

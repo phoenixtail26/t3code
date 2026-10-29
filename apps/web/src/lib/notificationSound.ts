@@ -1,12 +1,7 @@
 /**
- * Notification sound playback.
- *
- * A chosen OS sound (Windows ships short WAVs in %SystemRoot%\Media) is read
- * through the desktop bridge and played from a blob URL — reading the bytes
- * rather than pointing an <audio> at a `file://` path keeps this working under
- * the renderer's content-security policy. With nothing chosen, or in a browser
- * where no bridge exists, a short two-note chime is synthesized instead, so the
- * feature never depends on shipping an audio asset.
+ * The chosen OS sound is read through the desktop bridge and played from a blob
+ * URL, since a `file://` <audio> source is blocked by the renderer's CSP.
+ * Without a choice or a bridge, a synthesized chime plays instead.
  */
 
 const objectUrlByPath = new Map<string, string>();
@@ -56,12 +51,9 @@ async function resolveObjectUrl(soundPath: string): Promise<string | null> {
 }
 
 /**
- * Play the configured sound, falling back to the built-in chime.
- *
- * Returns whether the chosen sound actually played, so callers that can show
- * feedback (the settings preview) can say the choice did not work rather than
- * leaving the user to wonder why every option sounds identical — the failure
- * mode when `media-src` blocks blob URLs.
+ * Play the configured sound, falling back to the built-in chime. Returns
+ * whether the chosen sound actually played, so the settings preview can report
+ * a failure (e.g. `media-src` blocking blob URLs) instead of sounding identical.
  */
 export async function playNotificationSound(soundPath: string): Promise<boolean> {
   if (soundPath.length === 0) {

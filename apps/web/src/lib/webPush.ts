@@ -1,12 +1,9 @@
 import { isElectron } from "~/env";
 
 /**
- * Browser-side Web Push plumbing (fork feature, roadmap #6): service worker
- * registration and PushManager subscription management. Server registration
- * of the resulting subscription lives in `~/hooks/useWebPush.ts`.
- *
- * Electron is deliberately unsupported — the desktop app already delivers
- * native notifications; Web Push targets the phone PWA and plain browsers.
+ * Service worker registration and PushManager subscription. Server
+ * registration lives in `~/hooks/useWebPush.ts`. Electron is unsupported: the
+ * desktop app already delivers native notifications.
  */
 
 const SERVICE_WORKER_URL = "/sw.js";

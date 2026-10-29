@@ -45,20 +45,21 @@ export const makeWebPushWsHandlers = Effect.fnUntraced(function* () {
   const serverSettings = yield* ServerSettings.ServerSettingsService;
 
   return {
-    [WS_METHODS.serverSendTestPushNotification]: (_input: unknown) =>
-      Effect.gen(function* () {
-        const settings = yield* serverSettings.getSettings;
-        const webPush = yield* webPushStore.snapshot.pipe(
-          Effect.orElseSucceed((): WebPushStore.WebPushSnapshot => ({
-            vapidKeys: Option.none(),
-            subscriptions: [],
-          })),
-        );
-        const result = yield* sendTestPushNotification(settings.pushNotifications, webPush);
-        // Best-effort: a prune failure must not mask the test result.
-        yield* webPushStore.prune(result.goneEndpoints).pipe(Effect.ignore);
-        return { sent: result.sent, detail: result.detail };
-      }),
+    [WS_METHODS.serverSendTestPushNotification]: Effect.fn(
+      "notifications.wsHandlers.sendTestPushNotification",
+    )(function* (_input: unknown) {
+      const settings = yield* serverSettings.getSettings;
+      const webPush = yield* webPushStore.snapshot.pipe(
+        Effect.orElseSucceed((): WebPushStore.WebPushSnapshot => ({
+          vapidKeys: Option.none(),
+          subscriptions: [],
+        })),
+      );
+      const result = yield* sendTestPushNotification(settings.pushNotifications, webPush);
+      // Best-effort: a prune failure must not mask the test result.
+      yield* webPushStore.prune(result.goneEndpoints).pipe(Effect.ignore);
+      return { sent: result.sent, detail: result.detail };
+    }),
     [WS_METHODS.serverWebPushStatus]: (_input: unknown) =>
       webPushStore.snapshot.pipe(
         Effect.map((snapshot) => ({

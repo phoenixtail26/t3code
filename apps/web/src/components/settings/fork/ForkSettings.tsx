@@ -3,7 +3,7 @@
 // that upstream-owned file stays at one import and a few one-line mounts
 // (see AGENTS.md, "Fork additions").
 import { LoaderIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import {
   DEFAULT_UNIFIED_SETTINGS,
@@ -28,19 +28,12 @@ import { Switch } from "../../ui/switch";
 import { NotificationSoundControl } from "../NotificationSoundControl";
 import { SettingResetButton, SettingsRow, SettingsSection } from "../settingsLayout";
 
-/**
- * Fork entries for useSettingsRestore's dirty-settings summary. Computed in
- * its own memo so the upstream hook only spreads the result and adds one dep.
- */
-export function useForkSettingsDirtyLabels(settings: UnifiedSettings): ReadonlyArray<string> {
-  return useMemo(
-    () =>
-      settings.desktopNotificationSoundPath !==
-      DEFAULT_UNIFIED_SETTINGS.desktopNotificationSoundPath
-        ? ["Notification sound choice"]
-        : [],
-    [settings.desktopNotificationSoundPath],
-  );
+/** Fork entries for useSettingsRestore's dirty-settings summary. */
+export function forkSettingsDirtyLabels(settings: UnifiedSettings): ReadonlyArray<string> {
+  return settings.desktopNotificationSoundPath !==
+    DEFAULT_UNIFIED_SETTINGS.desktopNotificationSoundPath
+    ? ["Notification sound choice"]
+    : [];
 }
 
 /** Fork feature ("the radar"): toggle external Claude Code sessions in the sidebar. */
@@ -167,11 +160,9 @@ export function NotificationSoundRow() {
 }
 
 /**
- * Server-side phone push configuration (ntfy + Web Push). Unlike the
- * per-device desktop notification toggles, most of these live in
- * ServerSettings — one config for the machine, edited from any client. The
- * "Web Push on this device" row is the exception: it registers THIS
- * browser/PWA with the server so pushes arrive without the ntfy app.
+ * Server-side phone push configuration (ntfy + Web Push), mostly in
+ * ServerSettings. The "Web Push on this device" row is the exception: it
+ * registers THIS browser/PWA with the server.
  */
 export function PushNotificationSettingsSection() {
   const settings = usePrimarySettings();
@@ -190,11 +181,10 @@ export function PushNotificationSettingsSection() {
     deviceLabels: ReadonlyArray<string>;
   } | null>(null);
 
-  // The server, not this client, knows whether ANY device receives Web Push —
-  // e.g. the desktop app must not grey out "Send test" when only the phone is
-  // registered. Re-queried when this device's own registration changes, and
-  // retried because a cold navigation straight to settings can fire before
-  // the environment connection is ready.
+  // Only the server knows whether ANY device receives Web Push. Re-queried when
+  // this device's registration changes, and retried because a cold navigation
+  // can fire before the environment connection is ready.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- retries a server RPC on a timer while the environment connection comes up; the result is external server state
   useEffect(() => {
     if (primaryEnvironmentId === null) return;
     let cancelled = false;
@@ -216,6 +206,7 @@ export function PushNotificationSettingsSection() {
     return () => {
       cancelled = true;
     };
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A change in this device's registration re-queries the server-wide count.
   }, [primaryEnvironmentId, webPushStatus, webPushDevice.status.state]);
 
   const push = settings.pushNotifications;
@@ -275,7 +266,7 @@ export function PushNotificationSettingsSection() {
     <SettingsSection title="Phone push">
       <SettingsRow
         title="ntfy topic URL"
-        description="Full topic URL, e.g. https://ntfy.sh/your-secret-topic. Empty disables the ntfy channel; Web Push devices keep working. The topic name is the only credential — treat it like a secret."
+        description="Full topic URL, e.g. https://ntfy.sh/your-secret-topic. Empty disables the ntfy channel; Web Push devices keep working. The topic name is the only credential, so treat it like a secret."
         resetAction={
           push.topicUrl !== pushDefaults.topicUrl ? (
             <SettingResetButton
@@ -324,7 +315,7 @@ export function PushNotificationSettingsSection() {
             webPushDevice.error !== null
               ? webPushDevice.error
               : webPushDevice.status.state === "registered"
-                ? "This device receives pushes directly from the server — no ntfy app needed."
+                ? "This device receives pushes directly from the server, no ntfy app needed."
                 : webPushDevice.status.state === "permission-denied"
                   ? "Notifications are blocked for this site. Allow them in the browser settings, then retry."
                   : "Deliver pushes straight to this browser or installed PWA, without the ntfy app."
@@ -378,7 +369,7 @@ export function PushNotificationSettingsSection() {
       {phaseToggle("notifyOnCompletion", "Push on completion", "A thread finished its work.")}
       <SettingsRow
         title="Suppress while at the computer"
-        description="Skip the phone push if you were active at this machine within this many seconds — you already got the desktop notification. 0 always pushes."
+        description="Skip the phone push if you were active at this machine within this many seconds (you already got the desktop notification). 0 always pushes."
         resetAction={
           push.suppressWhenPresentSeconds !== pushDefaults.suppressWhenPresentSeconds ? (
             <SettingResetButton

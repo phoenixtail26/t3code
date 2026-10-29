@@ -1,9 +1,10 @@
 import type { ClaudeUsageLimit, ClaudeUsageSeverity, ClaudeUsageSummary } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import { CalendarClockIcon, GaugeIcon, TriangleAlertIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PrimaryEnvironmentHttpClient } from "../../environments/primary/httpClient";
+import { useNowMinute } from "../../hooks/useNowMinute";
 import { runPrimaryHttp } from "../../lib/runtime";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
@@ -36,9 +37,7 @@ function limitKey(limit: ClaudeUsageLimit): string {
 }
 
 /** Worst limit by severity; active limits break ties, then utilization. */
-export function pickHeadlineLimit(
-  limits: ReadonlyArray<ClaudeUsageLimit>,
-): ClaudeUsageLimit | null {
+function pickHeadlineLimit(limits: ReadonlyArray<ClaudeUsageLimit>): ClaudeUsageLimit | null {
   let headline: ClaudeUsageLimit | null = null;
   for (const limit of limits) {
     if (
@@ -55,7 +54,7 @@ export function pickHeadlineLimit(
 }
 
 /** The session (5-hour) window — the number worth keeping always on screen. */
-export function pickSessionLimit(limits: ReadonlyArray<ClaudeUsageLimit>): ClaudeUsageLimit | null {
+function pickSessionLimit(limits: ReadonlyArray<ClaudeUsageLimit>): ClaudeUsageLimit | null {
   return limits.find((limit) => limit.kind === "session") ?? pickHeadlineLimit(limits);
 }
 
@@ -65,7 +64,7 @@ export function pickSessionLimit(limits: ReadonlyArray<ClaudeUsageLimit>): Claud
  * than surfacing only once it has already crossed into warning. Highest
  * utilization wins when the account has several scoped windows.
  */
-export function pickScopedWeeklyLimit(
+function pickScopedWeeklyLimit(
   limits: ReadonlyArray<ClaudeUsageLimit>,
   sessionLimit: ClaudeUsageLimit | null,
 ): ClaudeUsageLimit | null {
@@ -80,7 +79,7 @@ export function pickScopedWeeklyLimit(
 }
 
 /** Worst limit not already pinned on screen that has crossed into warning/error. */
-export function pickAlertLimit(
+function pickAlertLimit(
   limits: ReadonlyArray<ClaudeUsageLimit>,
   pinnedLimits: ReadonlyArray<ClaudeUsageLimit | null>,
 ): ClaudeUsageLimit | null {
@@ -90,7 +89,7 @@ export function pickAlertLimit(
   return pickHeadlineLimit(alertCandidates);
 }
 
-export function formatResetLabel(resetsAt: string | null, nowMs: number): string | null {
+function formatResetLabel(resetsAt: string | null, nowMs: number): string | null {
   if (!resetsAt) return null;
   const resetMs = Date.parse(resetsAt);
   if (Number.isNaN(resetMs)) return null;
@@ -148,7 +147,8 @@ function notifyEscalations(
 }
 
 function UsageLimitRow({ limit }: { readonly limit: ClaudeUsageLimit }) {
-  const resetLabel = formatResetLabel(limit.resetsAt, Date.now());
+  const nowMinute = useNowMinute();
+  const resetLabel = formatResetLabel(limit.resetsAt, Date.parse(`${nowMinute}:00Z`));
   const barWidth = `${Math.max(0, Math.min(100, limit.percent))}%`;
   return (
     <div>
@@ -172,13 +172,10 @@ function UsageLimitRow({ limit }: { readonly limit: ClaudeUsageLimit }) {
 }
 
 /**
- * Plan-usage meter for the sidebar footer: the session (5-hour) window and
- * the model-scoped weekly window (e.g. Fable) are always on screen; when any
- * other limit crosses into warning or error an extra alert row appears under
- * them, and escalations observed at runtime raise a toast. Hover shows the
- * full per-window breakdown — the same data as the Claude Code `/usage`
- * screen. A transient outage (rate limit, unreachable endpoint) degrades to
- * a "Usage —" pill; only missing/invalid credentials hide it entirely.
+ * Plan-usage meter for the sidebar footer: session and model-scoped weekly
+ * windows always show; other limits in warning/error add an alert row and
+ * escalations raise a toast. A transient outage degrades to a "Usage" pill
+ * with a dash; only missing/invalid credentials hide it.
  */
 export function SidebarClaudeUsagePill() {
   const [summary, setSummary] = useState<ClaudeUsageSummary | null>(null);
@@ -186,30 +183,31 @@ export function SidebarClaudeUsagePill() {
   const knownSeveritiesRef = useRef<Map<string, ClaudeUsageSeverity> | null>(null);
   const lastRefreshAtRef = useRef(0);
 
-  const refresh = useCallback(async () => {
-    // Stamp before awaiting so a focus event mid-flight is gated too.
-    lastRefreshAtRef.current = Date.now();
-    try {
-      const next = await runPrimaryHttp(
-        PrimaryEnvironmentHttpClient.pipe(
-          Effect.flatMap((client) => client.fork.claudeUsage({ headers: {} })),
-        ),
-      );
-      if (next.status === "ok") {
-        knownSeveritiesRef.current = notifyEscalations(knownSeveritiesRef.current, next.limits);
-      }
-      // A transient "unavailable" must not blank an already-shown meter;
-      // keep the last good summary until fresh data arrives.
-      setSummary((previous) =>
-        next.status === "ok" || previous === null || previous.status !== "ok" ? next : previous,
-      );
-    } catch {
-      // Not yet authenticated or the environment is unreachable; keep the
-      // last summary (or stay hidden) and let the next poll retry.
-    }
-  }, []);
-
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- polls the usage endpoint on an interval and window focus; the data lives on the server
   useEffect(() => {
+    const refresh = async () => {
+      // Stamp before awaiting so a focus event mid-flight is gated too.
+      lastRefreshAtRef.current = Date.now();
+      try {
+        const next = await runPrimaryHttp(
+          PrimaryEnvironmentHttpClient.pipe(
+            Effect.flatMap((client) => client.fork.claudeUsage({ headers: {} })),
+          ),
+        );
+        if (next.status === "ok") {
+          knownSeveritiesRef.current = notifyEscalations(knownSeveritiesRef.current, next.limits);
+        }
+        // A transient "unavailable" must not blank an already-shown meter;
+        // keep the last good summary until fresh data arrives.
+        setSummary((previous) =>
+          next.status === "ok" || previous === null || previous.status !== "ok" ? next : previous,
+        );
+      } catch {
+        // Not yet authenticated or the environment is unreachable; keep the
+        // last summary (or stay hidden) and let the next poll retry.
+      }
+    };
+
     void refresh();
     const interval = setInterval(() => void refresh(), POLL_INTERVAL_MS);
     const handleFocus = () => {
@@ -221,7 +219,7 @@ export function SidebarClaudeUsagePill() {
       clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
     };
-  }, [refresh]);
+  }, []);
 
   if (summary === null) return null;
   if (summary.status !== "ok" || summary.limits.length === 0) {
@@ -245,7 +243,7 @@ export function SidebarClaudeUsagePill() {
             >
               <GaugeIcon className="size-3.5" />
               <span>Usage</span>
-              <span className="ml-auto font-medium">—</span>
+              <span className="ml-auto font-medium">–</span>
             </div>
           }
         />

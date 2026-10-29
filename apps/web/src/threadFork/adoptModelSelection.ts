@@ -9,18 +9,9 @@ import {
 const CLAUDE_AGENT_DRIVER_KIND = "claudeAgent";
 
 /**
- * Adopting an external session (F6) always continues on a Claude provider
- * instance — the server rejects any other driver (see
- * `apps/server/src/threadFork/wsHandlers.ts`'s `adoptExternalSession`,
- * `reason: "unsupported"` for non-claudeAgent). The client picks the
- * instance the same way a new thread picks its default
- * (`resolveDefaultNewProjectModelSelection` in `../modelSelection.ts`) —
- * ready first, else enabled+available — but scoped to claudeAgent
- * instances only, and with no further last-resort fallback: unlike a new
- * project (which must land on *some* provider), an adopted session has
- * nowhere else to go, so a disabled or unavailable claudeAgent instance is
- * treated the same as none configured. Returns null in that case, which
- * callers use to hide/disable the adopt action.
+ * The server rejects adopting onto any non-claudeAgent driver, so pick a ready
+ * (else enabled and available) claudeAgent instance. No last-resort fallback:
+ * returns null when none qualifies, which hides/disables the adopt action.
  */
 export function resolveClaudeAgentAdoptModelSelection(
   providers: ReadonlyArray<ServerProvider>,

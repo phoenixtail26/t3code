@@ -42,11 +42,9 @@ const capitalize = (token: Token): Token => ({
 const startsUppercase = (core: string) => /^\p{Lu}/u.test(core);
 
 /**
- * Drops um, uh, er, ah and "you know" used as a filler, then collapses
- * doubled words ("the the"). A removed filler's sentence-ending punctuation
- * moves to the word before it, and the word after a removed sentence-initial
- * filler is capitalised. "you know" counts as a filler only when punctuation
- * or the text's edges set it off, so "do you know the way" is kept.
+ * Drops um, uh, er, ah and "you know" used as a filler, then collapses doubled
+ * words ("the the"). "you know" counts only when punctuation or the text's
+ * edges set it off, so "do you know the way" is kept.
  */
 export const removeFillers = (text: string): string => {
   const tokens = text.split(/\s+/).filter(Boolean).map(parseToken);

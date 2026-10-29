@@ -110,16 +110,15 @@ export const make = Effect.gen(function* () {
     return loaded;
   });
 
-  const persist = (next: WebPushStoreFile) =>
-    Effect.gen(function* () {
-      const raw = yield* encodeStoreFileJson(next).pipe(
-        Effect.mapError((cause) => new WebPushError({ operation: "persist-store", cause })),
-      );
-      yield* secretStore
-        .set(SECRET_NAME, textEncoder.encode(raw))
-        .pipe(Effect.mapError((cause) => new WebPushError({ operation: "persist-store", cause })));
-      yield* Ref.set(stateRef, Option.some(next));
-    });
+  const persist = Effect.fn("WebPushStore.persist")(function* (next: WebPushStoreFile) {
+    const raw = yield* encodeStoreFileJson(next).pipe(
+      Effect.mapError((cause) => new WebPushError({ operation: "persist-store", cause })),
+    );
+    yield* secretStore
+      .set(SECRET_NAME, textEncoder.encode(raw))
+      .pipe(Effect.mapError((cause) => new WebPushError({ operation: "persist-store", cause })));
+    yield* Ref.set(stateRef, Option.some(next));
+  });
 
   const withStore = <A>(
     update: (

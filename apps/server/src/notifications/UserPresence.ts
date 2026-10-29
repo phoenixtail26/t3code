@@ -1,13 +1,7 @@
 /**
- * Last time any connected client reported the user actually present at the
- * machine — window focused, or the OS reporting recent input while the app sits
- * in the background.
- *
- * Used to keep the phone quiet when the user is at their desk: they already got
- * a desktop notification, so a push to the pocket is pure duplication. Kept as
- * a module-level timestamp rather than a service because it is a single number
- * with no lifecycle, and the process boundary already scopes it correctly (a
- * restart forgets presence, which fails safe toward notifying).
+ * Last time any connected client reported the user present (window focused, or
+ * recent OS input while backgrounded). Keeps the phone quiet at the desk. A
+ * module-level timestamp: a restart forgets presence, which fails safe toward notifying.
  */
 
 let lastPresentAtMs: number | null = null;

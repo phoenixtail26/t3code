@@ -1,19 +1,7 @@
 /**
- * "New build available" detection for the built desktop app.
- *
- * The long-running server serves apps/web/dist straight from disk, and a
- * rebuild (e.g. another thread's /build) rewrites those files under the
- * already-loaded renderer. The running client keeps its old, in-memory bundle
- * whose lazy route chunks may no longer exist on disk — so a toast click that
- * navigates to a not-yet-visited route silently fails to load its chunk. We
- * surface a manual "reload" affordance rather than auto-reloading, so
- * in-progress work is never disturbed until the user chooses to reload.
- *
- * Detection: every build stamps a BUILD_ID into both the client bundle (via
- * `import.meta.env.BUILD_ID`, the "running" id) and a non-fingerprinted
- * `/version.json` (the "served" id, always fetched no-store from the current
- * on-disk build). When the served id differs from the running id, a newer
- * build is on disk.
+ * A rebuild rewrites apps/web/dist under the loaded renderer, so lazy route
+ * chunks may vanish. The bundle's BUILD_ID ("running") is compared with the
+ * no-store `/version.json` ("served"); a mismatch means a newer build is on disk.
  */
 
 const VERSION_ENDPOINT = "/version.json";

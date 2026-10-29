@@ -1,16 +1,7 @@
-// Fork feature: external-session adoption (FORK_PLAN_FORKING.md, "Re-platformed
-// on orchestration v2"). Turns a Claude Code CLI session the radar found into a
-// t3 thread bound to that same session.
-//
-// Follows upstream's agent-session import recipe (project/AgentSessionImporter.ts):
-// the new thread is bound to the CLI's own session through a strong
-// `nativeThreadRef`, so its first turn resumes that session natively, and the
-// transcript's visible user/assistant text is imported as the thread's history.
-// Nothing is written to the CLI's files.
-//
-// A service rather than inline RPC code because it needs the orchestration
-// event sink and id allocator, which only the v2 runtime layer composes
-// (orchestration-v2/runtimeLayer.ts mounts `layer` next to the importer's).
+// Fork feature: external-session adoption (FORK_PLAN_FORKING.md). Binds a new t3
+// thread to a radar-found Claude CLI session through a strong `nativeThreadRef`
+// (upstream's AgentSessionImporter recipe) and imports the visible transcript as
+// history. A service because it needs the v2 event sink and id allocator.
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -150,7 +141,7 @@ function messageEvents(input: {
   ];
 }
 
-export const make = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const threadManagement = yield* ThreadManagement.ThreadManagementService;
   const projectService = yield* ProjectService.ProjectService;
   const eventSink = yield* EventSink.EventSinkV2;
@@ -179,7 +170,7 @@ export const make = Effect.gen(function* () {
     if (ownIds.has(session.sessionId)) {
       return yield* new ThreadForkError({
         reason: "unsupported",
-        message: "This session already belongs to a t3 thread — fork that thread instead.",
+        message: "This session already belongs to a t3 thread. Fork that thread instead.",
       });
     }
 
@@ -241,7 +232,7 @@ export const make = Effect.gen(function* () {
     );
     const lastActiveAtMs = yield* fs.stat(session.filePath).pipe(
       Effect.map((info) => Option.map(info.mtime, (mtime) => mtime.getTime())),
-      Effect.catch(() => Effect.succeed(Option.none<number>())),
+      Effect.orElseSucceed(() => Option.none<number>()),
       Effect.map(Option.getOrElse(() => Date.parse(session.lastActivityAt))),
     );
     const parsed = parseAgentSessionTranscript({
@@ -267,7 +258,7 @@ export const make = Effect.gen(function* () {
     const threadId = ThreadId.make(`adopt:${input.modelSelection.instanceId}:${session.sessionId}`);
     const existing = yield* threadManagement
       .getThreadShell(threadId)
-      .pipe(Effect.catch(() => Effect.succeed(null)));
+      .pipe(Effect.orElseSucceed(() => null));
     if (existing !== null) {
       // Idempotent: a second adopt of the same session opens the same thread.
       return { threadId } satisfies ThreadForkResult;

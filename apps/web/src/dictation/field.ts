@@ -1,8 +1,7 @@
-// Fork feature: dictation. A text field outside the composer that dictation
-// can target: the focused textarea, input or contenteditable at the moment
-// the shortcut fires, or the nearest field to a DictationFieldButton.
-// Insertion goes through the native value setter and an `input` event so a
-// React controlled field sees the change as if the user had typed it.
+// Fork feature: dictation. A text field outside the composer that dictation can
+// target: the focused one when the shortcut fires, or the nearest to a
+// DictationFieldButton. Insertion uses the native value setter plus an `input`
+// event so a React controlled field sees it as typing.
 
 export interface DictationField {
   readonly element: HTMLElement;
@@ -15,7 +14,7 @@ const TEXT_INPUT_TYPES = new Set(["", "text", "search", "url", "tel"]);
 const COMPOSER_EDITOR_SELECTOR = '[data-testid="composer-editor"]';
 const FIELD_SELECTOR = "textarea, input, [contenteditable]";
 
-export function isTextControl(element: Element): element is HTMLTextAreaElement | HTMLInputElement {
+function isTextControl(element: Element): element is HTMLTextAreaElement | HTMLInputElement {
   if (element instanceof HTMLTextAreaElement) return !element.disabled && !element.readOnly;
   if (element instanceof HTMLInputElement) {
     return TEXT_INPUT_TYPES.has(element.type) && !element.disabled && !element.readOnly;
@@ -23,14 +22,14 @@ export function isTextControl(element: Element): element is HTMLTextAreaElement 
   return false;
 }
 
-export function isEditableHost(element: Element): element is HTMLElement {
+function isEditableHost(element: Element): element is HTMLElement {
   if (!(element instanceof HTMLElement)) return false;
   const attribute = element.getAttribute("contenteditable");
   return attribute === "" || attribute === "true" || attribute === "plaintext-only";
 }
 
 /** The field behind an element, or null when it is not a field or is the composer's editor. */
-export function fieldFromElement(element: Element | null): DictationField | null {
+function fieldFromElement(element: Element | null): DictationField | null {
   if (element === null || !(element instanceof HTMLElement)) return null;
   if (element.closest(COMPOSER_EDITOR_SELECTOR) !== null) return null;
   if (!isTextControl(element) && !isEditableHost(element)) return null;

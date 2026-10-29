@@ -15,12 +15,9 @@ const BUILT_IN_VALUE = "";
 const BUILT_IN_LABEL = "Built-in chime";
 
 /**
- * Sound picker for desktop notifications: the OS sound set (Windows ships
- * short WAVs in %SystemRoot%\Media) plus the built-in chime, with a preview
- * button so a choice can be heard without contriving a notification.
- *
- * Where no desktop bridge exists (browser, phone PWA) the list is empty and
- * only the built-in chime is offered, which is what plays there anyway.
+ * Sound picker: the OS sound set plus the built-in chime, with a preview
+ * button. Without a desktop bridge the list is empty and only the built-in
+ * chime is offered, which is what plays there anyway.
  */
 export function NotificationSoundControl({
   value,
@@ -33,6 +30,7 @@ export function NotificationSoundControl({
 }) {
   const [options, setOptions] = useState<ReadonlyArray<NotificationSoundOption>>([]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- lists OS sounds through the Electron desktop bridge (IPC), which only the desktop shell can answer
   useEffect(() => {
     let cancelled = false;
     const list = window.desktopBridge?.listNotificationSounds;

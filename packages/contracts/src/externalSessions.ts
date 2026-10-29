@@ -3,12 +3,9 @@ import * as Schema from "effect/Schema";
 import { IsoDateTime, ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 /**
- * External Claude Code sessions ("the radar") — fork feature.
- *
- * The server watches `<claude-config>/projects/<slug>/*.jsonl` for sessions
- * driven outside t3code (plain CLI, IDE terminals), matches their cwd to
- * known t3 projects, and streams read-only state to the sidebar. See
- * `apps/server/src/externalSessions/DESIGN.md` and `FORK_PLAN_RADAR.md`.
+ * External Claude Code sessions ("the radar", fork feature): sessions driven
+ * outside t3code, matched by cwd to known projects and streamed read-only to
+ * the sidebar. See `apps/server/src/externalSessions/DESIGN.md`.
  */
 
 export const EXTERNAL_SESSIONS_WS_METHODS = {
@@ -57,11 +54,9 @@ export const ExternalSessionsSubscribeInput = Schema.Struct({});
 export type ExternalSessionsSubscribeInput = typeof ExternalSessionsSubscribeInput.Type;
 
 /**
- * Read-only transcript view (Phase 4). The server maps a session's JSONL
- * records to a single ordered entry list: conversational messages plus
- * work items (thinking/tool activity), in file order. Lossy by design —
- * sidechain (subagent) records, attachments, and housekeeping records are
- * dropped; see DESIGN.md "transcript view mapping".
+ * Read-only transcript view (Phase 4): one ordered entry list of messages and
+ * work items (thinking/tool activity). Lossy by design: sidechain records,
+ * attachments, and housekeeping records are dropped (DESIGN.md "transcript view mapping").
  */
 
 export const ExternalTranscriptMessageEntry = Schema.Struct({

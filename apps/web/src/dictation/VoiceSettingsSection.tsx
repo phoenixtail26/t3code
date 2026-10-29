@@ -1,8 +1,6 @@
 // Fork feature: dictation. The "Voice" section of the General settings page:
-// the cleanup toggle and dictionary (server settings), the model's state with
-// Download/Remove, and the last transcription raw beside cleaned so the
-// cleanup rules can be judged on real speech. Mounted by SettingsPanels with
-// one JSX element.
+// cleanup toggle and dictionary, model state with Download/Remove, and the
+// last transcription raw beside cleaned. Mounted by SettingsPanels.
 import { DEFAULT_UNIFIED_SETTINGS, type DictationStatus } from "@t3tools/contracts";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
@@ -41,13 +39,16 @@ export function VoiceSettingsSection() {
 
   const [store] = useState(() => new DictationModelStatusStore({ api: dictationApi }));
   const model = useSyncExternalStore(store.subscribe, store.getState, store.getState);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- disposes the store's poll timer when the section unmounts
   useEffect(() => () => store.dispose(), [store]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- starts the store's fetch (and its download poll timer) for this environment
   useEffect(() => {
     if (environmentId !== null) void store.refresh(environmentId);
   }, [environmentId, store]);
   // The composer's mic button drives downloads and transcriptions; re-read
   // when one starts a download or finishes (back to idle), so the percent and
   // the last transcription are current without the section polling.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscription to the external dictation store
   useEffect(() => {
     if (environmentId === null) return;
     let previous = dictation.getState().phase;

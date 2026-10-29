@@ -1,25 +1,10 @@
 import { useEffect } from "react";
 
 /**
- * Swipe-right anywhere to open the mobile sidebar; swipe left to dismiss it.
- * The one navigation affordance phones expect and the desktop-first layout
- * never had.
- *
- * Deliberately NOT edge-gated: Android's system back gesture owns the screen
- * edges, so an edge-only opener lands in exactly the strip the OS confiscates
- * (observed: edge swipes triggered Chrome back / closed the PWA and never
- * reached the page). Mid-screen swipes are ours.
- *
- * Horizontal scrolling stays safe without edge-gating because a swipe defers
- * to a scrollable ancestor only when that ancestor can actually consume the
- * gesture: a rightward swipe scrolls content leftward, which is only possible
- * when `scrollLeft > 0`. A code block at rest cannot consume a right-swipe, so
- * the gesture is free to mean "open the sidebar". Once the user has scrolled
- * into a block, swipes over it scroll it back — matching native-app behavior.
- *
- * Fork-local and self-contained: attaches its own listeners rather than
- * threading gesture state through the sidebar's render, so it stays a single
- * additive line against an upstream file.
+ * Swipe-right anywhere opens the mobile sidebar; swipe left dismisses it. Not
+ * edge-gated, because Android's back gesture owns the screen edges. A swipe
+ * defers to a scrollable ancestor only when it can consume it (a right-swipe
+ * needs `scrollLeft > 0`).
  */
 
 /** Horizontal travel before a drag counts as a swipe. */
@@ -64,6 +49,7 @@ export function useSidebarEdgeSwipe(input: {
 }): void {
   const { enabled, isOpen, setOpen } = input;
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- touch listeners on document drive the sidebar open/closed; no React event surface covers a swipe anywhere on the page
   useEffect(() => {
     if (!enabled) return;
 

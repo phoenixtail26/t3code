@@ -2,13 +2,12 @@ import { useAtomValue } from "@effect/atom-react";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ExternalSessionShell } from "@t3tools/contracts";
 import { Link, useParams } from "@tanstack/react-router";
-import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
-import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { ChevronDownIcon } from "lucide-react";
+import { useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useClientSettings } from "~/hooks/useSettings";
 import { cn } from "../lib/utils";
 import { readLocalApi } from "../localApi";
 import { Atom } from "effect/reactivity";
-import { useExternalSessionsForProject } from "../state/entities";
 import { environmentExternalSessions } from "../state/externalSessions";
 import { primaryEnvironmentIdAtom } from "../state/primaryEnvironment";
 import { environmentServerConfigsAtom } from "../state/server";
@@ -20,17 +19,13 @@ import { ThreadStatusLabel } from "./ThreadStatusIndicators";
 import type { ThreadStatusPill } from "./Sidebar.logic";
 
 /**
- * Read-only sidebar section listing external Claude Code CLI sessions ("the
- * radar") matched to the current project. Collapsed and quiet by default —
- * see `packages/contracts/src/externalSessions.ts` and
- * `apps/server/src/externalSessions/DESIGN.md` for the source of this data.
+ * Read-only sidebar section listing external Claude Code CLI sessions matched
+ * to the current project; data source in `apps/server/src/externalSessions/DESIGN.md`.
  */
 
-// Hand-built pills — `ThreadStatusPill["label"]` is a closed union tied to
-// in-app thread states, so there's no literal for a foreign/idle session.
-// "Working" is reused verbatim (it is a member of the union and matches the
-// intended color/pulse treatment); the idle label is asserted through the
-// same field type since no existing literal fits.
+// `ThreadStatusPill["label"]` is a closed union of in-app thread states with no
+// literal for an idle foreign session, so the idle label is asserted through
+// the field type; "Working" is reused verbatim.
 const EXTERNAL_SESSION_WORKING_PILL: ThreadStatusPill = {
   label: "Working",
   colorClass: "text-sky-600 dark:text-sky-300/80",
@@ -82,7 +77,7 @@ function sortExternalSessions(
   });
 }
 
-export function externalSessionTitle(session: ExternalSessionShell): string {
+function externalSessionTitle(session: ExternalSessionShell): string {
   return session.title ?? session.sessionId.slice(0, 8);
 }
 
@@ -116,7 +111,7 @@ export function SidebarExternalSessions({
       : environmentExternalSessions.stateValueAtom(primaryEnvironmentId),
   );
   const [expanded, setExpanded] = useState(false);
-  const sessions = useMemo(() => {
+  const sessions = (() => {
     if (primaryEnvironmentId === null) return [];
     const visibleProjectIds = new Set(
       projects
@@ -131,7 +126,7 @@ export function SidebarExternalSessions({
     return sortExternalSessions(
       [...sessionsById.values()].filter((session) => visibleProjectIds.has(session.projectId)),
     );
-  }, [primaryEnvironmentId, projects, scopedProjectKeys, sessionsById]);
+  })();
   if (!showExternalSessions || primaryEnvironmentId === null || sessions.length === 0) {
     return null;
   }
@@ -162,63 +157,7 @@ export function SidebarExternalSessions({
   );
 }
 
-/**
- * Legacy-sidebar mount: renders inside a project's expandable group. Reads the
- * visibility setting and the project's sessions itself so LegacySidebar.tsx
- * stays at one import and one element (AGENTS.md, "Fork additions").
- */
-export function LegacySidebarProjectExternalSessions({
-  project,
-  expanded,
-}: {
-  project: { readonly id: string; readonly environmentId: EnvironmentId };
-  expanded: boolean;
-}) {
-  const showExternalSessions = useClientSettings<boolean>(
-    (settings) => settings.showExternalSessions,
-  );
-  const sessions = useExternalSessionsForProject(project.id);
-  if (!expanded || !showExternalSessions) return null;
-  return <ExternalSessionsSection sessions={sessions} environmentId={project.environmentId} />;
-}
-
-export function ExternalSessionsSection({
-  sessions,
-  environmentId,
-}: {
-  sessions: ReadonlyArray<ExternalSessionShell>;
-  /** Environment the sessions were matched against — carried into the read-only transcript route link. */
-  environmentId: EnvironmentId;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  if (sessions.length === 0) {
-    return null;
-  }
-  return (
-    <div className="w-full">
-      <button
-        type="button"
-        className="flex h-6 w-full items-center gap-1.5 px-2 text-left text-3xs text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80 sm:h-7"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((current) => !current)}
-      >
-        <ChevronRightIcon
-          className={cn(
-            "size-3 shrink-0 text-muted-foreground/60 transition-transform duration-150",
-            expanded ? "rotate-90" : "",
-          )}
-        />
-        <span className="flex-1 truncate">External</span>
-        <span className="shrink-0 rounded-full bg-muted px-1.5 text-3xs tabular-nums text-muted-foreground/60">
-          {sessions.length}
-        </span>
-      </button>
-      {expanded && <ExternalSessionList sessions={sessions} environmentId={environmentId} />}
-    </div>
-  );
-}
-
-/** Session rows plus the adopt context menu — shared by both sidebar mounts. */
+/** Session rows plus the adopt context menu, mounted by SidebarExternalSessions. */
 function ExternalSessionList({
   sessions,
   environmentId,
@@ -226,7 +165,7 @@ function ExternalSessionList({
   sessions: ReadonlyArray<ExternalSessionShell>;
   environmentId: EnvironmentId;
 }) {
-  const sortedSessions = useMemo(() => sortExternalSessions(sessions), [sessions]);
+  const sortedSessions = sortExternalSessions(sessions);
   const activeSessionId = useParams({
     strict: false,
     select: (params) => (params as { sessionId?: string }).sessionId ?? null,
@@ -235,30 +174,29 @@ function ExternalSessionList({
   // Adopting always continues on a claudeAgent instance (F6) — resolved
   // once per environment, same for every row, rather than per-session.
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
-  const adoptModelSelection = useMemo(
-    () => resolveClaudeAgentAdoptModelSelection(serverConfigs.get(environmentId)?.providers ?? []),
-    [serverConfigs, environmentId],
+  const adoptModelSelection = resolveClaudeAgentAdoptModelSelection(
+    serverConfigs.get(environmentId)?.providers ?? [],
   );
   const adoptSession = useAdoptExternalSession();
-  const handleSessionContextMenu = useCallback(
-    (session: ExternalSessionShell, position: { x: number; y: number }) => {
-      if (!adoptModelSelection) return;
-      void (async () => {
-        const api = readLocalApi();
-        if (!api) return;
-        const clickedResult = await settlePromise(() =>
-          api.contextMenu.show([{ id: "adopt", label: "Adopt as thread" }], position),
-        );
-        if (clickedResult._tag === "Failure" || clickedResult.value !== "adopt") return;
-        void adoptSession({
-          environmentId,
-          sessionId: session.sessionId,
-          modelSelection: adoptModelSelection,
-        });
-      })();
-    },
-    [adoptModelSelection, adoptSession, environmentId],
-  );
+  const handleSessionContextMenu = (
+    session: ExternalSessionShell,
+    position: { x: number; y: number },
+  ) => {
+    if (!adoptModelSelection) return;
+    void (async () => {
+      const api = readLocalApi();
+      if (!api) return;
+      const clickedResult = await settlePromise(() =>
+        api.contextMenu.show([{ id: "adopt", label: "Adopt as thread" }], position),
+      );
+      if (clickedResult._tag === "Failure" || clickedResult.value !== "adopt") return;
+      void adoptSession({
+        environmentId,
+        sessionId: session.sessionId,
+        modelSelection: adoptModelSelection,
+      });
+    })();
+  };
 
   return (
     <div>

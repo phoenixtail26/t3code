@@ -35,6 +35,7 @@ export function FloatingDictationPill({
 }) {
   const [placement, setPlacement] = useState<Placement>(() => placementOf(anchor));
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- window scroll/resize listeners that re-measure the anchor element
   useLayoutEffect(() => {
     const update = () => {
       const next = placementOf(anchor);

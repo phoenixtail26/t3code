@@ -1,10 +1,6 @@
 /**
- * T3 Code push service worker (fork feature, roadmap #6).
- *
- * Renders Web Push messages sent by the server's PushNotifierService and
- * deep-links back into the app on tap. The payload shape is
- * `WebPushMessagePayload` in `packages/contracts/src/webPush.ts` — this file
- * is served verbatim from `public/` and cannot import from the workspace, so
+ * Push service worker. Served verbatim from `public/`, so it cannot import the
+ * payload shape (`WebPushMessagePayload` in `packages/contracts/src/webPush.ts`);
  * keep the two in sync by hand.
  */
 

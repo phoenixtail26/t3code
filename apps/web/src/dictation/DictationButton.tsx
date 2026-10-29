@@ -1,12 +1,10 @@
-// Fork feature: dictation. The microphone button in the composer footer and
-// the pill that replaces it while a model downloads, the mic is open, or a
-// transcription is in flight. Mounted by ChatComposer with one JSX element.
-// A dictation into another field still belongs to this composer (it supplies
-// the environment and the fallback draft); the button then stays a button and
-// the pill floats beside that field unless the field has its own button.
+// Fork feature: dictation. The composer footer mic button; its pill replaces it
+// while dictating. A dictation into another field still belongs to this
+// composer (environment, fallback draft): the button stays and the pill
+// floats beside that field unless the field has its own button.
 import type { EnvironmentId } from "@t3tools/contracts";
 import { MicIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 
 import { Button } from "../components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../components/ui/tooltip";
@@ -28,23 +26,26 @@ export function DictationButton(props: DictationButtonProps) {
   const mine = state.phase !== "idle" && state.ownerKey === ownerKey;
 
   // The composer re-renders often; register once per thread and read the
-  // latest insert/target through a ref so a re-render never unregisters.
-  const latest = useRef(props);
-  useEffect(() => {
-    latest.current = props;
-  });
+  // latest insert/target through effect events so a re-render never unregisters.
+  const insertAtCursor = useEffectEvent((text: string) =>
+    props.insertTextAtCursor(text, { ensureLeadingBoundary: true }),
+  );
+  const appendToDraft = useEffectEvent((text: string) =>
+    appendDictationToDraft(props.target, text),
+  );
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- holds this composer's entry in the dictation registry until unmount
   useEffect(
     () =>
       dictation.registerComposer(ownerKey, {
         environmentId: props.environmentId,
-        insertAtCursor: (text) =>
-          latest.current.insertTextAtCursor(text, { ensureLeadingBoundary: true }),
-        appendToDraft: (text) => appendDictationToDraft(latest.current.target, text),
+        insertAtCursor,
+        appendToDraft,
       }),
     [ownerKey, props.environmentId],
   );
 
   const recording = mine && state.phase === "recording";
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- capture-phase window keydown listener that exists only while recording
   useEffect(() => {
     if (!recording) return;
     const onKeyDown = (event: KeyboardEvent) => {

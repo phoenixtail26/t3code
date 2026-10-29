@@ -9,11 +9,8 @@ import webpush from "web-push";
 import type { StoredWebPushSubscription, VapidKeys } from "./WebPushStore.ts";
 
 /**
- * Web Push delivery. The `web-push` library is used only for the crypto —
- * VAPID JWT signing and aes128gcm payload encryption via
- * `generateRequestDetails` — while the actual POST to the push service goes
- * through the same Effect HttpClient stack as the ntfy sender, so tests can
- * intercept requests and no second HTTP path needs auditing.
+ * Web Push delivery. `web-push` supplies only the crypto (VAPID signing, payload
+ * encryption); the POST goes through the Effect HttpClient so tests can intercept it.
  */
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -71,55 +68,54 @@ const generateRequestDetails = (input: {
     catch: (cause) => new WebPushError({ operation: "encode-request", cause }),
   });
 
-const sendToSubscription = (input: {
+const sendToSubscription = Effect.fn("WebPushSender.sendToSubscription")(function* (input: {
   readonly subscription: StoredWebPushSubscription;
   readonly vapidKeys: VapidKeys;
   readonly vapidSubject: string;
   readonly payloadJson: string;
-}): Effect.Effect<WebPushDeliveryResult, never, HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    const endpoint = input.subscription.endpoint;
-    const details = yield* generateRequestDetails(input).pipe(Effect.option);
-    if (Option.isNone(details)) {
-      return { endpoint, outcome: "encoding-failed", gone: false } as const;
-    }
+}) {
+  const endpoint = input.subscription.endpoint;
+  const details = yield* generateRequestDetails(input).pipe(Effect.option);
+  if (Option.isNone(details)) {
+    return { endpoint, outcome: "encoding-failed", gone: false } as const;
+  }
 
-    // Content-Length is dropped: the transport computes it from the body.
-    const headers: Record<string, string> = {};
-    for (const [name, value] of Object.entries(details.value.headers)) {
-      if (name.toLowerCase() === "content-length") continue;
-      headers[name] = String(value);
-    }
+  // Content-Length is dropped: the transport computes it from the body.
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(details.value.headers)) {
+    if (name.toLowerCase() === "content-length") continue;
+    headers[name] = String(value);
+  }
 
-    const client = yield* HttpClient.HttpClient;
-    const request = HttpClientRequest.post(details.value.endpoint).pipe(
-      HttpClientRequest.setHeaders(headers),
-      HttpClientRequest.bodyUint8Array(Uint8Array.from(details.value.body)),
-    );
-    return yield* client.execute(request).pipe(
-      Effect.timeoutOption(REQUEST_TIMEOUT_MS),
-      Effect.map((response): WebPushDeliveryResult => {
-        if (Option.isNone(response)) {
-          return { endpoint, outcome: "timeout", gone: false };
-        }
-        const status = response.value.status;
-        if (status >= 200 && status < 300) {
-          return { endpoint, outcome: "delivered", status, gone: false };
-        }
-        return {
-          endpoint,
-          outcome: "rejected",
-          status,
-          gone: status === 404 || status === 410,
-        };
-      }),
-      Effect.orElseSucceed((): WebPushDeliveryResult => ({
+  const client = yield* HttpClient.HttpClient;
+  const request = HttpClientRequest.post(details.value.endpoint).pipe(
+    HttpClientRequest.setHeaders(headers),
+    HttpClientRequest.bodyUint8Array(Uint8Array.from(details.value.body)),
+  );
+  return yield* client.execute(request).pipe(
+    Effect.timeoutOption(REQUEST_TIMEOUT_MS),
+    Effect.map((response): WebPushDeliveryResult => {
+      if (Option.isNone(response)) {
+        return { endpoint, outcome: "timeout", gone: false };
+      }
+      const status = response.value.status;
+      if (status >= 200 && status < 300) {
+        return { endpoint, outcome: "delivered", status, gone: false };
+      }
+      return {
         endpoint,
-        outcome: "unreachable",
-        gone: false,
-      })),
-    );
-  });
+        outcome: "rejected",
+        status,
+        gone: status === 404 || status === 410,
+      };
+    }),
+    Effect.orElseSucceed((): WebPushDeliveryResult => ({
+      endpoint,
+      outcome: "unreachable",
+      gone: false,
+    })),
+  );
+});
 
 export const sendWebPushNotifications = (input: {
   readonly vapidKeys: VapidKeys;

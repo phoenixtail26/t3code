@@ -11,15 +11,10 @@ import { type ExternalSessionRecord } from "./transcriptRecords.ts";
  *  ended session shows "working" for up to this long after it finished. */
 export const WORKING_THRESHOLD_MS = 120_000;
 
-/** A dangling `tool_use` younger than this is treated as a tool still
- *  running (`working`); older, as blocked on the permission prompt
- *  (`waiting`). The 2026-07-21 tail survey (195 recent transcripts) found
- *  NO content-level marker for a pending permission prompt — a blocked
- *  session and a slow tool are byte-identical, and mtime staleness is the
- *  only differing axis. Dangling `tool_use` essentially never survives at
- *  rest in normal operation (1/195, and that one was live mid-call), so a
- *  stale one is a strong attention signal; the accepted false positive is
- *  a genuinely long-running approved tool in a prompting session. */
+/** A dangling `tool_use` younger than this is a running tool (`working`); older
+ *  is blocked on a permission prompt (`waiting`). Transcripts carry no marker
+ *  for a pending prompt, so mtime staleness is the only signal. Accepted false
+ *  positive: a long-running approved tool in a prompting session. */
 export const WAITING_THRESHOLD_MS = 30_000;
 
 /** `permission-mode` value under which a session can never be blocked on

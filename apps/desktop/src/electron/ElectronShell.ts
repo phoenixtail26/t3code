@@ -11,9 +11,7 @@ import * as Option from "effect/Option";
 
 import * as Electron from "electron";
 
-// Remote open-in-editor deep links (`vscode://vscode-remote/ssh-remote+…`,
-// `zed://ssh/<host>/<path>`, `jetbrains://gateway/ssh/environment?h=…`) must
-// reach the OS handler; every other non-web scheme stays blocked.
+// Remote editor deep links must reach the OS handler.
 const SAFE_WEB_PROTOCOLS = new Set(["http:", "https:"]);
 const REMOTE_EDITOR_PROTOCOLS = new Set(
   REMOTE_CAPABLE_EDITOR_IDS.flatMap((id) => {
@@ -22,8 +20,8 @@ const REMOTE_EDITOR_PROTOCOLS = new Set(
   }),
 );
 
-// Zed's host sits in the first path segment, so it needs its own userinfo ban.
-const ZED_SSH_PATHNAME = /^\/[^/@:]+\/.*$/;
+// Zed embeds [user@]host in the path; reject passwords and ports there.
+const ZED_SSH_PATHNAME = /^\/(?:[^/@:]+@)?[^/@:]+\/.*$/;
 
 const isRemoteEditorUrl = (url: URL) =>
   REMOTE_EDITOR_PROTOCOLS.has(url.protocol) &&
@@ -60,16 +58,15 @@ export class ElectronShell extends Context.Service<
     readonly openExternal: (rawUrl: unknown) => Effect.Effect<boolean>;
     readonly openPath: (rawPath: unknown) => Effect.Effect<boolean>;
     readonly revealItemInFolder: (rawPath: unknown) => Effect.Effect<boolean>;
-    /** Opens a known System Settings pane by identifier, not by URL. */
     readonly openSystemSettings: (pane: SystemSettingsPane) => Effect.Effect<boolean>;
     readonly copyText: (text: string) => Effect.Effect<void>;
   }
 >()("@t3tools/desktop/electron/ElectronShell") {}
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = ElectronShell.of({
-  openExternal: (rawUrl) =>
-    Option.match(parseSafeExternalUrl(rawUrl), {
+  openExternal: Effect.fn("ElectronShell.openExternal")(function (rawUrl) {
+    return Option.match(parseSafeExternalUrl(rawUrl), {
       onNone: () => Effect.succeed(false),
       onSome: (externalUrl) =>
         Effect.promise(() =>
@@ -78,9 +75,10 @@ export const make = ElectronShell.of({
             () => false,
           ),
         ),
-    }),
-  openPath: (rawPath) =>
-    Effect.promise(async () => {
+    });
+  }),
+  openPath: Effect.fn("ElectronShell.openPath")(function (rawPath) {
+    return Effect.promise(async () => {
       if (typeof rawPath !== "string" || rawPath.trim().length === 0) {
         return false;
       }
@@ -89,25 +87,29 @@ export const make = ElectronShell.of({
       // execute an executable or script whose path an agent named.
       const error = await Electron.shell.openPath(rawPath);
       return error.length === 0;
-    }),
-  revealItemInFolder: (rawPath) =>
-    Effect.sync(() => {
+    });
+  }),
+  revealItemInFolder: Effect.fn("ElectronShell.revealItemInFolder")(function (rawPath) {
+    return Effect.sync(() => {
       if (typeof rawPath !== "string" || rawPath.trim().length === 0) {
         return false;
       }
       // Reveals the target selected inside its parent; never launches it.
       Electron.shell.showItemInFolder(rawPath);
       return true;
-    }),
-  openSystemSettings: (pane) =>
-    Effect.promise(() =>
+    });
+  }),
+  openSystemSettings: Effect.fn("ElectronShell.openSystemSettings")(function (pane) {
+    return Effect.promise(() =>
       Electron.shell.openExternal(MAC_PERMISSION_SETTINGS_URLS[pane]).then(
         () => true,
         () => false,
       ),
-    ),
-  copyText: (text) =>
-    Effect.promise(() => Electron.clipboard.writeText(text).catch(() => undefined)),
+    );
+  }),
+  copyText: Effect.fn("ElectronShell.copyText")(function (text) {
+    return Effect.promise(() => Electron.clipboard.writeText(text).catch(() => undefined));
+  }),
 });
 
 export const layer = Layer.succeed(ElectronShell, make);

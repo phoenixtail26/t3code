@@ -2,11 +2,10 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 /**
- * Dictation: the client records 16 kHz mono Int16 PCM and posts the raw bytes
- * to `POST /api/dictation/transcribe`; the environment server transcribes it
- * locally. `GET /api/dictation/status` reports the model state and the last
- * transcription, `POST /api/dictation/model` downloads the model and
- * `DELETE /api/dictation/model` removes it.
+ * Dictation: the client posts 16 kHz mono Int16 PCM to
+ * `POST /api/dictation/transcribe` and the server transcribes it locally.
+ * `/api/dictation/status` reports model state; `POST`/`DELETE`
+ * `/api/dictation/model` download and remove the model.
  */
 
 export const DICTATION_TRANSCRIBE_PATH = "/api/dictation/transcribe";

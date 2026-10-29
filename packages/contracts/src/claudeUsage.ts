@@ -1,14 +1,10 @@
 import * as Schema from "effect/Schema";
 
 /**
- * Claude plan-usage summary served by `GET /api/claude/usage`.
- *
- * The environment server proxies Anthropic's OAuth usage endpoint (the same
- * data the Claude Code `/usage` screen shows) using the Claude CLI's stored
- * credentials, and maps it to this stable shape so clients never depend on
- * the upstream wire format. When credentials are missing or the upstream
- * request fails, the summary degrades to `status: "unavailable"` instead of
- * an HTTP error so pollers can render a quiet empty state.
+ * Claude plan-usage summary served by `GET /api/claude/usage`, mapped from
+ * Anthropic's OAuth usage endpoint so clients never see the upstream wire
+ * format. Missing credentials or upstream failure degrade to
+ * `status: "unavailable"` rather than an HTTP error.
  */
 
 export const ClaudeUsageSeverity = Schema.Literals(["normal", "warning", "error"]);

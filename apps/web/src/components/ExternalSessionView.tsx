@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { LegendListRef } from "@legendapp/list/react";
-import type { EnvironmentId, MessageId, ServerProvider } from "@t3tools/contracts";
-import { useEffect, useMemo, useRef } from "react";
+import type { EnvironmentId } from "@t3tools/contracts";
+import { useEffect, useRef } from "react";
 
 import { useEnvironmentSettings } from "../hooks/useSettings";
 import { useTheme } from "../hooks/useTheme";
@@ -18,11 +18,8 @@ import { mapExternalTranscriptEntriesToTimeline } from "./ExternalSessionView.lo
 import { ThreadStatusLabel } from "./ThreadStatusIndicators";
 
 /**
- * Read-only transcript view for an external Claude Code session ("the
- * radar" — see `packages/contracts/src/externalSessions.ts`). Renders the
- * session's mapped conversation using the same `MessagesTimeline` the live
- * chat route uses, wired with inert props: nothing here can mutate a
- * session, so every callback into the timeline is a no-op and every
+ * Read-only transcript view for an external Claude Code session. Reuses
+ * `MessagesTimeline` with inert props: every callback is a no-op and every
  * live-thread map is empty.
  */
 
@@ -32,7 +29,6 @@ import { ThreadStatusLabel } from "./ThreadStatusIndicators";
 const TRANSCRIPT_REFRESH_DEBOUNCE_MS = 1_000;
 
 const EMPTY_TURN_DIFF_SUMMARIES: ReadonlyArray<TurnDiffSummary> = [];
-const EMPTY_PROVIDER_STATUSES: ReadonlyArray<ServerProvider> = [];
 const EMPTY_RUNS: ReadonlyArray<HandoffTimelineRun> = [];
 
 function noop(): void {}
@@ -60,9 +56,8 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
   // Adopting (F6) always continues on a claudeAgent instance — null hides
   // the button when the environment has none configured.
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
-  const adoptModelSelection = useMemo(
-    () => resolveClaudeAgentAdoptModelSelection(serverConfigs.get(environmentId)?.providers ?? []),
-    [serverConfigs, environmentId],
+  const adoptModelSelection = resolveClaudeAgentAdoptModelSelection(
+    serverConfigs.get(environmentId)?.providers ?? [],
   );
   const adoptSession = useAdoptExternalSession();
 
@@ -72,6 +67,7 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
   // stays open.
   const lastActivityAt = shell?.lastActivityAt ?? null;
   const previousLastActivityAtRef = useRef<string | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- debounce timer that refetches the transcript; the query key never changes, so nothing in render triggers a refetch
   useEffect(() => {
     if (lastActivityAt === null) {
       return;
@@ -92,10 +88,7 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
     };
   }, [lastActivityAt, refresh]);
 
-  const timelineEntries = useMemo(
-    () => (data === null ? [] : mapExternalTranscriptEntriesToTimeline(data.entries)),
-    [data],
-  );
+  const timelineEntries = data === null ? [] : mapExternalTranscriptEntriesToTimeline(data.entries);
 
   if (data === null) {
     if (errorReason === "not-found") {
@@ -175,7 +168,6 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
       <div className="relative flex min-h-0 flex-1 flex-col">
         <MessagesTimeline
           isWorking={false}
-          activeTurnInProgress={false}
           activeTurnStartedAt={null}
           liveFollowEnabled
           listRef={listRef}
@@ -187,7 +179,6 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
           onOpenTurnDiff={noop}
           onOpenThread={noop}
           onForkFromRun={asyncNoop}
-          onRollbackCheckpoint={noop}
           supportsConversationRollback={false}
           onRevertToTurnCount={noop}
           isRevertingCheckpoint={false}
@@ -197,18 +188,15 @@ export function ExternalSessionView({ environmentId, sessionId }: ExternalSessio
           resolvedTheme={resolvedTheme}
           timestampFormat={timestampFormat}
           workspaceRoot={data.cwd ?? undefined}
-          providerStatuses={EMPTY_PROVIDER_STATUSES}
           runs={EMPTY_RUNS}
           anchorMessageId={null}
           onAnchorReady={noop}
           onAnchorSizeChanged={noop}
           contentInsetEndAdjustment={0}
+          emptyPlaceholderInset={0}
           onIsAtEndChange={noop}
-          onManualNavigation={noop}
         />
       </div>
     </div>
   );
 }
-
-export default ExternalSessionView;

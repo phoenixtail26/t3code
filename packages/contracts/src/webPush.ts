@@ -2,14 +2,10 @@ import * as Schema from "effect/Schema";
 import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
 
 /**
- * Web Push to the installed PWA (fork feature, roadmap #6): the server
- * delivers notifications straight to a browser push service using VAPID,
- * removing the ntfy hop for subscribed devices. ntfy remains the fallback
- * channel for platforms where Web Push is unreliable.
- *
- * Only the VAPID *public* key and each device's own subscription payload
- * cross this boundary. The private key and the stored subscription list
- * (whose endpoints are bearer capabilities) stay server-side.
+ * Web Push to the installed PWA (fork feature): VAPID delivery straight to a
+ * browser push service, with ntfy as fallback. Only the VAPID public key and each
+ * device's subscription payload cross this boundary; the private key and stored
+ * subscriptions (bearer capabilities) stay server-side.
  */
 
 export const WebPushSubscriptionKeys = Schema.Struct({

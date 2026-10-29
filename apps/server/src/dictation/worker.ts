@@ -25,11 +25,10 @@ type WorkerReply =
   | { readonly id: number; readonly ok: true; readonly text?: string; readonly backend?: string }
   | { readonly id: number; readonly ok: false; readonly error: string };
 
-// Child side. The npm bundle runs `dictation-worker.mjs` beside the server;
-// the single executable runs its `__dictation-worker` subcommand. The model
-// lives in this process so a native crash cannot take the server down.
-// Nothing here may run on import: inside the executable `import.meta.main` is
-// true for the whole bundle.
+// Child side: the npm bundle runs `dictation-worker.mjs`, the single executable
+// its `__dictation-worker` subcommand. The model lives here so a native crash
+// cannot take the server down. Nothing may run on import: in the executable
+// `import.meta.main` is true for the whole bundle.
 
 const LIBRARY_FILE = /^(lib)?transcribe\.(dll|so|dylib)$/u;
 
@@ -163,103 +162,98 @@ function workerArgs(isExecutable: boolean): ReadonlyArray<string> {
     : [NodePath.join(NodePath.dirname(here), "dictation-worker.mjs")];
 }
 
-const spawnProcess = (modelPath: string) =>
-  Effect.gen(function* () {
-    const executablePath = yield* HostProcess.ExecutablePath;
-    const isExecutable = yield* HostProcess.IsExecutable;
-    const environment = yield* HostProcess.Environment;
-    const child = yield* Effect.try({
-      try: () =>
-        NodeChildProcess.spawn(executablePath, workerArgs(isExecutable), {
-          stdio: ["ignore", "ignore", "pipe", "ipc"],
-          serialization: "advanced",
-          // Electron hosts run the worker as plain Node.
-          env: { ...environment, ELECTRON_RUN_AS_NODE: "1" },
-          windowsHide: true,
-        }),
-      catch: (cause) => new DictationWorkerError({ stage: "spawn", cause }),
-    });
+const spawnProcess = Effect.fn("DictationWorker.spawnProcess")(function* (modelPath: string) {
+  const executablePath = yield* HostProcess.ExecutablePath;
+  const isExecutable = yield* HostProcess.IsExecutable;
+  const environment = yield* HostProcess.Environment;
+  const child = yield* Effect.try({
+    try: () =>
+      NodeChildProcess.spawn(executablePath, workerArgs(isExecutable), {
+        stdio: ["ignore", "ignore", "pipe", "ipc"],
+        serialization: "advanced",
+        // Electron hosts run the worker as plain Node.
+        env: { ...environment, ELECTRON_RUN_AS_NODE: "1" },
+        windowsHide: true,
+      }),
+    catch: (cause) => new DictationWorkerError({ stage: "spawn", cause }),
+  });
 
-    let stderrTail = "";
-    child.stderr?.setEncoding("utf8");
-    child.stderr?.on("data", (chunk: string) => {
-      stderrTail = (stderrTail + chunk).slice(-STDERR_TAIL_CHARS);
-    });
+  let stderrTail = "";
+  child.stderr?.setEncoding("utf8");
+  child.stderr?.on("data", (chunk: string) => {
+    stderrTail = (stderrTail + chunk).slice(-STDERR_TAIL_CHARS);
+  });
 
-    let nextId = 0;
-    let pending:
-      | { readonly id: number; readonly settle: (reply: WorkerReply | Error) => void }
-      | undefined;
-    let exitError: Error | undefined;
-    const exitWaiters: Array<() => void> = [];
-    const onExit = (error: Error) => {
-      exitError ??= error;
-      pending?.settle(exitError);
-      pending = undefined;
-      for (const waiter of exitWaiters.splice(0)) waiter();
-    };
-    child.on("error", (error) => onExit(error));
-    child.on("exit", (code, signal) =>
-      onExit(new Error(`Dictation worker exited (${signal ?? code}). ${stderrTail}`.trim())),
-    );
-    child.on("message", (reply: WorkerReply) => {
-      if (pending?.id !== reply.id) return;
-      const settle = pending.settle;
-      pending = undefined;
-      settle(reply);
-    });
+  let nextId = 0;
+  let pending:
+    | { readonly id: number; readonly settle: (reply: WorkerReply | Error) => void }
+    | undefined;
+  let exitError: Error | undefined;
+  const exitWaiters: Array<() => void> = [];
+  const onExit = (error: Error) => {
+    exitError ??= error;
+    pending?.settle(exitError);
+    pending = undefined;
+    for (const waiter of exitWaiters.splice(0)) waiter();
+  };
+  child.on("error", (error) => onExit(error));
+  child.on("exit", (code, signal) =>
+    onExit(new Error(`Dictation worker exited (${signal ?? code}). ${stderrTail}`.trim())),
+  );
+  child.on("message", (reply: WorkerReply) => {
+    if (pending?.id !== reply.id) return;
+    const settle = pending.settle;
+    pending = undefined;
+    settle(reply);
+  });
 
-    const request = (command: WorkerCommand) =>
-      Effect.callback<WorkerReply & { readonly ok: true }, DictationWorkerError>((resume) => {
-        const stage = command.kind;
-        if (exitError) {
-          resume(Effect.fail(new DictationWorkerError({ stage: "exited", cause: exitError })));
-          return;
-        }
-        const id = ++nextId;
-        pending = {
-          id,
-          settle: (reply) => {
-            if (reply instanceof Error) {
-              resume(Effect.fail(new DictationWorkerError({ stage: "exited", cause: reply })));
-            } else if (reply.ok) {
-              resume(Effect.succeed(reply));
-            } else {
-              resume(
-                Effect.fail(new DictationWorkerError({ stage, cause: new Error(reply.error) })),
-              );
-            }
-          },
-        };
-        child.send({ ...command, id } satisfies WorkerRequest, (error) => {
-          if (error && pending?.id === id) {
-            pending = undefined;
-            resume(Effect.fail(new DictationWorkerError({ stage, cause: error })));
-          }
-        });
-        return Effect.sync(() => {
-          if (pending?.id === id) pending = undefined;
-        });
-      });
-
-    const kill = Effect.callback<void>((resume) => {
-      if (exitError || child.exitCode !== null) {
-        resume(Effect.void);
+  const request = (command: WorkerCommand) =>
+    Effect.callback<WorkerReply & { readonly ok: true }, DictationWorkerError>((resume) => {
+      const stage = command.kind;
+      if (exitError) {
+        resume(Effect.fail(new DictationWorkerError({ stage: "exited", cause: exitError })));
         return;
       }
-      exitWaiters.push(() => resume(Effect.void));
-      child.kill("SIGKILL");
-    }).pipe(Effect.uninterruptible);
+      const id = ++nextId;
+      pending = {
+        id,
+        settle: (reply) => {
+          if (reply instanceof Error) {
+            resume(Effect.fail(new DictationWorkerError({ stage: "exited", cause: reply })));
+          } else if (reply.ok) {
+            resume(Effect.succeed(reply));
+          } else {
+            resume(Effect.fail(new DictationWorkerError({ stage, cause: new Error(reply.error) })));
+          }
+        },
+      };
+      child.send({ ...command, id } satisfies WorkerRequest, (error) => {
+        if (error && pending?.id === id) {
+          pending = undefined;
+          resume(Effect.fail(new DictationWorkerError({ stage, cause: error })));
+        }
+      });
+      return Effect.sync(() => {
+        if (pending?.id === id) pending = undefined;
+      });
+    });
 
-    const loaded = yield* request({ kind: "load", path: modelPath }).pipe(
-      Effect.onError(() => kill),
-    );
-    return {
-      backend: loaded.backend ?? "unknown",
-      transcribe: (pcm: Int16Array) =>
-        request({ kind: "transcribe", pcm }).pipe(Effect.map((reply) => reply.text ?? "")),
-      kill,
-    } satisfies DictationWorkerProcess;
-  });
+  const kill = Effect.callback<void>((resume) => {
+    if (exitError || child.exitCode !== null) {
+      resume(Effect.void);
+      return;
+    }
+    exitWaiters.push(() => resume(Effect.void));
+    child.kill("SIGKILL");
+  }).pipe(Effect.uninterruptible);
+
+  const loaded = yield* request({ kind: "load", path: modelPath }).pipe(Effect.onError(() => kill));
+  return {
+    backend: loaded.backend ?? "unknown",
+    transcribe: (pcm: Int16Array) =>
+      request({ kind: "transcribe", pcm }).pipe(Effect.map((reply) => reply.text ?? "")),
+    kill,
+  } satisfies DictationWorkerProcess;
+});
 
 export const layer = Layer.succeed(DictationWorker, DictationWorker.of({ spawn: spawnProcess }));

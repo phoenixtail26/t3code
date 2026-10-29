@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { EnvironmentId } from "@t3tools/contracts";
 
 import { serverEnvironment } from "~/state/server";
@@ -48,6 +48,7 @@ export function useWebPushDevice(environmentId: EnvironmentId | null): WebPushDe
   );
   const [error, setError] = useState<string | null>(null);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reads the browser's PushManager subscription, which only exists outside React
   useEffect(() => {
     if (!isWebPushSupported()) return;
     let cancelled = false;
@@ -68,7 +69,7 @@ export function useWebPushDevice(environmentId: EnvironmentId | null): WebPushDe
     };
   }, []);
 
-  const enable = useCallback(() => {
+  const enable = () => {
     if (environmentId === null || !isWebPushSupported()) return;
     setError(null);
     setStatus({ state: "busy", operation: "enabling" });
@@ -108,9 +109,9 @@ export function useWebPushDevice(environmentId: EnvironmentId | null): WebPushDe
         setStatus(idleStatus());
       }
     })();
-  }, [environmentId, getPublicKey, subscribeRpc]);
+  };
 
-  const disable = useCallback(() => {
+  const disable = () => {
     if (environmentId === null || !isWebPushSupported()) return;
     setError(null);
     setStatus({ state: "busy", operation: "disabling" });
@@ -142,7 +143,7 @@ export function useWebPushDevice(environmentId: EnvironmentId | null): WebPushDe
         );
       }
     })();
-  }, [environmentId, unsubscribeRpc]);
+  };
 
   return { status, error, enable, disable };
 }

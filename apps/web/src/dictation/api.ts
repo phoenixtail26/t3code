@@ -68,45 +68,43 @@ interface RawResponse {
 // remembered for the request callback, which is invoked right after.
 const dictationRequest = createRuntimeCommand(connectionAtomRuntime, {
   label: "web:dictation:request",
-  execute: (input: DictationRequest) =>
-    Effect.gen(function* () {
-      const prepared = readPreparedConnection(input.environmentId);
-      if (prepared === null) {
-        return yield* new DictationEnvironmentOfflineError({
-          message: "The environment is not connected.",
-        });
-      }
-      const signer = yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner);
-      let requestUrl = "";
-      return yield* executeAuthenticatedEnvironmentHttpRequest({
-        prepared,
-        signer,
-        group: "auth",
-        method: input.method,
-        url: (urls) => {
-          requestUrl = new URL(input.path, urls.session()).toString();
-          return requestUrl;
-        },
-        timeoutMs: input.timeoutMs,
-        request: ({ headers }) =>
-          Effect.gen(function* () {
-            const client = yield* HttpClient.HttpClient;
-            let request = HttpClientRequest.make(input.method)(requestUrl).pipe(
-              HttpClientRequest.setHeaders({ ...headers }),
-            );
-            if (input.body !== undefined) {
-              request = HttpClientRequest.bodyUint8Array(
-                request,
-                input.body,
-                "application/octet-stream",
-              );
-            }
-            const response = yield* client.execute(request);
-            const text = yield* response.text;
-            return { status: response.status, text } satisfies RawResponse;
-          }),
+  execute: Effect.fn("dictationRequest")(function* (input: DictationRequest) {
+    const prepared = readPreparedConnection(input.environmentId);
+    if (prepared === null) {
+      return yield* new DictationEnvironmentOfflineError({
+        message: "The environment is not connected.",
       });
-    }),
+    }
+    const signer = yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner);
+    let requestUrl = "";
+    return yield* executeAuthenticatedEnvironmentHttpRequest({
+      prepared,
+      signer,
+      group: "auth",
+      method: input.method,
+      url: (urls) => {
+        requestUrl = new URL(input.path, urls.session()).toString();
+        return requestUrl;
+      },
+      timeoutMs: input.timeoutMs,
+      request: Effect.fn("dictationRequest.request")(function* ({ headers }) {
+        const client = yield* HttpClient.HttpClient;
+        let request = HttpClientRequest.make(input.method)(requestUrl).pipe(
+          HttpClientRequest.setHeaders({ ...headers }),
+        );
+        if (input.body !== undefined) {
+          request = HttpClientRequest.bodyUint8Array(
+            request,
+            input.body,
+            "application/octet-stream",
+          );
+        }
+        const response = yield* client.execute(request);
+        const text = yield* response.text;
+        return { status: response.status, text } satisfies RawResponse;
+      }),
+    });
+  }),
 });
 
 const decodeStatus = Schema.decodeUnknownSync(Schema.fromJsonString(DictationStatus));

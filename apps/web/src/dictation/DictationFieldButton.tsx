@@ -16,6 +16,7 @@ export function DictationFieldButton() {
   const hostRef = useRef<HTMLSpanElement>(null);
   const [field, setField] = useState<DictationField | null>(null);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reads the field from the mounted DOM and holds its button registration until unmount
   useLayoutEffect(() => {
     const found = findNearestField(hostRef.current);
     setField(found);

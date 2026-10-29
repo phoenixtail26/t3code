@@ -5,15 +5,10 @@ import { PrimaryEnvironmentHttpClient } from "../environments/primary/httpClient
 import { runPrimaryHttp } from "../lib/runtime";
 
 /**
- * Tells the server the user is actually at this machine, so it can keep the
- * phone quiet while they are at their desk (they get a desktop notification
- * instead). See `apps/server/src/notifications/UserPresence.ts`.
- *
- * "Present" is deliberately broader than "focused": someone working in another
- * app on the same machine is still present, and pushing to their pocket then is
- * duplication. In Electron that comes from the OS idle timer; in a plain
- * browser, where no such signal exists, only focus counts — which fails safe
- * toward notifying.
+ * Tells the server the user is at this machine so it can keep the phone quiet
+ * (see `apps/server/src/notifications/UserPresence.ts`). "Present" is broader
+ * than focused: Electron uses the OS idle timer; a browser has only focus,
+ * which fails safe toward notifying.
  */
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
@@ -33,6 +28,7 @@ async function isUserPresent(): Promise<boolean> {
 }
 
 export function useUserPresenceReporter(): void {
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- heartbeat interval and window focus listener report presence to the server; neither is expressible in render
   useEffect(() => {
     let cancelled = false;
 

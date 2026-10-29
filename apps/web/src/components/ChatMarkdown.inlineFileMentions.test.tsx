@@ -54,7 +54,7 @@ describe("ChatMarkdown inline code file mentions", () => {
       <ChatMarkdown
         text="Run $deploy or literally type `$deploy`."
         cwd={CWD}
-        skills={[{ name: "deploy", displayName: "Deploy" }]}
+        skills={[{ name: "deploy", displayName: "Deploy", path: "/skills/deploy", enabled: true }]}
       />,
     );
     // The prose token renders as a skill chip; the code-span token stays literal.
