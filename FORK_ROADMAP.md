@@ -517,6 +517,12 @@ environment server (`transcribe-cpp`, English Parakeet), so desktop and the
 phone PWA share one web implementation. If upstream ships dictation we delete
 ours and take theirs (upstream #14882 was rejected as too large to carry).
 
+Planned next (2026-11-05, not started): the engine moves out to Hearsay, a
+separate local speech service shared with system-wide dictation and Raymond.
+`DictationService` forwards to it and read aloud is added here. Spec:
+`D:\Dev\hearsay\.claude\plans\hearsay.md`, phases 4 and 5. Read it before
+changing dictation or adding any voice feature.
+
 Built (phases 1-6, overnight 2026-10-13): server service in a child process
 with a FIFO queue, model download on first use into
 `<T3 home>/models/dictation/` (SHA-256 checked, cancellable), 60-minute idle
