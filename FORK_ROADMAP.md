@@ -517,6 +517,12 @@ environment server (`transcribe-cpp`, English Parakeet), so desktop and the
 phone PWA share one web implementation. If upstream ships dictation we delete
 ours and take theirs (upstream #14882 was rejected as too large to carry).
 
+Upstream shipped it (sync of 2026-11-07: `apps/server/src/speech/`, streaming
+partials, Silero VAD, dictionary hinting, `mod+shift+d`). Both now run side by
+side: two mic buttons in the composer, two voice sections in Settings. The
+owner is holding the removal until Hearsay works and the T3 half of its plan
+is re-pointed at upstream's `SpeechService` — do not delete ours unasked.
+
 Planned next (2026-11-05, not started): the engine moves out to Hearsay, a
 separate local speech service shared with system-wide dictation and Raymond.
 `DictationService` forwards to it and read aloud is added here. Spec:
