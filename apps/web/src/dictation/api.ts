@@ -13,7 +13,6 @@ import { ManagedRelay } from "@t3tools/client-runtime/relay";
 import { executeAuthenticatedEnvironmentHttpRequest } from "@t3tools/client-runtime/state/environment-http-auth";
 import { createRuntimeCommand } from "@t3tools/client-runtime/state/runtime";
 import * as Cause from "effect/Cause";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientRequest, type HttpMethod } from "effect/http";
@@ -40,11 +39,12 @@ export interface DictationApi {
   ): Promise<DictationResult<DictationTranscript>>;
 }
 
-class DictationEnvironmentOfflineError extends Data.TaggedError(
-  "DictationEnvironmentOfflineError",
-)<{
-  readonly message: string;
-}> {}
+class DictationEnvironmentOfflineError extends Schema.TaggedError<
+  DictationEnvironmentOfflineError,
+  { readonly brand: unique symbol }
+>()("DictationEnvironmentOfflineError", {
+  message: Schema.String,
+}) {}
 
 const STATUS_TIMEOUT_MS = 10_000;
 const DOWNLOAD_TIMEOUT_MS = 30 * 60_000;

@@ -87,7 +87,7 @@ export function StaleClaudeCompactionSettingRow() {
   return (
     <SettingsRow
       title="Compact stale Claude threads"
-      description="When a Claude thread over 100k tokens has sat long enough for its prompt cache to expire, the composer offers to summarize the history before sending. Ask starts that offer off, Always starts it on, Never hides it."
+      description="When a Claude thread over 100k tokens sits long enough for its prompt cache to expire, the composer offers to summarize the history first. Ask starts it off, Always starts it on, Never hides it."
       resetAction={
         settings.staleClaudeCompaction !== DEFAULT_UNIFIED_SETTINGS.staleClaudeCompaction ? (
           <SettingResetButton
