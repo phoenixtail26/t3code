@@ -1,12 +1,18 @@
+// @effect-diagnostics nodeBuiltinImport:off - the summary's scoped working directory is checked on disk.
+import * as NodeFS from "node:fs";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import {
   MessageId,
   RunId,
+  TextGenerationError,
   ThreadId,
   type OrchestrationV2AppThread,
   type OrchestrationV2ConversationMessage,
+  type ServerSettings as ServerSettingsShape,
 } from "@t3tools/contracts";
+import type { TranscriptionPostProcessingInput } from "@t3tools/provider-core/server/textGeneration";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -18,8 +24,10 @@ import { expect } from "vite-plus/test";
 
 import * as ProjectionStoreV2 from "../orchestration-v2/ProjectionStore.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import { fakeHearsay, type FakeHearsayScript } from "./fakeHearsay.ts";
 import * as ReadAloud from "./ReadAloudService.ts";
+import { READ_ALOUD_SUMMARY_INSTRUCTIONS } from "./summaryPrompt.ts";
 
 const THREAD = ThreadId.make("thread-1");
 const FORK = ThreadId.make("thread-fork");
@@ -85,10 +93,38 @@ export const projections = Layer.mock(ProjectionStoreV2.ProjectionStoreV2)({
       : Effect.fail(new ProjectionStoreV2.ProjectionStoreThreadNotFoundError({ threadId })),
 });
 
-const layerFor = (hearsay: { url?: string; token?: string }) =>
+/** The summary model: answers `summary`, or fails with `failure`, and records what it was asked. */
+const summariser = (script: { summary?: string; failure?: string }) => {
+  const calls: TranscriptionPostProcessingInput[] = [];
+  const layer = Layer.mock(TextGeneration.TextGeneration)({
+    generateTranscriptionPostProcessing: (input) => {
+      calls.push(input);
+      return script.failure === undefined
+        ? Effect.succeed({ transcription: script.summary ?? "" })
+        : Effect.fail(
+            new TextGenerationError({
+              operation: "generateTranscriptionPostProcessing",
+              detail: script.failure,
+            }),
+          );
+    },
+  });
+  return { calls, layer };
+};
+
+type SettingsOverrides = Parameters<typeof ServerSettings.layerTest>[0];
+
+const layerFor = (
+  hearsay: { url?: string; token?: string },
+  options: {
+    settings?: SettingsOverrides;
+    textGeneration?: Layer.Layer<TextGeneration.TextGeneration>;
+  } = {},
+) =>
   ReadAloud.layer.pipe(
     Layer.provide(projections),
-    Layer.provide(ServerSettings.layerTest({ hearsaySpeech: hearsay })),
+    Layer.provide(ServerSettings.layerTest({ ...options.settings, hearsaySpeech: hearsay })),
+    Layer.provide(options.textGeneration ?? summariser({ summary: "Done." }).layer),
     Layer.provide(NodeServices.layer),
   );
 
@@ -280,6 +316,81 @@ it.live("opens nothing when no Hearsay URL is set", () =>
     const error = yield* collect({ url: "" }, "Hello.").pipe(Effect.flip);
     expect(error).toBeInstanceOf(ReadAloud.ReadAloudNotConfiguredError);
     expect(error.message).toBe("Set a Hearsay URL on the Voice page to read replies aloud.");
+    expect(hearsay.handshakes).toEqual([]);
+  }).pipe(Effect.scoped),
+);
+
+const speakSummaryThrough = (
+  hearsayUrl: string,
+  options: Parameters<typeof layerFor>[1],
+  threadId = THREAD,
+  messageId = REPLY,
+) =>
+  ReadAloud.ReadAloudService.pipe(
+    Effect.flatMap((service) => service.speakSummary(threadId, messageId)),
+    Effect.flatMap((utterance) => Stream.runDrain(utterance.audio)),
+    Effect.provide(layerFor({ url: hearsayUrl }, options)),
+  );
+
+it.live("speaks a summary of the reply made by Claude Haiku, its stray marks dropped", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* serve();
+    const model = summariser({ summary: "**Done.** The build is `green`.\n\nPush it when ready." });
+    yield* speakSummaryThrough(hearsay.url, { textGeneration: model.layer });
+    expect(hearsay.received).toEqual([
+      { type: "start" },
+      { type: "text", text: "Done. The build is green.\n\nPush it when ready." },
+      { type: "end" },
+    ]);
+    expect(model.calls).toHaveLength(1);
+    const call = model.calls[0]!;
+    // Pinned to the Claude instance and Haiku whatever the server's text generation model is.
+    expect(call.modelSelection).toEqual({ instanceId: "claudeAgent", model: "claude-haiku-5-5" });
+    expect(call.prompt.startsWith(READ_ALOUD_SUMMARY_INSTRUCTIONS)).toBe(true);
+    expect(call.prompt).toContain(
+      "<reply>\nDone.\n\n```sh\nrm -rf build\n```\n\nPush it.\n</reply>",
+    );
+    // The model ran in a scoped scratch directory, gone once the summary was made.
+    expect(call.cwd).toContain("t3-read-aloud-summary-");
+    expect(NodeFS.existsSync(call.cwd)).toBe(false);
+  }).pipe(Effect.scoped),
+);
+
+it.live("falls back to the server's text generation model when no Claude instance is enabled", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* serve();
+    const model = summariser({ summary: "Done." });
+    const selection = { instanceId: "codex", model: "gpt-6-luna" };
+    yield* speakSummaryThrough(hearsay.url, {
+      textGeneration: model.layer,
+      settings: {
+        providerInstances: { claudeAgent: { driver: "claudeAgent", enabled: false } },
+        textGenerationModelSelection: selection,
+      } as unknown as Partial<ServerSettingsShape>,
+    });
+    expect(model.calls[0]!.modelSelection).toMatchObject(selection);
+  }).pipe(Effect.scoped),
+);
+
+it.live("fails plainly, with no socket opened, when the summary cannot be made", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* serve();
+    const failing = summariser({ failure: "claude is not installed" });
+    const error = yield* speakSummaryThrough(hearsay.url, { textGeneration: failing.layer }).pipe(
+      Effect.flip,
+    );
+    expect(error).toBeInstanceOf(ReadAloud.ReadAloudSummaryError);
+    expect(error.message).toBe("The summary could not be made: claude is not installed");
+    // A reply with nothing to read is refused before the model is asked.
+    const model = summariser({ summary: "Done." });
+    const nothing = yield* speakSummaryThrough(
+      hearsay.url,
+      { textGeneration: model.layer },
+      THREAD,
+      CODE_ONLY,
+    ).pipe(Effect.flip);
+    expect(nothing).toBeInstanceOf(ReadAloud.ReadAloudNothingToReadError);
+    expect(model.calls).toEqual([]);
     expect(hearsay.handshakes).toEqual([]);
   }).pipe(Effect.scoped),
 );

@@ -1,11 +1,13 @@
 // Fork feature: read aloud. A reply is read from the projection and its words spoken as one
 // utterance through Hearsay's `WS /v1/speak`: the text goes in whole, the PCM comes back as
-// Hearsay makes it, and closing the scope early cancels it.
+// Hearsay makes it, and closing the scope early cancels it. A summary of the reply, a few
+// spoken sentences from Claude Haiku, goes the same way at the end of a turn.
 import type { MessageId, OrchestrationV2ConversationMessage, ThreadId } from "@t3tools/contracts";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
@@ -14,7 +16,10 @@ import * as Stream from "effect/Stream";
 
 import * as ProjectionStoreV2 from "../orchestration-v2/ProjectionStore.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import { speakableText } from "./speakableText.ts";
+import { readAloudSummaryModelSelection } from "./summaryModel.ts";
+import { buildReadAloudSummaryPrompt } from "./summaryPrompt.ts";
 
 const OPEN_TIMEOUT = Duration.seconds(10);
 // Covers the voice's load on first use (105 s measured in a fresh Hearsay process on a cold
@@ -70,16 +75,24 @@ export class ReadAloudNothingToReadError extends Schema.TaggedError<
   }
 }
 
+export class ReadAloudSummaryError extends Schema.TaggedError<
+  ReadAloudSummaryError,
+  { readonly brand: unique symbol }
+>()("ReadAloudSummaryError", { reason: Schema.String }) {
+  override get message(): string {
+    return `The summary could not be made: ${this.reason}`;
+  }
+}
+
 type SpeakError = ReadAloudNotConfiguredError | ReadAloudHearsayError;
-type SpeakReplyError =
-  | SpeakError
+type FindReplyError =
   | ReadAloudReplyNotFoundError
   | ReadAloudReplyStreamingError
-  | ReadAloudNothingToReadError
   | Exclude<
       ProjectionStoreV2.ProjectionStoreV2Error,
       { readonly _tag: "ProjectionStoreThreadNotFoundError" }
     >;
+type SpeakReplyError = SpeakError | FindReplyError | ReadAloudNothingToReadError;
 
 // A forked thread shows its parent's replies; the chain is followed this far before giving up.
 const MAX_FORK_HOPS = 16;
@@ -103,6 +116,13 @@ export class ReadAloudService extends Context.Service<
       threadId: ThreadId,
       messageId: MessageId,
     ) => Effect.Effect<Utterance, SpeakReplyError, Scope.Scope>;
+    /** A few spoken sentences about `text`, from Claude Haiku when a Claude instance is enabled. */
+    readonly summarise: (text: string) => Effect.Effect<string, ReadAloudSummaryError>;
+    /** Reads the reply as `speakReply` does and speaks its summary instead of its words. */
+    readonly speakSummary: (
+      threadId: ThreadId,
+      messageId: MessageId,
+    ) => Effect.Effect<Utterance, SpeakReplyError | ReadAloudSummaryError, Scope.Scope>;
   }
 >()("t3/readAloud/ReadAloudService") {}
 
@@ -158,6 +178,8 @@ const pieces = (text: string): ReadonlyArray<string> => {
 const make = Effect.gen(function* () {
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const projections = yield* ProjectionStoreV2.ProjectionStoreV2;
+  const textGeneration = yield* TextGeneration.TextGeneration;
+  const fileSystem = yield* FileSystem.FileSystem;
 
   const speak = Effect.fn("ReadAloudService.speak")(function* (text: string) {
     const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
@@ -243,7 +265,7 @@ const make = Effect.gen(function* () {
     return { sampleRate, audio } satisfies Utterance;
   });
 
-  const speakReply = Effect.fn("ReadAloudService.speakReply")(function* (
+  const findReply = Effect.fn("ReadAloudService.findReply")(function* (
     threadId: ThreadId,
     messageId: MessageId,
   ) {
@@ -269,12 +291,52 @@ const make = Effect.gen(function* () {
     }
     if (message === undefined || message.role !== "assistant") return yield* notFound;
     if (message.streaming) return yield* new ReadAloudReplyStreamingError({ messageId });
+    return message;
+  });
+
+  const speakReply = Effect.fn("ReadAloudService.speakReply")(function* (
+    threadId: ThreadId,
+    messageId: MessageId,
+  ) {
+    const message = yield* findReply(threadId, messageId);
     const text = speakableText(message.text);
     if (!text) return yield* new ReadAloudNothingToReadError({ messageId });
     return yield* speak(text);
   });
 
-  return ReadAloudService.of({ speak, speakReply });
+  const summarise = Effect.fn("ReadAloudService.summarise")(function* (text: string) {
+    const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
+    const modelSelection = readAloudSummaryModelSelection(settings);
+    // Providers run in a working directory; the summary must not read a checkout.
+    const cwd = yield* fileSystem
+      .makeTempDirectoryScoped({ prefix: "t3-read-aloud-summary-" })
+      .pipe(Effect.mapError((error) => new ReadAloudSummaryError({ reason: error.message })));
+    yield* Effect.logInfo(
+      `read aloud: summarising ${text.length} characters with ${modelSelection.instanceId} ${modelSelection.model}`,
+    );
+    const generated = yield* textGeneration
+      .generateTranscriptionPostProcessing({
+        cwd,
+        prompt: buildReadAloudSummaryPrompt(text),
+        modelSelection,
+      })
+      .pipe(Effect.mapError((error) => new ReadAloudSummaryError({ reason: error.detail })));
+    return generated.transcription.trim();
+  }, Effect.scoped);
+
+  const speakSummary = Effect.fn("ReadAloudService.speakSummary")(function* (
+    threadId: ThreadId,
+    messageId: MessageId,
+  ) {
+    const message = yield* findReply(threadId, messageId);
+    if (!speakableText(message.text)) return yield* new ReadAloudNothingToReadError({ messageId });
+    // The model is asked for plain speech; the pass guards against a stray mark anyway.
+    const text = speakableText(yield* summarise(message.text));
+    if (!text) return yield* new ReadAloudSummaryError({ reason: "the model answered nothing" });
+    return yield* speak(text);
+  });
+
+  return ReadAloudService.of({ speak, speakReply, summarise, speakSummary });
 });
 
 export const layer = Layer.effect(ReadAloudService, make);

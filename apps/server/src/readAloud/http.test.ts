@@ -6,6 +6,7 @@ import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   MessageId,
+  TextGenerationError,
   ThreadId,
   type AuthEnvironmentScope,
   type OrchestrationV2ConversationMessage,
@@ -21,6 +22,7 @@ import { expect } from "vite-plus/test";
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ProjectionStoreV2 from "../orchestration-v2/ProjectionStore.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import { fakeHearsay, type FakeHearsayScript } from "./fakeHearsay.ts";
 import { READ_ALOUD_SAMPLE_RATE_HEADER, READ_ALOUD_SPEAK_PATH, readAloudRoutes } from "./http.ts";
 import * as ReadAloud from "./ReadAloudService.ts";
@@ -79,15 +81,32 @@ const projections = Layer.mock(ProjectionStoreV2.ProjectionStoreV2)({
       : Effect.fail(new ProjectionStoreV2.ProjectionStoreThreadNotFoundError({ threadId })),
 });
 
+const SUMMARY = "Build fixed. Run the tests.";
+/** The summary model: a fixed sentence, or a failure when `summaryFails`. */
+const summariser = (summaryFails: boolean) =>
+  Layer.mock(TextGeneration.TextGeneration)({
+    generateTranscriptionPostProcessing: () =>
+      summaryFails
+        ? Effect.fail(
+            new TextGenerationError({
+              operation: "generateTranscriptionPostProcessing",
+              detail: "claude is not installed",
+            }),
+          )
+        : Effect.succeed({ transcription: SUMMARY }),
+  });
+
 const withRoute = Effect.fn("test.readAloud.withRoute")(function* (
   hearsay: { url?: string; token?: string },
   scopes: AuthEnvironmentScope[] = [AuthOrchestrationOperateScope],
+  summaryFails = false,
 ) {
   const routes = readAloudRoutes.pipe(
     Layer.provide(
       ReadAloud.layer.pipe(
         Layer.provide(projections),
         Layer.provide(ServerSettings.layerTest({ hearsaySpeech: hearsay })),
+        Layer.provide(summariser(summaryFails)),
       ),
     ),
     Layer.provide(NodeServices.layer),
@@ -136,6 +155,33 @@ it.live("streams a reply's speech with its code blocks never sent to Hearsay", (
     ]);
     expect(JSON.stringify(hearsay.received)).not.toContain("rm -rf");
     expect(hearsay.handshakes[0]!.authorization).toBe("Bearer secret");
+  }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
+);
+
+it.live("speaks the summary of a reply in summary mode, and 502 when it cannot be made", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* serve({ sampleRate: 24_000, chunks: [new Uint8Array([1, 0])] });
+    const post = yield* withRoute({ url: hearsay.url });
+    const response = yield* Effect.promise(() =>
+      post({ threadId: THREAD, messageId: REPLY, mode: "summary" }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get(READ_ALOUD_SAMPLE_RATE_HEADER)).toBe("24000");
+    expect(new Uint8Array(yield* Effect.promise(() => response.arrayBuffer()))).toEqual(
+      new Uint8Array([1, 0]),
+    );
+    expect(hearsay.received).toEqual([
+      { type: "start" },
+      { type: "text", text: SUMMARY },
+      { type: "end" },
+    ]);
+    const failing = yield* withRoute({ url: hearsay.url }, [AuthOrchestrationOperateScope], true);
+    const failed = yield* Effect.promise(() =>
+      failing({ threadId: THREAD, messageId: REPLY, mode: "summary" }),
+    );
+    expect(failed.status).toBe(502);
+    expect(yield* errorOf(failed)).toBe("The summary could not be made: claude is not installed");
+    expect(hearsay.handshakes).toHaveLength(1);
   }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
 );
 

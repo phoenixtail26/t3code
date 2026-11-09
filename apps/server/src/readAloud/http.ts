@@ -1,6 +1,6 @@
-// Fork feature: read aloud. One raw route streams a reply's speech as PCM; a chunked
-// binary body does not belong in the JSON API or on the WebSocket. Mounted inside the
-// fork's dictation route layer.
+// Fork feature: read aloud. One raw route streams a reply's speech as PCM, the whole reply
+// or a spoken summary of it; a chunked binary body does not belong in the JSON API or on
+// the WebSocket. Mounted inside the fork's dictation route layer.
 import { AuthOrchestrationOperateScope, MessageId, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -26,7 +26,12 @@ export const READ_ALOUD_SPEAK_PATH = "/api/read-aloud/speak";
 /** The PCM's sample rate, on the response; the body is mono Int16 little-endian. */
 export const READ_ALOUD_SAMPLE_RATE_HEADER = "read-aloud-sample-rate";
 
-const SpeakRequest = Schema.Struct({ threadId: ThreadId, messageId: MessageId });
+const SpeakRequest = Schema.Struct({
+  threadId: ThreadId,
+  messageId: MessageId,
+  /** `full` speaks the reply's words; `summary` a few sentences about it. */
+  mode: Schema.optional(Schema.Literals(["full", "summary"])),
+});
 const decodeSpeakRequest = Schema.decodeUnknownEffect(Schema.fromJsonString(SpeakRequest));
 
 // The same check as the fork's dictation routes, so the desktop and the phone reach it alike.
@@ -75,7 +80,11 @@ export const readAloudRoutes = HttpRouter.use(
         const input = yield* request.text.pipe(Effect.flatMap(decodeSpeakRequest), Effect.option);
         if (input._tag === "None")
           return errorResponse(400, "The request must name a thread and a message.");
-        const utterance = yield* readAloud.speakReply(input.value.threadId, input.value.messageId);
+        const { threadId, messageId, mode } = input.value;
+        const utterance =
+          mode === "summary"
+            ? yield* readAloud.speakSummary(threadId, messageId)
+            : yield* readAloud.speakReply(threadId, messageId);
         return HttpServerResponse.stream(
           utterance.audio.pipe(
             Stream.tapError((error) => Effect.logWarning(`read aloud: ${error.message}`)),
@@ -101,6 +110,7 @@ export const readAloudRoutes = HttpRouter.use(
           ReadAloudNothingToReadError: failure(409),
           ReadAloudNotConfiguredError: failure(409),
           ReadAloudHearsayError: failure(502),
+          ReadAloudSummaryError: failure(502),
           ProjectionStoreSetupError: failure(500),
           ProjectionStoreApplyEventError: failure(500),
           ProjectionStoreReadError: failure(500),
