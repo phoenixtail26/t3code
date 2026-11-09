@@ -7,6 +7,7 @@ import {
   type EnvironmentSpeechModels,
   type EnvironmentSpeechStatus,
 } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -24,15 +25,23 @@ export const HEARSAY_RECOGNIZER_MODEL_ID = "parakeet-tdt-0.6b-v2-int8";
 export const HEARSAY_MAX_PCM_BYTES = 9_600_000;
 const HEARSAY_MODEL_NAME = "Parakeet TDT 0.6B v2 (Hearsay)";
 const STATUS_TIMEOUT = Duration.seconds(10);
-// Covers a five-minute clip and a cold model load. The socket client stops waiting after
-// two minutes without an event, so a model download belongs to the Download action.
+// The server's own ceiling for a five-minute clip and a cold model load. On the path the
+// client takes the real bound is two minutes: the socket client gives up 120 s after
+// `finish` (client-runtime/voice-input/stream.ts). Only the HTTP path waits this long.
 const TRANSCRIBE_TIMEOUT = Duration.minutes(10);
-const DOWNLOAD_POLL = Duration.seconds(1);
+const REMOVE_IN_HEARSAY = "Remove Hearsay's models in Hearsay's settings window";
 
 /** A plain failure the owner can read, kept a SpeechOperationError for upstream's error mapping. */
 export class HearsaySpeechError extends Upstream.SpeechOperationError {
   override get message(): string {
     return this.cause instanceof Error ? this.cause.message : super.message;
+  }
+}
+
+/** Upstream's refusal of a model request (a 400 for the client), carrying the reason for the log. */
+export class HearsayModelRemovalError extends Upstream.SpeechModelNotFoundError {
+  override get message(): string {
+    return REMOVE_IN_HEARSAY;
   }
 }
 
@@ -81,7 +90,13 @@ const describe = (cause: unknown): string => {
   return current.message || ("code" in current ? String(current.code) : current.name);
 };
 
-const make = Effect.gen(function* () {
+type Options = {
+  readonly downloadPoll: Duration.Duration;
+  /** How long a download is polled before it fails; the client's own bound on the request. */
+  readonly downloadCap: Duration.Duration;
+};
+
+const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options) {
   const upstream = yield* Upstream.SpeechService;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const http = yield* HttpClient.HttpClient;
@@ -171,13 +186,15 @@ const make = Effect.gen(function* () {
     return yield* decodeStatus(body).pipe(Effect.mapError(malformed(operation, hearsay)));
   });
 
-  // Hearsay builds before its model-name keys report the recogniser under its engine name.
+  // Hearsay's `fake_engines()` and `no_engines()` key the recogniser by its engine name.
   const recognizer = (status: HearsayStatus) =>
     status.models[HEARSAY_RECOGNIZER_MODEL_ID] ?? status.models.recognizer;
 
   const toStatus = (hearsay: Target, status: HearsayStatus): EnvironmentSpeechStatus => {
-    const failure = status.unavailable.recognizer ?? status.failures.recognizer;
-    if (failure) return { supported: false, reason: `Hearsay at ${hearsay.url}: ${failure}` };
+    // A `failures` entry clears only on Hearsay's next load or call, so it must not close the gate.
+    const unavailable = status.unavailable.recognizer;
+    if (unavailable)
+      return { supported: false, reason: `Hearsay at ${hearsay.url}: ${unavailable}` };
     const model = recognizer(status);
     if (!model)
       return {
@@ -214,7 +231,7 @@ const make = Effect.gen(function* () {
     const entry: EnvironmentSpeechModel = {
       id: HEARSAY_RECOGNIZER_MODEL_ID,
       name: HEARSAY_MODEL_NAME,
-      description: `Hearsay's recogniser at ${hearsay.url}. Its dictionary and cleanup are set in Hearsay's settings window.`,
+      description: `Hearsay's recogniser at ${hearsay.url}. Change its dictionary and filler words, or remove it, in Hearsay's settings window.`,
       size,
       languages: ["en"],
       accuracy: 0,
@@ -252,6 +269,7 @@ const make = Effect.gen(function* () {
   ) {
     const operation = "model download";
     yield* requireHearsayModel(modelId);
+    const deadline = (yield* Clock.currentTimeMillis) + Duration.toMillis(options.downloadCap);
     const started = yield* call(
       hearsay,
       operation,
@@ -262,7 +280,13 @@ const make = Effect.gen(function* () {
       Effect.mapError(malformed(operation, hearsay)),
     );
     while (recognizer(status)?.state === "downloading") {
-      yield* Effect.sleep(DOWNLOAD_POLL);
+      if ((yield* Clock.currentTimeMillis) >= deadline)
+        return yield* fail(
+          operation,
+          hearsay,
+          `the model download did not finish within ${Duration.format(options.downloadCap)}`,
+        );
+      yield* Effect.sleep(options.downloadPoll);
       status = yield* fetchStatus(hearsay, operation);
     }
     const model = recognizer(status);
@@ -271,18 +295,33 @@ const make = Effect.gen(function* () {
     return toModels(hearsay, status);
   });
 
-  const remove = Effect.fn("HearsaySpeechService.remove")(function* (
+  /** Hearsay's DELETE also removes a finished model, so it is sent only while Hearsay says `downloading`. */
+  const cancelDownload = Effect.fn("HearsaySpeechService.cancelDownload")(function* (
     hearsay: Target,
-    operation: string,
+    modelId: string,
   ) {
+    const operation = "model download";
+    const status = yield* fetchStatus(hearsay, operation);
+    if (modelId !== HEARSAY_RECOGNIZER_MODEL_ID || recognizer(status)?.state !== "downloading")
+      return toModels(hearsay, status);
     const { body } = yield* call(
       hearsay,
       operation,
       HttpClientRequest.delete(`${hearsay.url}/v1/models/${HEARSAY_RECOGNIZER_MODEL_ID}`),
       STATUS_TIMEOUT,
     );
-    const status = yield* decodeStatus(body).pipe(Effect.mapError(malformed(operation, hearsay)));
-    return toModels(hearsay, status);
+    const stopped = yield* decodeStatus(body).pipe(Effect.mapError(malformed(operation, hearsay)));
+    return toModels(hearsay, stopped);
+  });
+
+  // The recogniser is shared with Hearsay's other clients; T3 Code does not delete it.
+  const refuseRemoval = Effect.fn("HearsaySpeechService.removeModel")(function* (
+    _hearsay: Target,
+    modelId: string,
+  ) {
+    const error = new HearsayModelRemovalError({ modelId });
+    yield* Effect.logWarning(error.message);
+    return yield* error;
   });
 
   const transcribe = Effect.fn("HearsaySpeechService.transcribe")(function* (
@@ -416,14 +455,8 @@ const make = Effect.gen(function* () {
     selectModel: route("model selection", upstream.selectModel, (hearsay, modelId) =>
       requireHearsayModel(modelId).pipe(Effect.andThen(models(hearsay, "model selection"))),
     ),
-    cancelDownload: route("model download", upstream.cancelDownload, (hearsay, modelId) =>
-      modelId === HEARSAY_RECOGNIZER_MODEL_ID
-        ? remove(hearsay, "model download")
-        : models(hearsay, "model download"),
-    ),
-    removeModel: route("model removal", upstream.removeModel, (hearsay, modelId) =>
-      requireHearsayModel(modelId).pipe(Effect.andThen(remove(hearsay, "model removal"))),
-    ),
+    cancelDownload: route("model download", upstream.cancelDownload, cancelDownload),
+    removeModel: route("model removal", upstream.removeModel, refuseRemoval),
     prepareModel: dispatch("model preparation", upstream.prepareModel, () => Effect.void),
     transcribe: route("transcription", upstream.transcribe, (hearsay, pcmBytes) =>
       transcribe(hearsay, "transcription", pcmBytes),
@@ -444,4 +477,10 @@ const make = Effect.gen(function* () {
   });
 });
 
-export const layer = Layer.effect(Upstream.SpeechService, make).pipe(Layer.provide(Upstream.layer));
+export const layerWith = (options: Options) =>
+  Layer.effect(Upstream.SpeechService, make(options)).pipe(Layer.provide(Upstream.layer));
+
+export const layer = layerWith({
+  downloadPoll: Duration.seconds(1),
+  downloadCap: Duration.minutes(30),
+});

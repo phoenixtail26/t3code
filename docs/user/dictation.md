@@ -34,40 +34,53 @@ The next dictation downloads it again.
 
 ## Transcribe through Hearsay
 
-T3 Code's own voice input (the microphone button and `mod+shift+d`, set up
-under **Settings → Voice**) can hand its recordings to a Hearsay speech
-service running on the environment that transcribes for you, instead of the
-bundled engine.
+T3 Code's own voice input (the microphone button and `mod+shift+d`) can hand
+its recordings to a Hearsay speech service running on the environment that
+transcribes for you, instead of the bundled engine. Its settings are on the
+**Voice** page, **Settings → Voice**, which is a different place from the
+**Voice** section of the General page that the rest of this guide describes.
 
-In **Settings → Voice → Transcription**, with the transcribing environment
-chosen under **Transcribe with**:
+In **Settings → Voice → Transcription**, directly under **Transcribe with**
+once an environment is chosen there:
 
 - **Hearsay URL** is where Hearsay listens, for example
   `http://127.0.0.1:47700`. Empty means the bundled engine, and nothing else
   changes. With a URL set, recordings go to Hearsay as 16 kHz mono PCM and
   the text Hearsay returns lands in the composer. The bundled engine is never
-  started while the URL is set.
+  started while the URL is set. A bundled model that was already loaded
+  before you set the URL stays in memory until its **Unload model** time
+  runs out; if that is **Never**, restart T3 Code to release it.
 - **Hearsay token** is the token from Hearsay's config. Leave it empty unless
   Hearsay is bound to an address other than loopback, where it requires one.
+  It is an ordinary setting: it is stored in the environment's
+  `settings.json` and sent to every client of that environment.
 
 With the URL set, the model card shows Hearsay's recogniser: **Download**
 starts the download in Hearsay and the card shows its progress; recording
-is offered once Hearsay reports the model ready. The **Transcription
-options** section notes that the dictionary and cleanup are managed by
-Hearsay and disables those controls: change them in Hearsay's settings
-window. The **Cleanup** section, which runs on the transcript afterwards,
-still applies.
+is offered once Hearsay reports the model ready. Cancelling stops a download
+that is still running. The model cannot be removed from T3 Code, because
+Hearsay's other clients use it too: remove it in Hearsay's settings window.
 
-If Hearsay cannot be reached, answers with an error, or does not answer in
-time, the dictation fails with a message naming the URL and the reason, for
-example
-`Hearsay at http://127.0.0.1:47700 did not answer: engine failed to load`.
-When Hearsay is down before you record, that message is what the "Voice
-input is not available" notice and the Voice panel show. When a recording
-fails part way, T3 Code shows its usual transcription failure and the
-message is in the server log. There is no fallback to the bundled engine:
-fix or clear the URL. A recording longer than five minutes is refused
-without being sent. Each forwarded recording is logged as
+Hearsay handles the dictionary and filler words, so the **Transcription
+options** section says so and disables its controls: change them in
+Hearsay's settings window. **Hardware** and **Unload model** under
+**Advanced** are disabled too, since Hearsay runs the model. The **Cleanup**
+section, which runs on the transcript afterwards, still applies.
+
+There is no fallback to the bundled engine: when Hearsay fails, fix it or
+clear the URL. What a failure looks like depends on when it happens:
+
+- **Before you record**, when Hearsay cannot be reached or is not installed
+  with its recogniser: the "Voice input is not available" notice and the
+  Voice page show the reason, for example
+  `Hearsay at http://127.0.0.1:47700 did not answer: connect ECONNREFUSED 127.0.0.1:47700`.
+- **During a transcription**, when Hearsay answers with an error or does not
+  answer in time: T3 Code shows its usual transcription failure, and the
+  reason is in the server log, for example
+  `Hearsay at http://127.0.0.1:47700 did not answer: engine failed to load`.
+  Recording again retries.
+
+Each forwarded recording is logged as
 `speech: forwarded to Hearsay at <url>, entry <id>`, where the id is the
 entry in Hearsay's history.
 

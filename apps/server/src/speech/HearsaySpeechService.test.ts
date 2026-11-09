@@ -5,8 +5,10 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import { DEFAULT_SPEECH_TRANSCRIPTION_OPTIONS } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Duration from "effect/Duration";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { beforeEach, expect, vi } from "vite-plus/test";
@@ -124,8 +126,8 @@ const statusBody = (
   ...extra,
 });
 
-const layerFor = (hearsay: { url?: string; token?: string }) =>
-  HearsaySpeech.layer.pipe(
+const layerFor = (hearsay: { url?: string; token?: string }, base = HearsaySpeech.layer) =>
+  base.pipe(
     Layer.provide(store),
     Layer.provideMerge(ServerSettings.layerTest({ hearsaySpeech: hearsay })),
     Layer.provide(FetchHttpClient.layer),
@@ -136,6 +138,11 @@ const float32 = (...samples: number[]) => new Uint8Array(new Float32Array(sample
 const int16Of = (bytes: Uint8Array) =>
   Array.from(new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 2));
 const options = DEFAULT_SPEECH_TRANSCRIPTION_OPTIONS;
+const requests = (hearsay: { received: Received[] }) =>
+  hearsay.received.map((request) => `${request.method} ${request.url}`);
+const UPSTREAM_MODEL_ID = "handy-computer/parakeet-unified-en-0.6b-gguf";
+const pollingAtOnce = (downloadCap: Duration.Duration) =>
+  HearsaySpeech.layerWith({ downloadPoll: Duration.zero, downloadCap });
 
 beforeEach(() => {
   loadNative.mockClear();
@@ -158,7 +165,20 @@ it.live("hands every call through to upstream when no URL is set", () =>
     expect(text).toBe("upstream heard it");
     expect(loadNative).toHaveBeenCalledTimes(1);
     const status = yield* speech.status;
-    expect(status.supported && status.modelId).toBe("handy-computer/parakeet-unified-en-0.6b-gguf");
+    expect(status.supported && status.modelId).toBe(UPSTREAM_MODEL_ID);
+    const { models } = yield* speech.models(false);
+    expect(models.map((model) => model.id)).toContain(UPSTREAM_MODEL_ID);
+    const scope = yield* Scope.make();
+    const stream = yield* speech.startStream(options).pipe(Scope.provide(scope));
+    yield* stream.feed(float32(0.25));
+    expect(yield* stream.finish).toBe("upstream heard it");
+    yield* Scope.close(scope, Exit.void);
+    expect(yield* speech.updateAcceleration("cpu")).toMatchObject({
+      supported: true,
+      modelId: UPSTREAM_MODEL_ID,
+      acceleration: "cpu",
+    });
+    expect(discoverGpus).toHaveBeenCalled();
     expect(hearsay.received).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(layerFor({}))),
 );
@@ -174,8 +194,15 @@ it.live("posts Int16 PCM with the t3code source and answers Hearsay's text", () 
     const speech = yield* Upstream.SpeechService.pipe(
       Effect.provide(layerFor({ url: `${hearsay.url}/` })),
     );
-    const text = yield* speech.transcribe(float32(0, 0.5, 1, -1), options);
+    const logged: unknown[] = [];
+    const logger = Logger.make(({ message }) => {
+      logged.push(...(Array.isArray(message) ? message : [message]));
+    });
+    const text = yield* speech
+      .transcribe(float32(0, 0.5, 1, -1), options)
+      .pipe(Effect.provide(Logger.layer([logger], { mergeWithExisting: false })));
     expect(text).toBe("T3 is ready");
+    expect(logged).toEqual([`speech: forwarded to Hearsay at ${hearsay.url}, entry entry-1`]);
     expect(loadNative).not.toHaveBeenCalled();
     expect(hearsay.received).toHaveLength(1);
     const request = hearsay.received[0]!;
@@ -284,10 +311,7 @@ it.live("maps Hearsay's model states onto upstream's status and model list", () 
       status: 200,
       body: statusBody({ state: "ready" }, { failures: { recognizer: "engine failed to load" } }),
     });
-    expect(yield* speech.status).toEqual({
-      supported: false,
-      reason: `Hearsay at ${hearsay.url}: engine failed to load`,
-    });
+    expect(yield* speech.status).toMatchObject({ supported: true, state: "ready" });
 
     hearsay.reply = () => ({
       status: 200,
@@ -314,23 +338,105 @@ it.live("maps Hearsay's model states onto upstream's status and model list", () 
   }).pipe(Effect.scoped),
 );
 
-it.live("starts Hearsay's download and reports the model once it landed", () =>
+it.live("starts Hearsay's download and polls its status until the model landed", () =>
   Effect.gen(function* () {
     const hearsay = yield* fakeHearsay;
-    hearsay.reply = (request) => ({
+    const answers = [
+      statusBody({ state: "downloading", percent: 10 }),
+      statusBody({ state: "downloading", percent: 60 }),
+      statusBody({ state: "ready" }),
+    ];
+    hearsay.reply = () => ({ status: 200, body: answers[hearsay.received.length - 1] });
+    const speech = yield* Upstream.SpeechService.pipe(
+      Effect.provide(layerFor({ url: hearsay.url }, pollingAtOnce(Duration.minutes(30)))),
+    );
+    const { models } = yield* speech.downloadModel(HEARSAY_RECOGNIZER_MODEL_ID);
+    expect(models).toMatchObject([{ id: HEARSAY_RECOGNIZER_MODEL_ID, state: "installed" }]);
+    expect(requests(hearsay)).toEqual([
+      `POST /v1/models/${HEARSAY_RECOGNIZER_MODEL_ID}/download`,
+      "GET /v1/status",
+      "GET /v1/status",
+    ]);
+    const unknown = yield* speech.downloadModel("other-model").pipe(Effect.exit);
+    expect(Exit.isFailure(unknown)).toBe(true);
+    expect(hearsay.received).toHaveLength(3);
+  }).pipe(Effect.scoped),
+);
+
+it.live("fails a download Hearsay reports as failed", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* fakeHearsay;
+    hearsay.reply = () => ({
       status: 200,
-      body: statusBody({ state: request.method === "POST" ? "ready" : "missing" }),
+      body: statusBody({ state: "missing", error: "disk full" }),
     });
     const speech = yield* Upstream.SpeechService.pipe(
       Effect.provide(layerFor({ url: hearsay.url })),
     );
-    const { models } = yield* speech.downloadModel(HEARSAY_RECOGNIZER_MODEL_ID);
-    expect(models).toMatchObject([{ id: HEARSAY_RECOGNIZER_MODEL_ID, state: "installed" }]);
-    expect(hearsay.received.map((request) => `${request.method} ${request.url}`)).toEqual([
-      `POST /v1/models/${HEARSAY_RECOGNIZER_MODEL_ID}/download`,
+    const exit = yield* speech.downloadModel(HEARSAY_RECOGNIZER_MODEL_ID).pipe(Effect.exit);
+    expect(String(Exit.isFailure(exit) ? exit.cause : "")).toContain(
+      `Hearsay at ${hearsay.url} did not answer: disk full`,
+    );
+  }).pipe(Effect.scoped),
+);
+
+it.live("gives up on a download still running when its cap has passed", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* fakeHearsay;
+    hearsay.reply = () => ({
+      status: 200,
+      body: statusBody({ state: "downloading", percent: 1 }),
+    });
+    const speech = yield* Upstream.SpeechService.pipe(
+      Effect.provide(layerFor({ url: hearsay.url }, pollingAtOnce(Duration.zero))),
+    );
+    const exit = yield* speech.downloadModel(HEARSAY_RECOGNIZER_MODEL_ID).pipe(Effect.exit);
+    expect(String(Exit.isFailure(exit) ? exit.cause : "")).toContain(
+      `Hearsay at ${hearsay.url} did not answer: the model download did not finish within`,
+    );
+    expect(requests(hearsay)).toEqual([`POST /v1/models/${HEARSAY_RECOGNIZER_MODEL_ID}/download`]);
+  }).pipe(Effect.scoped),
+);
+
+it.live("cancels a download only while Hearsay says it is downloading", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* fakeHearsay;
+    const speech = yield* Upstream.SpeechService.pipe(
+      Effect.provide(layerFor({ url: hearsay.url })),
+    );
+    hearsay.reply = (request) => ({
+      status: 200,
+      body: statusBody(
+        request.method === "DELETE" ? { state: "missing" } : { state: "downloading", percent: 5 },
+      ),
+    });
+    expect((yield* speech.cancelDownload(HEARSAY_RECOGNIZER_MODEL_ID)).models).toMatchObject([
+      { state: "downloadable" },
     ]);
-    const unknown = yield* speech.downloadModel("other-model").pipe(Effect.exit);
-    expect(Exit.isFailure(unknown)).toBe(true);
+    expect(requests(hearsay)).toEqual([
+      "GET /v1/status",
+      `DELETE /v1/models/${HEARSAY_RECOGNIZER_MODEL_ID}`,
+    ]);
+
+    hearsay.reply = () => ({ status: 200, body: statusBody({ state: "ready" }) });
+    expect((yield* speech.cancelDownload(HEARSAY_RECOGNIZER_MODEL_ID)).models).toMatchObject([
+      { state: "installed" },
+    ]);
+    expect(requests(hearsay).slice(2)).toEqual(["GET /v1/status"]);
+  }).pipe(Effect.scoped),
+);
+
+it.live("refuses to remove Hearsay's model and sends nothing", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* fakeHearsay;
+    const speech = yield* Upstream.SpeechService.pipe(
+      Effect.provide(layerFor({ url: hearsay.url })),
+    );
+    const exit = yield* speech.removeModel(HEARSAY_RECOGNIZER_MODEL_ID).pipe(Effect.exit);
+    expect(String(Exit.isFailure(exit) ? exit.cause : "")).toContain(
+      "Remove Hearsay's models in Hearsay's settings window",
+    );
+    expect(hearsay.received).toEqual([]);
   }).pipe(Effect.scoped),
 );
 

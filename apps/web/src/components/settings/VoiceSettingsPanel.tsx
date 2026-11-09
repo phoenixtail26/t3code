@@ -120,7 +120,12 @@ import { searchableSetting } from "./settingsSearch";
 import { useOptionalSettingsScope, useSettingsScope } from "./SettingsScopeContext";
 import { useScopedModelDisabledReason } from "./useScopedModelAvailability";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
-import { HearsayManagedSection, HearsaySpeechSettingsRows } from "./fork/HearsaySpeechSettings";
+import {
+  HearsayEngineRow,
+  HearsayManagedSection,
+  HearsaySpeechSettingsRows,
+  useHearsayKeyedConnection,
+} from "./fork/HearsaySpeechSettings";
 
 const OFF = "off";
 function CloudSpeechLogo({ provider }: { provider: CloudSpeechProvider }) {
@@ -670,7 +675,8 @@ function AdvancedSpeechSettings({
   const supported = status;
   return (
     <AdvancedSettings targetIds={[searchableSetting("speech-hardware").id]}>
-      <SettingsRow
+      <HearsayEngineRow
+        environmentId={prepared.environmentId}
         {...searchableSetting("speech-hardware")}
         title="Hardware"
         description="Auto uses the environment’s GPU when it has one."
@@ -710,7 +716,8 @@ function AdvancedSpeechSettings({
           </Select>
         }
       />
-      <SettingsRow
+      <HearsayEngineRow
+        environmentId={prepared.environmentId}
         title="Unload model"
         description="Release the model’s memory on the environment after it sits idle."
         control={
@@ -1105,7 +1112,7 @@ export function VoiceSettingsPanel() {
   const { environments } = useEnvironments();
   const [microphones, setMicrophones] = useState<BrowserMicrophone[]>([]);
   const prepared = destination.cloudProvider ? null : destination.prepared;
-  const catalog = useVoiceModels(prepared);
+  const catalog = useVoiceModels(useHearsayKeyedConnection(prepared));
 
   const refreshMicrophones = useStableCallback(async () => {
     if (!navigator.mediaDevices?.enumerateDevices) return;
@@ -1409,6 +1416,7 @@ export function VoiceSettingsPanel() {
             </p>
           ) : null}
         </SettingsSearchTarget>
+        {prepared && <HearsaySpeechSettingsRows environmentId={prepared.environmentId} />}
 
         {pendingCloud && cloudEnvironment && (
           <CloudVoiceConfiguration
@@ -1468,7 +1476,6 @@ export function VoiceSettingsPanel() {
           />
         ) : null}
         {prepared && <AdvancedSpeechSettings prepared={prepared} catalog={catalog} />}
-        {prepared && <HearsaySpeechSettingsRows environmentId={prepared.environmentId} />}
       </SettingsSection>
       <HearsayManagedSection
         environmentId={prepared?.environmentId ?? null}
