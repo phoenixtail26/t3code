@@ -116,6 +116,7 @@ export function startReadAloud(target: ReadAloudTarget): void {
       environmentId: target.environmentId,
       threadId: target.threadId,
       messageId: target.messageId,
+      ...(target.mode ? { mode: target.mode } : {}),
       stop: stopped,
       onFormat: (sampleRate) => {
         scheduling.current = schedulePcm(context, sampleRate);

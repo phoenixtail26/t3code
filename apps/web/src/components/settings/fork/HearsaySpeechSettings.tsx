@@ -1,11 +1,12 @@
 // Fork feature: Hearsay behind upstream's voice input. Two rows on the Voice
-// panel hold the transcribing environment's Hearsay URL and token, and wrappers
-// disable the upstream controls Hearsay takes over while the URL is set.
-// Mounted by VoiceSettingsPanel.
+// panel hold the transcribing environment's Hearsay URL and token, wrappers
+// disable the upstream controls Hearsay takes over while the URL is set, and
+// the read-aloud setting's row follows. Mounted by VoiceSettingsPanel.
 import { DEFAULT_UNIFIED_SETTINGS, type EnvironmentId } from "@t3tools/contracts";
 import type { ComponentProps, ReactNode } from "react";
 
 import { useEnvironmentSettings, useUpdateEnvironmentSettings } from "../../../hooks/useSettings";
+import { ReadAloudSettingRow } from "../../../readAloud/ReadAloudSettingRow";
 import { DraftInput } from "../../ui/draft-input";
 import {
   SettingResetButton,
@@ -69,6 +70,7 @@ export function HearsaySpeechSettingsRows({ environmentId }: { environmentId: En
           />
         }
       />
+      {hearsay.url ? <ReadAloudSettingRow /> : null}
     </>
   );
 }

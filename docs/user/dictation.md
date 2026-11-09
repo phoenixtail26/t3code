@@ -147,3 +147,17 @@ Hearsay's settings window. The first reading after Hearsay starts, or after
 its voice has been idle for an hour, waits for the voice to load before
 anything is heard; the button says so meanwhile. Without a Hearsay URL
 there is no button and the key does nothing.
+
+### Hearing a turn end
+
+T3 Code can also tell you how a turn went without being asked. **Settings →
+Voice → Read replies aloud** sets it for the device you are on: **After
+dictated messages** (the default) speaks a short summary of the reply when a
+turn whose message you dictated ends; **After every message** does so for
+every turn sent from this device; **Off** never does. The summary is a few
+plain sentences made by Claude Haiku on the server, saying what was done and
+what you should do next, so it is heard a few seconds after the turn ends.
+It plays only on the window or phone that sent the message, and only if that
+page stayed open: reloading before the turn ends loses it. Stop it as you
+would stop any reading. The row shows while the environment has a Hearsay
+URL.

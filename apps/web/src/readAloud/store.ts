@@ -7,6 +7,8 @@ export interface ReadAloudTarget {
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
   readonly messageId: MessageId;
+  /** The reply's words (the default) or a few spoken sentences about it. */
+  readonly mode?: "full" | "summary";
 }
 
 export type ReadAloudState =

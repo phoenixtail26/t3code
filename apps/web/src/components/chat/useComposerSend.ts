@@ -63,6 +63,7 @@ import { type ChatMessage } from "../../types";
 import { recordPromptSent } from "../GitHubStarPrompt";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { newMessageId, newThreadId } from "~/lib/utils";
+import { bindDictatedMark } from "../../readAloud/dictatedMark";
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import {
@@ -921,6 +922,7 @@ export function useComposerSend(input: ComposerSendInput) {
       composerAttachmentsSnapshot.map((attachment) => attachment.id),
     );
     const messageIdForSend = newMessageId();
+    bindDictatedMark(composerDraftTarget, environmentId, threadIdForSend, messageIdForSend);
     const messageCreatedAt = new Date().toISOString();
     const outgoingMessageText = formatOutgoingPrompt({
       provider: ctxSelectedProvider,

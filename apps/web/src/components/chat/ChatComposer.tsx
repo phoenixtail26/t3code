@@ -140,6 +140,7 @@ import { attachmentUploadBlockReason } from "../../lib/attachmentUploadState";
 import { useDictationShortcut } from "../../speech/useDictationShortcut";
 import { useDictationSubmissionShortcut } from "../../speech/useDictationSubmissionShortcut";
 import { useEnvironmentSpeechInput } from "../../speech/useEnvironmentSpeechInput";
+import { markDraftDictated } from "../../readAloud/dictatedMark";
 import { ComposerSpeechButton, ComposerSpeechRecordingPill } from "./ComposerSpeechButton";
 import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
 import { shortcutLabelForCommand } from "../../keybindings";
@@ -1876,6 +1877,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         focusEditorAfterReplace: false,
       });
       if (!applied) return;
+      markDraftDictated(composerDraftTargetKey);
       const cursor = collapseExpandedComposerCursor(text, selection.start, isLiteralPendingAnswer);
       setComposerCursor(cursor);
       window.requestAnimationFrame(() => composerEditorRef.current?.focusAt(cursor));

@@ -26,6 +26,7 @@ export interface SpeakRequest {
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
   readonly messageId: MessageId;
+  readonly mode?: "full" | "summary";
   /** Called once with the PCM's sample rate, before the first chunk. */
   readonly onFormat: (sampleRate: number) => void;
   readonly onChunk: (pcm: Uint8Array) => void;
@@ -73,6 +74,7 @@ const speakCommand = createRuntimeCommand(connectionAtomRuntime, {
           HttpClientRequest.bodyJsonUnsafe({
             threadId: input.threadId,
             messageId: input.messageId,
+            ...(input.mode ? { mode: input.mode } : {}),
           }),
         );
         const exchange = Effect.gen(function* () {
