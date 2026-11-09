@@ -31,6 +31,15 @@ function lastCompletedAssistantMessageId(threadRef: ScopedThreadRef): MessageId 
   return null;
 }
 
+// Thread find dismisses Escape in a listener that runs after the dispatcher, and an open
+// dialog, menu or picker owns Escape, so reading yields to any of them on the page.
+const ESCAPE_OWNERS =
+  '[data-thread-find-bar], [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
+
+function escapeBelongsElsewhere(): boolean {
+  return document.querySelector(ESCAPE_OWNERS) !== null;
+}
+
 export function installReadAloudCommands(router: AnyRouter): () => void {
   stopReadAloudWhenTheMicrophoneOpens();
   const readRouteThreadRef = () => {
@@ -57,6 +66,7 @@ export function installReadAloudCommands(router: AnyRouter): () => void {
       when: () => !isCommandPaletteOpen(),
       onKeyDown: (event) => {
         if (event.key !== "Escape" || readReadAloudState().state === "idle") return false;
+        if (escapeBelongsElsewhere()) return false;
         event.preventDefault();
         stopReadAloud();
       },

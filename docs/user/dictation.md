@@ -128,8 +128,8 @@ not reset them. Use the reset arrow on each row instead.
 
 ## Read aloud
 
-With a Hearsay URL set, T3 Code can read an assistant reply to you in
-Hearsay's voice. It speaks the reply's words and skips its code blocks in
+With a Hearsay URL set (**Settings → Voice → Transcription**, see above),
+T3 Code can read an assistant reply to you in Hearsay's voice. It speaks the reply's words and skips its code blocks in
 silence: headings, lists and tables are read as plain sentences, and links
 are read by their text.
 
@@ -143,5 +143,7 @@ Aloud**.
 The voice comes from the Hearsay service of the environment the thread runs
 on, through the same T3 Code server that transcribes for you, so it works
 on the desktop and in a phone browser alike. Which voice speaks is chosen in
-Hearsay's settings window. Without a Hearsay URL there is no button and the
-key does nothing.
+Hearsay's settings window. The first reading after Hearsay starts, or after
+its voice has been idle for an hour, waits for the voice to load before
+anything is heard; the button says so meanwhile. Without a Hearsay URL
+there is no button and the key does nothing.

@@ -1,5 +1,7 @@
-// Fork feature: read aloud. One utterance through Hearsay's `WS /v1/speak`: the text goes
-// in whole, the PCM comes back as Hearsay makes it, and closing the scope early cancels it.
+// Fork feature: read aloud. A reply is read from the projection and its words spoken as one
+// utterance through Hearsay's `WS /v1/speak`: the text goes in whole, the PCM comes back as
+// Hearsay makes it, and closing the scope early cancels it.
+import type { MessageId, ThreadId } from "@t3tools/contracts";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -10,7 +12,9 @@ import type * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 
+import * as ProjectionStoreV2 from "../orchestration-v2/ProjectionStore.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import { speakableText } from "./speakableText.ts";
 
 const OPEN_TIMEOUT = Duration.seconds(10);
 // Covers the voice's load on first use (105 s measured in a fresh Hearsay process on a cold
@@ -39,6 +43,44 @@ export class ReadAloudHearsayError extends Schema.TaggedError<
   }
 }
 
+export class ReadAloudReplyNotFoundError extends Schema.TaggedError<
+  ReadAloudReplyNotFoundError,
+  { readonly brand: unique symbol }
+>()("ReadAloudReplyNotFoundError", { threadId: Schema.String, messageId: Schema.String }) {
+  override get message(): string {
+    return "There is no such reply in this thread.";
+  }
+}
+
+export class ReadAloudReplyStreamingError extends Schema.TaggedError<
+  ReadAloudReplyStreamingError,
+  { readonly brand: unique symbol }
+>()("ReadAloudReplyStreamingError", { messageId: Schema.String }) {
+  override get message(): string {
+    return "This reply is still being written.";
+  }
+}
+
+export class ReadAloudNothingToReadError extends Schema.TaggedError<
+  ReadAloudNothingToReadError,
+  { readonly brand: unique symbol }
+>()("ReadAloudNothingToReadError", { messageId: Schema.String }) {
+  override get message(): string {
+    return "There is nothing to read in this reply.";
+  }
+}
+
+type SpeakError = ReadAloudNotConfiguredError | ReadAloudHearsayError;
+type SpeakReplyError =
+  | SpeakError
+  | ReadAloudReplyNotFoundError
+  | ReadAloudReplyStreamingError
+  | ReadAloudNothingToReadError
+  | Exclude<
+      ProjectionStoreV2.ProjectionStoreV2Error,
+      { readonly _tag: "ProjectionStoreThreadNotFoundError" }
+    >;
+
 interface Utterance {
   readonly sampleRate: number;
   /** Mono Int16 little-endian PCM at `sampleRate`, chunk by chunk as Hearsay sends it. */
@@ -52,9 +94,12 @@ export class ReadAloudService extends Context.Service<
      * Speaks `text` through Hearsay. The socket lives in the scope: closing it before the
      * audio ends sends `cancel`, so a client that goes away stops the voice.
      */
-    readonly speak: (
-      text: string,
-    ) => Effect.Effect<Utterance, ReadAloudNotConfiguredError | ReadAloudHearsayError, Scope.Scope>;
+    readonly speak: (text: string) => Effect.Effect<Utterance, SpeakError, Scope.Scope>;
+    /** Reads the assistant reply from the thread's projection and speaks its words, code left out. */
+    readonly speakReply: (
+      threadId: ThreadId,
+      messageId: MessageId,
+    ) => Effect.Effect<Utterance, SpeakReplyError, Scope.Scope>;
   }
 >()("t3/readAloud/ReadAloudService") {}
 
@@ -109,6 +154,7 @@ const pieces = (text: string): ReadonlyArray<string> => {
 
 const make = Effect.gen(function* () {
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const projections = yield* ProjectionStoreV2.ProjectionStoreV2;
 
   const speak = Effect.fn("ReadAloudService.speak")(function* (text: string) {
     const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
@@ -194,7 +240,27 @@ const make = Effect.gen(function* () {
     return { sampleRate, audio } satisfies Utterance;
   });
 
-  return ReadAloudService.of({ speak });
+  const speakReply = Effect.fn("ReadAloudService.speakReply")(function* (
+    threadId: ThreadId,
+    messageId: MessageId,
+  ) {
+    const projection = yield* projections.getThreadProjection(threadId).pipe(
+      Effect.catchTags({
+        ProjectionStoreThreadNotFoundError: () =>
+          Effect.fail(new ReadAloudReplyNotFoundError({ threadId, messageId })),
+      }),
+    );
+    const message = projection.messages.find(
+      (candidate) => candidate.id === messageId && candidate.role === "assistant",
+    );
+    if (!message) return yield* new ReadAloudReplyNotFoundError({ threadId, messageId });
+    if (message.streaming) return yield* new ReadAloudReplyStreamingError({ messageId });
+    const text = speakableText(message.text);
+    if (!text) return yield* new ReadAloudNothingToReadError({ messageId });
+    return yield* speak(text);
+  });
+
+  return ReadAloudService.of({ speak, speakReply });
 });
 
 export const layer = Layer.effect(ReadAloudService, make);

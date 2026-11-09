@@ -22,7 +22,12 @@ export function ReadAloudButton({ message }: { readonly message: ChatMessage }) 
   const threadRef = ctx.threadRef;
   if (!hearsayUrl || !threadRef || message.streaming || !message.text?.trim()) return null;
   const reading = isReadingMessage(state, message.id);
-  const label = reading ? "Stop reading" : "Read aloud";
+  const label =
+    reading && state.state === "loading"
+      ? "Loading the voice. Press to stop."
+      : reading
+        ? "Stop reading"
+        : "Read aloud";
   return (
     <Tooltip>
       <TooltipTrigger
@@ -32,6 +37,8 @@ export function ReadAloudButton({ message }: { readonly message: ChatMessage }) 
             size="xs"
             variant="ghost-muted"
             aria-label={label}
+            // fork.css keeps the hover-only meta row visible while this reply is read.
+            data-read-aloud={reading ? "active" : undefined}
             onClick={() =>
               reading
                 ? stopReadAloud()

@@ -21,7 +21,6 @@ import {
 } from "../auth/http.ts";
 import * as ProjectionStoreV2 from "../orchestration-v2/ProjectionStore.ts";
 import * as ReadAloudService from "./ReadAloudService.ts";
-import { speakableText } from "./speakableText.ts";
 
 export const READ_ALOUD_SPEAK_PATH = "/api/read-aloud/speak";
 /** The PCM's sample rate, on the response; the body is mono Int16 little-endian. */
@@ -62,11 +61,10 @@ const errorResponse = (status: number, message: string) =>
 const failure = (status: number) => (error: { readonly message: string }) =>
   Effect.succeed(errorResponse(status, error.message));
 
-/** The route alone; tests give it a fake projection store. */
+/** The route alone; tests give it a service on a fake projection store. */
 export const readAloudRoutes = HttpRouter.use(
   Effect.fnUntraced(function* (router) {
     const readAloud = yield* ReadAloudService.ReadAloudService;
-    const projections = yield* ProjectionStoreV2.ProjectionStoreV2;
 
     yield* router.add(
       "POST",
@@ -77,19 +75,7 @@ export const readAloudRoutes = HttpRouter.use(
         const input = yield* request.text.pipe(Effect.flatMap(decodeSpeakRequest), Effect.option);
         if (input._tag === "None")
           return errorResponse(400, "The request must name a thread and a message.");
-        const projection = yield* projections.getThreadProjection(input.value.threadId).pipe(
-          Effect.catchTags({
-            ProjectionStoreThreadNotFoundError: () => Effect.succeed(null),
-          }),
-        );
-        const message = projection?.messages.find(
-          (candidate) => candidate.id === input.value.messageId && candidate.role === "assistant",
-        );
-        if (!message) return errorResponse(404, "There is no such reply in this thread.");
-        if (message.streaming) return errorResponse(409, "This reply is still being written.");
-        const text = speakableText(message.text);
-        if (!text) return errorResponse(409, "There is nothing to read in this reply.");
-        const utterance = yield* readAloud.speak(text);
+        const utterance = yield* readAloud.speakReply(input.value.threadId, input.value.messageId);
         return HttpServerResponse.stream(
           utterance.audio.pipe(
             Stream.tapError((error) => Effect.logWarning(`read aloud: ${error.message}`)),
@@ -110,6 +96,9 @@ export const readAloudRoutes = HttpRouter.use(
         ),
         Effect.catchTags({
           ...authErrors,
+          ReadAloudReplyNotFoundError: failure(404),
+          ReadAloudReplyStreamingError: failure(409),
+          ReadAloudNothingToReadError: failure(409),
           ReadAloudNotConfiguredError: failure(409),
           ReadAloudHearsayError: failure(502),
           ProjectionStoreSetupError: failure(500),
@@ -122,6 +111,5 @@ export const readAloudRoutes = HttpRouter.use(
 );
 
 export const layerReadAloudRoutes = readAloudRoutes.pipe(
-  Layer.provide(ReadAloudService.layer),
-  Layer.provide(ProjectionStoreV2.layer),
+  Layer.provide(ReadAloudService.layer.pipe(Layer.provide(ProjectionStoreV2.layer))),
 );

@@ -15,6 +15,8 @@ import type * as NetAddress from "effect/net/NetAddress";
 
 export interface FakeHearsayScript {
   readonly sampleRate?: number;
+  /** Waited for before `format`, as a voice still loading would. */
+  readonly holdFormat?: Deferred.Deferred<void>;
   readonly chunks?: ReadonlyArray<Uint8Array>;
   /** Waited for after the first chunk, so a test can act while the speech is under way. */
   readonly gate?: Deferred.Deferred<void>;
@@ -27,9 +29,11 @@ export interface FakeHearsayScript {
 }
 
 interface FakeHearsay {
-  readonly url: string;
+  url: string;
   readonly handshakes: Array<Record<string, string | undefined>>;
   readonly received: Array<Record<string, unknown>>;
+  /** Called with each message as it arrives. */
+  onMessage: (message: Record<string, unknown>) => void;
   readonly cancelled: Deferred.Deferred<void>;
   /** Resolves once `done` has been sent. */
   readonly finished: Deferred.Deferred<void>;
@@ -43,11 +47,13 @@ export const fakeHearsay = Effect.fn("test.fakeHearsay")(function* (
     url: "",
     handshakes: [],
     received: [],
+    onMessage: () => {},
     cancelled: yield* Deferred.make<void>(),
     finished: yield* Deferred.make<void>(),
   };
   const chunks = script.chunks ?? [new Uint8Array([1, 0, 2, 0])];
   const respond = Effect.fn("test.fakeHearsay.respond")(function* (writer: Socket.Writer) {
+    if (script.holdFormat) yield* Deferred.await(script.holdFormat);
     yield* writer.write(
       JSON.stringify({ type: "format", sample_rate: script.sampleRate ?? 24_000 }),
     );
@@ -85,6 +91,7 @@ export const fakeHearsay = Effect.fn("test.fakeHearsay")(function* (
               if (typeof frame !== "string") continue;
               const message = JSON.parse(frame) as Record<string, unknown>;
               state.received.push(message);
+              state.onMessage(message);
               if (message.type === "end") yield* respond(writer).pipe(Effect.forkScoped);
               if (message.type === "cancel") {
                 yield* Deferred.succeed(state.cancelled, undefined);
@@ -107,5 +114,6 @@ export const fakeHearsay = Effect.fn("test.fakeHearsay")(function* (
   const server = Context.get(serverContext, HttpServer.HttpServer);
   const address = server.address as NetAddress.InetAddress;
   const host = address._tag === "InetAddressV6" ? "[::1]" : "127.0.0.1";
-  return { ...state, url: `http://${host}:${address.port}` };
+  state.url = `http://${host}:${address.port}`;
+  return state;
 });

@@ -1,5 +1,12 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
+import {
+  MessageId,
+  ThreadId,
+  type OrchestrationV2ConversationMessage,
+  type OrchestrationV2ThreadProjection,
+} from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -8,12 +15,57 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { expect } from "vite-plus/test";
 
+import * as ProjectionStoreV2 from "../orchestration-v2/ProjectionStore.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { fakeHearsay, type FakeHearsayScript } from "./fakeHearsay.ts";
 import * as ReadAloud from "./ReadAloudService.ts";
 
+const THREAD = ThreadId.make("thread-1");
+const REPLY = MessageId.make("reply-1");
+const STREAMING = MessageId.make("reply-2");
+const CODE_ONLY = MessageId.make("reply-3");
+const USER = MessageId.make("user-1");
+const NOW = DateTime.makeUnsafe(0);
+
+const message = (
+  id: MessageId,
+  role: "user" | "assistant",
+  text: string,
+  streaming = false,
+): OrchestrationV2ConversationMessage =>
+  ({
+    id,
+    threadId: THREAD,
+    runId: null,
+    nodeId: null,
+    role,
+    text,
+    attachments: [],
+    streaming,
+    createdAt: NOW,
+    updatedAt: NOW,
+  }) as unknown as OrchestrationV2ConversationMessage;
+
+const projection = {
+  messages: [
+    message(USER, "user", "Please build."),
+    message(REPLY, "assistant", "Done.\n\n```sh\nrm -rf build\n```\n\nPush it."),
+    message(STREAMING, "assistant", "Still going", true),
+    message(CODE_ONLY, "assistant", "```\nonly code\n```"),
+  ],
+} as unknown as OrchestrationV2ThreadProjection;
+
+/** The projection store the service reads: one thread with the messages above. */
+export const projections = Layer.mock(ProjectionStoreV2.ProjectionStoreV2)({
+  getThreadProjection: (threadId) =>
+    threadId === THREAD
+      ? Effect.succeed(projection)
+      : Effect.fail(new ProjectionStoreV2.ProjectionStoreThreadNotFoundError({ threadId })),
+});
+
 const layerFor = (hearsay: { url?: string; token?: string }) =>
   ReadAloud.layer.pipe(
+    Layer.provide(projections),
     Layer.provide(ServerSettings.layerTest({ hearsaySpeech: hearsay })),
     Layer.provide(NodeServices.layer),
   );
@@ -143,6 +195,44 @@ it.live("fails plainly when Hearsay is unreachable or refuses the handshake", ()
     expect(refused).toBeInstanceOf(ReadAloud.ReadAloudHearsayError);
     expect(refused.message).toContain(`Hearsay at ${refusing.url} did not answer: `);
     expect(refusing.received).toEqual([]);
+  }).pipe(Effect.scoped),
+);
+
+it.live("speaks a reply from the projection with its code blocks never sent", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* serve();
+    const chunks = yield* ReadAloud.ReadAloudService.pipe(
+      Effect.flatMap((service) => service.speakReply(THREAD, REPLY)),
+      Effect.flatMap((utterance) => Stream.runCollect(utterance.audio)),
+      Effect.provide(layerFor({ url: hearsay.url })),
+    );
+    expect(chunks).toHaveLength(1);
+    expect(hearsay.received).toEqual([
+      { type: "start" },
+      { type: "text", text: "Done.\n\nPush it." },
+      { type: "end" },
+    ]);
+  }).pipe(Effect.scoped),
+);
+
+it.live("refuses a reply it cannot read before opening a socket", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* serve();
+    const failing = (threadId: ThreadId, messageId: MessageId) =>
+      ReadAloud.ReadAloudService.pipe(
+        Effect.flatMap((service) => service.speakReply(threadId, messageId)),
+        Effect.provide(layerFor({ url: hearsay.url })),
+        Effect.flip,
+      );
+    expect(yield* failing(ThreadId.make("thread-2"), REPLY)).toBeInstanceOf(
+      ReadAloud.ReadAloudReplyNotFoundError,
+    );
+    expect(yield* failing(THREAD, USER)).toBeInstanceOf(ReadAloud.ReadAloudReplyNotFoundError);
+    expect(yield* failing(THREAD, STREAMING)).toBeInstanceOf(
+      ReadAloud.ReadAloudReplyStreamingError,
+    );
+    expect(yield* failing(THREAD, CODE_ONLY)).toBeInstanceOf(ReadAloud.ReadAloudNothingToReadError);
+    expect(hearsay.handshakes).toEqual([]);
   }).pipe(Effect.scoped),
 );
 

@@ -105,3 +105,13 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Fork: read aloud keeps its stop button in view
+   ─────────────────────────────────────────────────────────────
+   Fork feature: read aloud (apps/web/src/readAloud). The reply's meta row is
+   opacity-0 until hover or focus on desktop, so the stop button would vanish
+   while a reply plays. Unlayered, so it outranks the Tailwind utility. */
+div:has(> button[data-read-aloud="active"]) {
+  opacity: 1;
+}

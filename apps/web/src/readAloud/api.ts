@@ -35,6 +35,9 @@ export interface SpeakRequest {
 
 export type SpeakResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
+/** The request ended because the person stopped; there is no answer to read. */
+const STOPPED = { status: 200, body: "" } as const;
+
 class ReadAloudEnvironmentOfflineError extends Schema.TaggedError<
   ReadAloudEnvironmentOfflineError,
   { readonly brand: unique symbol }
@@ -62,7 +65,8 @@ const speakCommand = createRuntimeCommand(connectionAtomRuntime, {
       },
       timeoutMs: SPEAK_TIMEOUT_MS,
       request: Effect.fn("readAloud.speak.request")(function* ({ headers }) {
-        // The scope owns the fetch; stopping closes it and the server cancels the utterance.
+        // The scope owns the fetch; stopping closes it, headers pending or not, so the fetch
+        // aborts and the server cancels the utterance on Hearsay's socket.
         const client = HttpClient.withScope(yield* HttpClient.HttpClient);
         const request = HttpClientRequest.post(requestUrl).pipe(
           HttpClientRequest.setHeaders({ ...headers }),
@@ -71,15 +75,21 @@ const speakCommand = createRuntimeCommand(connectionAtomRuntime, {
             messageId: input.messageId,
           }),
         );
-        const response = yield* client.execute(request);
-        if (response.status < 200 || response.status >= 300) {
-          return { status: response.status, body: yield* response.text };
-        }
-        input.onFormat(Number(response.headers[SAMPLE_RATE_HEADER]));
-        yield* Stream.runForEach(response.stream, (chunk) =>
-          Effect.sync(() => input.onChunk(chunk)),
-        ).pipe(Effect.raceFirst(Effect.promise(() => input.stop)));
-        return { status: response.status, body: "" };
+        const exchange = Effect.gen(function* () {
+          const response = yield* client.execute(request);
+          if (response.status < 200 || response.status >= 300) {
+            return { status: response.status, body: yield* response.text };
+          }
+          input.onFormat(Number(response.headers[SAMPLE_RATE_HEADER]));
+          yield* Stream.runForEach(response.stream, (chunk) =>
+            Effect.sync(() => input.onChunk(chunk)),
+          );
+          return { status: response.status, body: "" };
+        });
+        return yield* Effect.raceFirst(
+          exchange,
+          Effect.promise(() => input.stop).pipe(Effect.as(STOPPED)),
+        );
       }, Effect.scoped),
     });
   }),

@@ -83,9 +83,12 @@ const withRoute = Effect.fn("test.readAloud.withRoute")(function* (
   scopes: AuthEnvironmentScope[] = [AuthOrchestrationOperateScope],
 ) {
   const routes = readAloudRoutes.pipe(
-    Layer.provide(projections),
-    Layer.provide(ReadAloud.layer),
-    Layer.provide(ServerSettings.layerTest({ hearsaySpeech: hearsay })),
+    Layer.provide(
+      ReadAloud.layer.pipe(
+        Layer.provide(projections),
+        Layer.provide(ServerSettings.layerTest({ hearsaySpeech: hearsay })),
+      ),
+    ),
     Layer.provide(NodeServices.layer),
   );
   yield* Layer.build(
@@ -97,11 +100,12 @@ const withRoute = Effect.fn("test.readAloud.withRoute")(function* (
   const address = server.address as NetAddress.InetAddress;
   const host = address._tag === "InetAddressV6" ? "[::1]" : "127.0.0.1";
   const url = `http://${host}:${address.port}${READ_ALOUD_SPEAK_PATH}`;
-  return (body: unknown) =>
+  return (body: unknown, signal?: AbortSignal) =>
     fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: typeof body === "string" ? body : JSON.stringify(body),
+      ...(signal ? { signal } : {}),
     });
 });
 
@@ -195,5 +199,33 @@ it.live("cancels the utterance on Hearsay's socket when the client aborts", () =
     yield* Effect.promise(() => reader.cancel());
     yield* Deferred.await(hearsay.cancelled);
     expect(hearsay.received.at(-1)).toEqual({ type: "cancel" });
+  }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
+);
+
+it.live("cancels on Hearsay's socket when the client gives up while the voice still loads", () =>
+  Effect.gen(function* () {
+    const holdFormat = yield* Deferred.make<void>();
+    const hearsay = yield* serve({ holdFormat });
+    const post = yield* withRoute({ url: hearsay.url });
+    const ended = yield* Deferred.make<void>();
+    hearsay.onMessage = (message) => {
+      if (message.type === "end") Deferred.doneUnsafe(ended, Effect.void);
+    };
+    // Effect.promise's signal aborts the fetch when the race interrupts it, as a client that stops does.
+    const request = Effect.promise((signal) =>
+      post({ threadId: THREAD, messageId: REPLY }, signal),
+    );
+    const winner = yield* Effect.raceFirst(
+      request.pipe(Effect.map((response) => `answered ${response.status}`)),
+      Deferred.await(ended).pipe(Effect.as("stopped" as const)),
+    );
+    expect(winner).toBe("stopped");
+    yield* Deferred.await(hearsay.cancelled);
+    expect(hearsay.received.map((message) => message.type)).toEqual([
+      "start",
+      "text",
+      "end",
+      "cancel",
+    ]);
   }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
 );

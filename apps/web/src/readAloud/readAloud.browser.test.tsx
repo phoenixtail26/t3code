@@ -263,6 +263,8 @@ it("the button speaks its reply, becomes the stop button, and stops", async () =
   ]);
   await expect.element(screen.getByLabelText("Stop reading")).toBeInTheDocument();
   expect(screen.buttons("Read aloud")).toHaveLength(0);
+  // The marker fork.css reads to keep the hover-only row visible while this reply plays.
+  expect(screen.buttons("Stop reading")[0]!.dataset.readAloud).toBe("active");
   // Four bytes became two samples in one buffer; the odd byte waits for the next chunk.
   const context = FakeAudioContext.instances[0]!;
   expect(context.sources).toHaveLength(1);
@@ -271,7 +273,58 @@ it("the button speaks its reply, becomes the stop button, and stops", async () =
   expect(readReadAloudState()).toEqual({ state: "idle" });
   expect(context.closed).toBe(true);
   await expect.element(screen.getByLabelText("Read aloud")).toBeInTheDocument();
+  expect(screen.buttons("Read aloud")[0]!.dataset.readAloud).toBeUndefined();
   await state.stops[0];
+});
+
+it("while the voice loads the button says so and still stops", async () => {
+  setup("http://127.0.0.1:47700");
+  using _audio = stubGlobal("AudioContext", FakeAudioContext);
+  // Hearsay has not answered yet: the request stays open until stopped.
+  state.answer = async (input) => {
+    await input.stop;
+    return { ok: true };
+  };
+  await using screen = await renderReply();
+  await act(async () => screen.buttons("Read aloud")[0]!.click());
+  expect(readReadAloudState().state).toBe("loading");
+  await expect
+    .element(screen.getByLabelText("Loading the voice. Press to stop."))
+    .toBeInTheDocument();
+  expect(screen.buttons("Loading the voice. Press to stop.")[0]!.dataset.readAloud).toBe("active");
+  await act(async () => screen.buttons("Loading the voice. Press to stop.")[0]!.click());
+  expect(readReadAloudState()).toEqual({ state: "idle" });
+  await state.stops[0];
+  await expect.element(screen.getByLabelText("Read aloud")).toBeInTheDocument();
+});
+
+it("Escape leaves reading alone while thread find or a dialog is open", async () => {
+  setup("http://127.0.0.1:47700");
+  using _audio = stubGlobal("AudioContext", FakeAudioContext);
+  using _commands = commands();
+  await using screen = await renderReply();
+  await act(async () => screen.buttons("Read aloud")[0]!.click());
+  await vi.waitFor(() => expect(readReadAloudState().state).toBe("playing"));
+  const findBar = document.createElement("div");
+  findBar.setAttribute("data-thread-find-bar", "");
+  document.body.append(findBar);
+  try {
+    await userEvent.keyboard("{Escape}");
+    expect(readReadAloudState().state).toBe("playing");
+  } finally {
+    findBar.remove();
+  }
+  const dialog = document.createElement("div");
+  dialog.setAttribute("role", "dialog");
+  document.body.append(dialog);
+  try {
+    await userEvent.keyboard("{Escape}");
+    expect(readReadAloudState().state).toBe("playing");
+  } finally {
+    dialog.remove();
+  }
+  await userEvent.keyboard("{Escape}");
+  expect(readReadAloudState()).toEqual({ state: "idle" });
 });
 
 it("playback ends on its own once the last buffer has played", async () => {
