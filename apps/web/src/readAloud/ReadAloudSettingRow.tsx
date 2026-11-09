@@ -26,12 +26,12 @@ export function ReadAloudSettingRow() {
   const mode = useReadAloudMode();
   return (
     <SettingsRow
-      title="Read replies aloud"
-      description="When a turn you sent from this device ends, a short spoken summary of the reply plays here."
+      title="Speak a summary after a turn"
+      description="When a turn you sent from this device ends, a few spoken sentences say what the reply did and what to do next. The Read aloud button and key work either way."
       resetAction={
         mode !== DEFAULT_READ_ALOUD_MODE ? (
           <SettingResetButton
-            label="Read replies aloud"
+            label="Speak a summary after a turn"
             onClick={() => setReadAloudMode(DEFAULT_READ_ALOUD_MODE)}
           />
         ) : null
@@ -43,7 +43,7 @@ export function ReadAloudSettingRow() {
             if (value) setReadAloudMode(value as ReadAloudMode);
           }}
         >
-          <SelectTrigger size="sm" aria-label="Read replies aloud" className="max-w-72">
+          <SelectTrigger size="sm" aria-label="Speak a summary after a turn" className="max-w-72">
             <SelectValue>{LABELS[mode]}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>

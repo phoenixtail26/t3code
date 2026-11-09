@@ -9,7 +9,7 @@ export interface SummaryCase {
   readonly mustMention: ReadonlyArray<ReadonlyArray<string>>;
   /** None of these may appear. */
   readonly mustNotMention: ReadonlyArray<string>;
-  /** Words in the whole summary; the prompt's forty, with a little room, when unset. */
+  /** Words in the whole summary; the grader allows 45 when unset, a little over the prompt. */
   readonly maxWords?: number;
 }
 
