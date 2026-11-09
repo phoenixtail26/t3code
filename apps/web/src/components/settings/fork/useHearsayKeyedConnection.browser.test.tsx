@@ -53,9 +53,11 @@ it("re-keys the connection only when the saved Hearsay URL changes", async () =>
   await screen.rerender(ui(registry));
   expect(seen.at(-1)).toBe(prepared);
 
+  const rendersBeforeOtherSetting = seen.length;
   await act(() =>
     registry.set(settings, { ...DEFAULT_SERVER_SETTINGS, speechAcceleration: "cpu" }),
   );
+  expect(seen.length).toBeGreaterThan(rendersBeforeOtherSetting);
   expect(seen.at(-1)).toBe(prepared);
 
   const withUrl = {
@@ -67,7 +69,9 @@ it("re-keys the connection only when the saved Hearsay URL changes", async () =>
   expect(keyed).not.toBe(prepared);
   expect(keyed).toEqual(prepared);
 
+  const rendersBeforeOtherSettingWithUrl = seen.length;
   await act(() => registry.set(settings, { ...withUrl, speechAcceleration: "cpu" }));
+  expect(seen.length).toBeGreaterThan(rendersBeforeOtherSettingWithUrl);
   expect(seen.at(-1)).toBe(keyed);
 
   await act(() => registry.set(settings, DEFAULT_SERVER_SETTINGS));

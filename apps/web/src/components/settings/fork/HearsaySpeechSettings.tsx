@@ -40,7 +40,6 @@ export function HearsaySpeechSettingsRows({ environmentId }: { environmentId: En
             size="sm"
             type="url"
             aria-label="Hearsay URL"
-            placeholder="http://127.0.0.1:47700"
             value={hearsay.url}
             onCommit={(url) => updateSettings({ hearsaySpeech: { url } })}
             className="max-w-72"
@@ -117,8 +116,13 @@ function ManagedByHearsay({
   if (!url) return children;
   return (
     <SettingsUnavailableGroup message={note}>
-      {/* `disabled` reaches native controls only; `inert` also stops the custom ones. */}
-      <fieldset disabled inert className="contents [&>*+*]:border-t [&>*+*]:border-border/50">
+      {/* `disabled` reaches native controls only; `inert` also stops the custom ones. The
+          group already dims titles and descriptions, so those are reset to dim once, not twice. */}
+      <fieldset
+        disabled
+        inert
+        className="min-w-0 opacity-50 [&_h3]:opacity-100! [&_p]:opacity-100! [&>*+*]:border-t [&>*+*]:border-border/50 [&>[data-slot=settings-row]]:rounded-none"
+      >
         {children}
       </fieldset>
     </SettingsUnavailableGroup>

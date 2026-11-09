@@ -233,7 +233,8 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
     const entry: EnvironmentSpeechModel = {
       id: HEARSAY_RECOGNIZER_MODEL_ID,
       name: HEARSAY_MODEL_NAME,
-      description: `Hearsay's recogniser at ${hearsay.url}. Change its dictionary and filler words, or remove it, in Hearsay's settings window.${failure ? ` Hearsay's last attempt failed: ${failure}` : ""}`,
+      // Upstream's card says its test skips cleanup; a test cannot be told from a dictation here.
+      description: `Hearsay's recogniser at ${hearsay.url}. Test model shows the text after Hearsay's own cleanup. Change its dictionary and filler words, or remove it, in Hearsay's settings window.${failure ? ` Hearsay's last attempt failed: ${failure}` : ""}`,
       size,
       languages: ["en"],
       accuracy: 0,

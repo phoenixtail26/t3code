@@ -73,6 +73,12 @@ starts the download in Hearsay and the card shows its progress; recording
 is offered once Hearsay reports the model ready. Cancelling stops a download
 that is still running. The model cannot be removed from T3 Code, because
 Hearsay's other clients use it too: remove it in Hearsay's settings window.
+The bin on its card only answers that the environment rejected the request.
+
+**Test model** on the card shows the text after Hearsay's own cleanup, not
+the raw recognition, whatever the line under it says about cleanup being
+skipped. Hearsay's own status shows the raw and the cleaned text side by
+side.
 
 Hearsay transcribes, so the **Transcription options** (silence filtering,
 filler words and the dictionaries) are not used: the section says so and
