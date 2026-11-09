@@ -25,6 +25,7 @@ import {
   failEnvironmentInternal,
   failEnvironmentScopeRequired,
 } from "../auth/http.ts";
+import { layerReadAloudRoutes } from "../readAloud/http.ts";
 import * as DictationService from "./DictationService.ts";
 import * as DictationWorker from "./worker.ts";
 
@@ -91,7 +92,7 @@ const readCappedBody = Effect.gen(function* () {
 
 // The service is resolved once when the routes are registered, so handlers
 // only need the per-request auth context.
-export const layerDictationRoutes = HttpRouter.use(
+const layerDictation = HttpRouter.use(
   Effect.fnUntraced(function* (router) {
     const dictation = yield* DictationService.DictationService;
 
@@ -146,3 +147,5 @@ export const layerDictationRoutes = HttpRouter.use(
     );
   }),
 ).pipe(Layer.provide(DictationService.layer), Layer.provide(DictationWorker.layer));
+
+export const layerDictationRoutes = Layer.merge(layerDictation, layerReadAloudRoutes);

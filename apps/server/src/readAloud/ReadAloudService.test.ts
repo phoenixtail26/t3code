@@ -1,0 +1,157 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it } from "@effect/vitest";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import { expect } from "vite-plus/test";
+
+import * as ServerSettings from "../serverSettings.ts";
+import { fakeHearsay, type FakeHearsayScript } from "./fakeHearsay.ts";
+import * as ReadAloud from "./ReadAloudService.ts";
+
+const layerFor = (hearsay: { url?: string; token?: string }) =>
+  ReadAloud.layer.pipe(
+    Layer.provide(ServerSettings.layerTest({ hearsaySpeech: hearsay })),
+    Layer.provide(NodeServices.layer),
+  );
+
+const speakThrough = (hearsay: { url?: string; token?: string }, text: string) =>
+  ReadAloud.ReadAloudService.pipe(
+    Effect.flatMap((service) => service.speak(text)),
+    Effect.provide(layerFor(hearsay)),
+  );
+
+const collect = (hearsay: { url?: string; token?: string }, text: string) =>
+  speakThrough(hearsay, text).pipe(
+    Effect.flatMap((utterance) =>
+      Stream.runCollect(utterance.audio).pipe(
+        Effect.map((chunks) => ({ sampleRate: utterance.sampleRate, chunks })),
+      ),
+    ),
+  );
+
+const serve = (script?: FakeHearsayScript) => fakeHearsay(script);
+
+it.live("speaks the text in Hearsay's wire order and yields the PCM as it arrives", () =>
+  Effect.gen(function* () {
+    const gate = yield* Deferred.make<void>();
+    const first = new Uint8Array([1, 0, 2, 0]);
+    const second = new Uint8Array([3, 0]);
+    const hearsay = yield* serve({ sampleRate: 16_000, chunks: [first, second], gate });
+    const utterance = yield* speakThrough({ url: `${hearsay.url}/`, token: "secret" }, "Hello.");
+    expect(utterance.sampleRate).toBe(16_000);
+    const received: Uint8Array[] = [];
+    yield* Stream.runForEach(utterance.audio, (chunk) =>
+      Effect.gen(function* () {
+        received.push(chunk);
+        if (received.length === 1) {
+          // The second chunk is not sent until the gate opens, so the first was not buffered.
+          expect(hearsay.received.map((message) => message.type)).toEqual(["start", "text", "end"]);
+          yield* Deferred.succeed(gate, undefined);
+        }
+      }),
+    );
+    expect(received).toEqual([first, second]);
+    expect(hearsay.received).toEqual([
+      { type: "start" },
+      { type: "text", text: "Hello." },
+      { type: "end" },
+    ]);
+    const handshake = hearsay.handshakes[0]!;
+    expect(handshake.authorization).toBe("Bearer secret");
+    expect(handshake.origin).toBeUndefined();
+  }).pipe(Effect.scoped),
+);
+
+it.live("sends no token header when none is set and a large chunk arrives whole", () =>
+  Effect.gen(function* () {
+    const large = new Uint8Array(600 * 1024).map((_, index) => index % 251);
+    const hearsay = yield* serve({ chunks: [large] });
+    const { chunks } = yield* collect({ url: hearsay.url }, "A long reply.");
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]!.byteLength).toBe(large.byteLength);
+    expect(chunks[0]).toEqual(large);
+    expect(hearsay.handshakes[0]!.authorization).toBeUndefined();
+  }).pipe(Effect.scoped),
+);
+
+it.live("cancels the utterance when the scope closes before the speech ends", () =>
+  Effect.gen(function* () {
+    const gate = yield* Deferred.make<void>();
+    const hearsay = yield* serve({
+      chunks: [new Uint8Array([1, 0]), new Uint8Array([2, 0])],
+      gate,
+    });
+    const scope = yield* Scope.make();
+    const utterance = yield* speakThrough({ url: hearsay.url }, "Hello.").pipe(
+      Scope.provide(scope),
+    );
+    const first = yield* Stream.runHead(utterance.audio);
+    expect(first._tag === "Some" ? first.value : undefined).toEqual(new Uint8Array([1, 0]));
+    yield* Scope.close(scope, Exit.void);
+    yield* Deferred.await(hearsay.cancelled);
+    expect(hearsay.received.at(-1)).toEqual({ type: "cancel" });
+  }).pipe(Effect.scoped),
+);
+
+it.live("does not cancel an utterance that ended", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* serve();
+    const scope = yield* Scope.make();
+    const utterance = yield* speakThrough({ url: hearsay.url }, "Hello.").pipe(
+      Scope.provide(scope),
+    );
+    yield* Stream.runDrain(utterance.audio);
+    yield* Scope.close(scope, Exit.void);
+    yield* Deferred.await(hearsay.finished);
+    expect(hearsay.received.map((message) => message.type)).toEqual(["start", "text", "end"]);
+  }).pipe(Effect.scoped),
+);
+
+it.live("fails with Hearsay's own error sentence", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* serve({ error: "There is no voice named 'nobody'." });
+    const error = yield* collect({ url: hearsay.url }, "Hello.").pipe(Effect.flip);
+    expect(error).toBeInstanceOf(ReadAloud.ReadAloudHearsayError);
+    expect(error.message).toBe(
+      `Hearsay at ${hearsay.url} did not answer: There is no voice named 'nobody'.`,
+    );
+  }).pipe(Effect.scoped),
+);
+
+it.live("fails when the socket closes before done", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* serve({ closeAfterChunks: 1012 });
+    const error = yield* collect({ url: hearsay.url }, "Hello.").pipe(Effect.flip);
+    expect(error.message).toBe(
+      `Hearsay at ${hearsay.url} did not answer: the socket closed (code 1012) before the speech ended`,
+    );
+  }).pipe(Effect.scoped),
+);
+
+it.live("fails plainly when Hearsay is unreachable or refuses the handshake", () =>
+  Effect.gen(function* () {
+    const unreachable = yield* collect({ url: "http://127.0.0.1:9" }, "Hello.").pipe(Effect.flip);
+    expect(unreachable.message).toBe(
+      "Hearsay at http://127.0.0.1:9 did not answer: the connection was refused or the handshake failed",
+    );
+    const refusing = yield* serve({ refuse: true });
+    const refused = yield* collect({ url: refusing.url }, "Hello.").pipe(Effect.flip);
+    expect(refused).toBeInstanceOf(ReadAloud.ReadAloudHearsayError);
+    expect(refused.message).toContain(`Hearsay at ${refusing.url} did not answer: `);
+    expect(refusing.received).toEqual([]);
+  }).pipe(Effect.scoped),
+);
+
+it.live("opens nothing when no Hearsay URL is set", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* serve();
+    const error = yield* collect({ url: "" }, "Hello.").pipe(Effect.flip);
+    expect(error).toBeInstanceOf(ReadAloud.ReadAloudNotConfiguredError);
+    expect(error.message).toBe("Set a Hearsay URL on the Voice page to read replies aloud.");
+    expect(hearsay.handshakes).toEqual([]);
+  }).pipe(Effect.scoped),
+);

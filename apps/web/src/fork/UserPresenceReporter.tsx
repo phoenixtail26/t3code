@@ -1,4 +1,5 @@
 import { useUserPresenceReporter } from "../hooks/useUserPresenceReporter";
+import { useReadAloudCommands } from "../readAloud/useReadAloudCommands";
 
 /**
  * Headless mount for the presence heartbeat: tells the server this client is
@@ -8,5 +9,6 @@ import { useUserPresenceReporter } from "../hooks/useUserPresenceReporter";
  */
 export function UserPresenceReporter(): null {
   useUserPresenceReporter();
+  useReadAloudCommands();
   return null;
 }

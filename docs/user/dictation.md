@@ -125,3 +125,23 @@ Also in **Settings → General → Voice**:
 
 These settings do not appear in settings search, and **Restore defaults** does
 not reset them. Use the reset arrow on each row instead.
+
+## Read aloud
+
+With a Hearsay URL set, T3 Code can read an assistant reply to you in
+Hearsay's voice. It speaks the reply's words and skips its code blocks in
+silence: headings, lists and tables are read as plain sentences, and links
+are read by their text.
+
+Each finished reply has a **Read aloud** button beside its copy button.
+`mod+alt+r` reads the last finished reply of the open thread. While a reply
+is being read, the same key, `Escape`, or the button (now **Stop reading**)
+stops it; so does starting voice input or dictation, and reading another
+reply. Rebind the key under **Settings → Keybindings** as **Chat: Read
+Aloud**.
+
+The voice comes from the Hearsay service of the environment the thread runs
+on, through the same T3 Code server that transcribes for you, so it works
+on the desktop and in a phone browser alike. Which voice speaks is chosen in
+Hearsay's settings window. Without a Hearsay URL there is no button and the
+key does nothing.
