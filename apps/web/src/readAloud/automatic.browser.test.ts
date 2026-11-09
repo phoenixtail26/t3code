@@ -294,9 +294,9 @@ it("keeps a dictated turn's summary when a typed follow-up is sent on the same t
   using _audio = stubGlobal("AudioContext", FakeAudioContext);
   const { registry, shellAtom, thread } = await setup();
   using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
-  registry.set(shellAtom, shell(RUN, "running"));
   send(true);
   send(false, SENT_2);
+  registry.set(shellAtom, shell(RUN, "running"));
   // The dictated run completes while the typed follow-up's run takes its place in the shell.
   registry.set(
     thread,
@@ -544,5 +544,57 @@ it("a new thread from a draft: nothing loads until its shell ends the run, then 
   await vi.waitFor(() => expect(state.calls.map((call) => call.messageId)).toEqual([REPLY]));
   expect(loads).toBe(1);
   expect(registry.get(details.statusAtom(THREAD_REF))).not.toBe("deleted");
+  expect(pendingTurnCount()).toBe(0);
+});
+
+it("a new thread from a draft: a failed retry is dictated still, through the promotion write", async () => {
+  using _audio = stubGlobal("AudioContext", FakeAudioContext);
+  const { registry, shellAtom, thread } = await setup();
+  using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
+  const drafts = useComposerDraftStore.getState();
+  drafts.setPrompt(DRAFT, "build it, spoken");
+  markDraftDictated(DRAFT);
+  bindDictatedMark(DRAFT, ENVIRONMENT_ID, THREAD_ID, SENT);
+  // The send writes the store while it promotes the draft thread and uploads, then clears.
+  useComposerDraftStore.setState({});
+  drafts.setPrompt(DRAFT, "build it, spoken");
+  drafts.setPrompt(DRAFT, "");
+  // The send fails; the draft comes back and is sent again.
+  drafts.setPrompt(DRAFT, "build it, spoken");
+  bindDictatedMark(DRAFT, ENVIRONMENT_ID, THREAD_ID, SENT_2);
+  drafts.setPrompt(DRAFT, "");
+  registry.set(
+    thread,
+    detail({ sent: SENT_2, runId: RUN_2, status: "completed", reply: { id: REPLY_2 } }),
+  );
+  registry.set(shellAtom, shell(RUN_2, "completed"));
+  expect(state.calls.map((call) => call.messageId)).toEqual([REPLY_2]);
+});
+
+it("an existing thread: the detail is read once, after the new run ends, never during it", async () => {
+  using _audio = stubGlobal("AudioContext", FakeAudioContext);
+  const { registry, shellAtom } = await setup();
+  let loads = 0;
+  const details = makeThreadAtoms(() => {
+    loads += 1;
+    return {
+      _tag: "present",
+      snapshot: {
+        snapshotSequence: 1,
+        projection: projection({ sent: SENT, status: "completed", reply: {} }),
+      },
+    };
+  });
+  state.details = details;
+  using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
+  // The thread exists and its previous run ended long ago.
+  registry.set(shellAtom, shell(RunId.make("run-0"), "completed"));
+  send(true);
+  expect(loads).toBe(0);
+  registry.set(shellAtom, shell(RUN, "running"));
+  expect(loads).toBe(0);
+  registry.set(shellAtom, shell(RUN, "completed"));
+  await vi.waitFor(() => expect(state.calls.map((call) => call.messageId)).toEqual([REPLY]));
+  expect(loads).toBe(1);
   expect(pendingTurnCount()).toBe(0);
 });

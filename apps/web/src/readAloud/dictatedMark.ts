@@ -14,30 +14,28 @@ import { trackSentTurn } from "./turnEnd";
 // The store files a draft under its own resolution of the target (a thread's draft may sit
 // under a draft id), so the target is kept and the lookup goes through the store.
 const marks = new Map<string, ComposerThreadTarget>();
-// A send empties the draft, and a send that then fails puts the same words back; the words
-// of an emptied dictated draft are kept so the restored draft is dictated still.
-const ghosts = new Map<string, { readonly target: ComposerThreadTarget; readonly text: string }>();
+// A send empties the draft, and a send that then fails puts the same words back, perhaps
+// under another key; the words of a sent dictated draft are kept until the thread shows the
+// message, so the retry is dictated still. Nothing else consumes them: the store is written
+// while a new thread is promoted and while attachments upload, with the draft untouched.
+const ghosts = new Map<string, string>();
 let unwatchDrafts: (() => void) | null = null;
 
 function stopWatching(): void {
-  if (marks.size === 0 && ghosts.size === 0 && unwatchDrafts !== null) {
+  if (marks.size === 0 && unwatchDrafts !== null) {
     unwatchDrafts();
     unwatchDrafts = null;
   }
 }
 
+// An emptied draft leaves the store, and a sent one is emptied by the send, so the mark lives
+// exactly as long as the dictated words.
 function watchDrafts(): void {
   if (unwatchDrafts !== null) return;
   unwatchDrafts = useComposerDraftStore.subscribe((state) => {
     for (const [key, target] of Array.from(marks)) {
       const draft = state.getComposerDraft(target);
       if (draft === null || draft.prompt.trim() === "") marks.delete(key);
-    }
-    for (const [key, ghost] of Array.from(ghosts)) {
-      const draft = state.getComposerDraft(ghost.target);
-      if (draft === null || draft.prompt.trim() === "") continue;
-      ghosts.delete(key);
-      if (draft.prompt === ghost.text) marks.set(key, ghost.target);
     }
     stopWatching();
   });
@@ -47,7 +45,6 @@ function watchDrafts(): void {
 export function markDraftDictated(target: ComposerThreadTarget): void {
   const key = composerTargetKey(target);
   if (!key) return;
-  ghosts.delete(key);
   marks.set(key, target);
   watchDrafts();
 }
@@ -63,19 +60,16 @@ export function bindDictatedMark(
   messageId: MessageId,
 ): void {
   const key = composerTargetKey(target);
-  const draft = useComposerDraftStore.getState().getComposerDraft(target);
-  // A send empties the draft; a failed one restores these same words, dictated still.
-  if (marks.has(key) && draft !== null) ghosts.set(key, { target, text: draft.prompt });
+  const text = useComposerDraftStore.getState().getComposerDraft(target)?.prompt ?? "";
+  const dictated = marks.has(key) || (text !== "" && Array.from(ghosts.values()).includes(text));
+  if (dictated && text !== "") ghosts.set(key, text);
   trackSentTurn({
     environmentId,
     threadId,
     messageId,
-    dictated: marks.has(key),
-    text: draft?.prompt ?? "",
-    onAccepted: () => {
-      ghosts.delete(key);
-      stopWatching();
-    },
+    dictated,
+    text,
+    onAccepted: () => ghosts.delete(key),
   });
 }
 

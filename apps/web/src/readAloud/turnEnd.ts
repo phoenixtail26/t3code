@@ -30,7 +30,9 @@ interface PendingTurn extends SentTurn {
   settled: boolean;
   accepted: boolean;
   /** The shell's latest run when the thread was first seen; undefined until then. */
-  firstRunId: RunId | null | undefined;
+  firstRun: { readonly runId: RunId; readonly ended: boolean } | null | undefined;
+  /** The first run to appear after that: this turn's, since a thread runs one at a time. */
+  ownRunId: RunId | undefined;
   unsubscribeShell: () => void;
   unsubscribeDetail: (() => void) | null;
 }
@@ -100,15 +102,22 @@ function observeDetail(turn: PendingTurn, thread: EnvironmentThread | null): voi
 // earlier would hit a 404 for a thread the send has not created yet, and the client would
 // hold that thread as deleted (upstream's waitForShell rule).
 function observeShell(turn: PendingTurn, shell: EnvironmentThreadShell | null): void {
-  if (turn.settled || shell === null || turn.unsubscribeDetail !== null || registry === null)
-    return;
-  const run = shell.latestRun;
-  if (turn.firstRunId === undefined) turn.firstRunId = run?.runId ?? null;
+  if (turn.settled || turn.unsubscribeDetail !== null || registry === null) return;
+  const run = shell?.latestRun ?? null;
+  if (turn.firstRun === undefined)
+    turn.firstRun = run === null ? null : { runId: run.runId, ended: ENDED.has(run.status) };
   if (run === null) return;
-  // Runs on a thread go one at a time, so a newer run than the first one seen means the
-  // earlier one, perhaps this turn's, has ended even though the shell no longer shows it.
-  const laterRun = turn.firstRunId !== null && run.runId !== turn.firstRunId;
-  if (!ENDED.has(run.status) && !laterRun) return;
+  if (turn.ownRunId === undefined && run.runId !== turn.firstRun?.runId) turn.ownRunId = run.runId;
+  const ended = ENDED.has(run.status);
+  // This turn's run ended, or a run after it began (runs go one at a time); until this turn's
+  // run is known, only the run that was still going when the thread was first seen counts
+  // when it ends: this message may have joined it, or be queued behind it. A run that had
+  // already ended when the thread was first seen is not this turn's.
+  const ready =
+    turn.ownRunId !== undefined
+      ? run.runId !== turn.ownRunId || ended
+      : turn.firstRun !== null && !turn.firstRun.ended && ended;
+  if (!ready) return;
   const unsubscribe = registry.subscribe(
     environmentThreadDetails.threadAtom({
       environmentId: turn.environmentId,
@@ -133,7 +142,8 @@ export function trackSentTurn(turn: SentTurn): void {
     ...turn,
     settled: false,
     accepted: false,
-    firstRunId: undefined,
+    firstRun: undefined,
+    ownRunId: undefined,
     unsubscribeShell: () => {},
     unsubscribeDetail: null,
   };
