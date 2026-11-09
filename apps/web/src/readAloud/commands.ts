@@ -31,10 +31,11 @@ function lastCompletedAssistantMessageId(threadRef: ScopedThreadRef): MessageId 
   return null;
 }
 
-// Thread find dismisses Escape in a listener that runs after the dispatcher, and an open
-// dialog, menu or picker owns Escape, so reading yields to any of them on the page.
+// Thread find dismisses Escape in a listener that runs after the dispatcher, and a modal,
+// a menu or a picker owns Escape even when it does not mark the event, so reading yields to
+// any of them on the page. A toast is a dialog by role but takes no key.
 const ESCAPE_OWNERS =
-  '[data-thread-find-bar], [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
+  '[data-thread-find-bar], [aria-modal="true"], [role="alertdialog"], [role="menu"], [role="listbox"]';
 
 function escapeBelongsElsewhere(): boolean {
   return document.querySelector(ESCAPE_OWNERS) !== null;
@@ -46,7 +47,7 @@ export function installReadAloudCommands(router: AnyRouter): () => void {
     const target = resolveThreadRouteTarget(router.state.matches.at(-1)?.params ?? {});
     return target?.kind === "server" ? target.threadRef : null;
   };
-  return registerCommands(
+  const unregisterKey = registerCommands(
     {
       "chat.readAloud": (event) => {
         if (readReadAloudState().state !== "idle") {
@@ -62,14 +63,23 @@ export function installReadAloudCommands(router: AnyRouter): () => void {
         startReadAloud({ ...threadRef, messageId });
       },
     },
+    { when: () => !isCommandPaletteOpen() },
+  );
+  // An observer hears Escape after every scope ran, with whether one of them took it.
+  const unregisterEscape = registerCommands(
+    {},
     {
-      when: () => !isCommandPaletteOpen(),
-      onKeyDown: (event) => {
-        if (event.key !== "Escape" || readReadAloudState().state === "idle") return false;
-        if (escapeBelongsElsewhere()) return false;
+      observe: (event, consumed) => {
+        if (consumed || event.repeat || event.isComposing || event.key !== "Escape") return;
+        if (readReadAloudState().state === "idle" || isCommandPaletteOpen()) return;
+        if (escapeBelongsElsewhere()) return;
         event.preventDefault();
         stopReadAloud();
       },
     },
   );
+  return () => {
+    unregisterKey();
+    unregisterEscape();
+  };
 }

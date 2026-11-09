@@ -1,7 +1,7 @@
 // Fork feature: read aloud. The speaker button beside a reply's copy button, mounted by
 // TimelineAssistantRows. Shown only when the environment has a Hearsay URL, so T3 Code
 // without one looks as upstream does; while this reply loads or plays it is the stop button.
-import { Square, Volume2 } from "lucide-react";
+import { Hourglass, Square, Volume2 } from "lucide-react";
 import { use } from "react";
 
 import { TimelineRowCtx } from "../components/chat/timelineRowContext";
@@ -51,7 +51,13 @@ export function ReadAloudButton({ message }: { readonly message: ChatMessage }) 
           />
         }
       >
-        {reading ? <Square className="size-3" /> : <Volume2 className="size-3" />}
+        {reading && state.state === "loading" ? (
+          <Hourglass className="size-3" />
+        ) : reading ? (
+          <Square className="size-3 fill-current" />
+        ) : (
+          <Volume2 className="size-3" />
+        )}
       </TooltipTrigger>
       <TooltipPopup>
         <p>{label}</p>

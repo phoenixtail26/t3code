@@ -1,7 +1,7 @@
 // Fork feature: read aloud. A reply is read from the projection and its words spoken as one
 // utterance through Hearsay's `WS /v1/speak`: the text goes in whole, the PCM comes back as
 // Hearsay makes it, and closing the scope early cancels it.
-import type { MessageId, ThreadId } from "@t3tools/contracts";
+import type { MessageId, OrchestrationV2ConversationMessage, ThreadId } from "@t3tools/contracts";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -80,6 +80,9 @@ type SpeakReplyError =
       ProjectionStoreV2.ProjectionStoreV2Error,
       { readonly _tag: "ProjectionStoreThreadNotFoundError" }
     >;
+
+// A forked thread shows its parent's replies; the chain is followed this far before giving up.
+const MAX_FORK_HOPS = 16;
 
 interface Utterance {
   readonly sampleRate: number;
@@ -244,16 +247,27 @@ const make = Effect.gen(function* () {
     threadId: ThreadId,
     messageId: MessageId,
   ) {
-    const projection = yield* projections.getThreadProjection(threadId).pipe(
-      Effect.catchTags({
-        ProjectionStoreThreadNotFoundError: () =>
-          Effect.fail(new ReadAloudReplyNotFoundError({ threadId, messageId })),
-      }),
-    );
-    const message = projection.messages.find(
-      (candidate) => candidate.id === messageId && candidate.role === "assistant",
-    );
-    if (!message) return yield* new ReadAloudReplyNotFoundError({ threadId, messageId });
+    const notFound = new ReadAloudReplyNotFoundError({ threadId, messageId });
+    // A reply shown in a forked thread may live in the thread it was forked from.
+    let message: OrchestrationV2ConversationMessage | undefined;
+    let current = threadId;
+    for (let hop = 0; hop <= MAX_FORK_HOPS && message === undefined; hop += 1) {
+      const found = yield* projections
+        .getMessagesById(current, [messageId])
+        .pipe(
+          Effect.catchTags({ ProjectionStoreThreadNotFoundError: () => Effect.fail(notFound) }),
+        );
+      message = found.get(messageId);
+      if (message !== undefined) break;
+      const thread = yield* projections
+        .getThread(current)
+        .pipe(
+          Effect.catchTags({ ProjectionStoreThreadNotFoundError: () => Effect.fail(notFound) }),
+        );
+      if (thread.forkedFrom?.type !== "run") break;
+      current = thread.forkedFrom.threadId;
+    }
+    if (message === undefined || message.role !== "assistant") return yield* notFound;
     if (message.streaming) return yield* new ReadAloudReplyStreamingError({ messageId });
     const text = speakableText(message.text);
     if (!text) return yield* new ReadAloudNothingToReadError({ messageId });

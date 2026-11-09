@@ -9,7 +9,6 @@ import {
   ThreadId,
   type AuthEnvironmentScope,
   type OrchestrationV2ConversationMessage,
-  type OrchestrationV2ThreadProjection,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -52,13 +51,11 @@ const message = (
   }) as unknown as OrchestrationV2ConversationMessage;
 
 const REPLY_TEXT = "Done.\n\n```sh\nrm -rf build\n```\n\nPush it.";
-const projection = {
-  messages: [
-    message(USER, "user", "Please build."),
-    message(REPLY, "assistant", REPLY_TEXT),
-    message(STREAMING, "assistant", "Still going", true),
-  ],
-} as unknown as OrchestrationV2ThreadProjection;
+const messages = [
+  message(USER, "user", "Please build."),
+  message(REPLY, "assistant", REPLY_TEXT),
+  message(STREAMING, "assistant", "Still going", true),
+];
 
 const principal = (...scopes: AuthEnvironmentScope[]) =>
   Layer.mock(EnvironmentAuth.EnvironmentAuth)({
@@ -72,9 +69,13 @@ const principal = (...scopes: AuthEnvironmentScope[]) =>
   });
 
 const projections = Layer.mock(ProjectionStoreV2.ProjectionStoreV2)({
-  getThreadProjection: (threadId) =>
+  getMessagesById: (threadId, ids) =>
     threadId === THREAD
-      ? Effect.succeed(projection)
+      ? Effect.succeed(new Map(messages.filter((m) => ids.includes(m.id)).map((m) => [m.id, m])))
+      : Effect.fail(new ProjectionStoreV2.ProjectionStoreThreadNotFoundError({ threadId })),
+  getThread: (threadId) =>
+    threadId === THREAD
+      ? Effect.succeed({ id: THREAD, forkedFrom: null } as never)
       : Effect.fail(new ProjectionStoreV2.ProjectionStoreThreadNotFoundError({ threadId })),
 });
 

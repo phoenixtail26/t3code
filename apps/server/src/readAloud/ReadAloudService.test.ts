@@ -2,9 +2,10 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import {
   MessageId,
+  RunId,
   ThreadId,
+  type OrchestrationV2AppThread,
   type OrchestrationV2ConversationMessage,
-  type OrchestrationV2ThreadProjection,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -21,6 +22,8 @@ import { fakeHearsay, type FakeHearsayScript } from "./fakeHearsay.ts";
 import * as ReadAloud from "./ReadAloudService.ts";
 
 const THREAD = ThreadId.make("thread-1");
+const FORK = ThreadId.make("thread-fork");
+const FORK_OF_FORK = ThreadId.make("thread-fork-2");
 const REPLY = MessageId.make("reply-1");
 const STREAMING = MessageId.make("reply-2");
 const CODE_ONLY = MessageId.make("reply-3");
@@ -46,20 +49,39 @@ const message = (
     updatedAt: NOW,
   }) as unknown as OrchestrationV2ConversationMessage;
 
-const projection = {
-  messages: [
-    message(USER, "user", "Please build."),
-    message(REPLY, "assistant", "Done.\n\n```sh\nrm -rf build\n```\n\nPush it."),
-    message(STREAMING, "assistant", "Still going", true),
-    message(CODE_ONLY, "assistant", "```\nonly code\n```"),
+const OWN_REPLY = MessageId.make("reply-fork-1");
+const messagesByThread = new Map<ThreadId, ReadonlyArray<OrchestrationV2ConversationMessage>>([
+  [
+    THREAD,
+    [
+      message(USER, "user", "Please build."),
+      message(REPLY, "assistant", "Done.\n\n```sh\nrm -rf build\n```\n\nPush it."),
+      message(STREAMING, "assistant", "Still going", true),
+      message(CODE_ONLY, "assistant", "```\nonly code\n```"),
+    ],
   ],
-} as unknown as OrchestrationV2ThreadProjection;
+  [FORK, [message(OWN_REPLY, "assistant", "Forked and done.")]],
+  [FORK_OF_FORK, []],
+]);
+const forkedFrom = new Map<ThreadId, OrchestrationV2AppThread["forkedFrom"]>([
+  [THREAD, null],
+  [FORK, { type: "run", threadId: THREAD, runId: RunId.make("run-1") }],
+  [FORK_OF_FORK, { type: "run", threadId: FORK, runId: RunId.make("run-fork-1") }],
+]);
 
-/** The projection store the service reads: one thread with the messages above. */
+/** The projection store the service reads: a thread, a fork of it and a fork of that. */
 export const projections = Layer.mock(ProjectionStoreV2.ProjectionStoreV2)({
-  getThreadProjection: (threadId) =>
-    threadId === THREAD
-      ? Effect.succeed(projection)
+  getMessagesById: (threadId, ids) => {
+    const messages = messagesByThread.get(threadId);
+    if (messages === undefined)
+      return Effect.fail(new ProjectionStoreV2.ProjectionStoreThreadNotFoundError({ threadId }));
+    return Effect.succeed(
+      new Map(messages.filter((candidate) => ids.includes(candidate.id)).map((m) => [m.id, m])),
+    );
+  },
+  getThread: (threadId) =>
+    forkedFrom.has(threadId)
+      ? Effect.succeed({ id: threadId, forkedFrom: forkedFrom.get(threadId) } as never)
       : Effect.fail(new ProjectionStoreV2.ProjectionStoreThreadNotFoundError({ threadId })),
 });
 
@@ -212,6 +234,22 @@ it.live("speaks a reply from the projection with its code blocks never sent", ()
       { type: "text", text: "Done.\n\nPush it." },
       { type: "end" },
     ]);
+  }).pipe(Effect.scoped),
+);
+
+it.live("reads a reply a forked thread inherited from the thread it was forked from", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* serve();
+    const spoken = (threadId: ThreadId, messageId: MessageId) =>
+      ReadAloud.ReadAloudService.pipe(
+        Effect.flatMap((service) => service.speakReply(threadId, messageId)),
+        Effect.flatMap((utterance) => Stream.runDrain(utterance.audio)),
+        Effect.provide(layerFor({ url: hearsay.url })),
+        Effect.map(() => hearsay.received.at(-2)),
+      );
+    expect(yield* spoken(FORK, REPLY)).toEqual({ type: "text", text: "Done.\n\nPush it." });
+    expect(yield* spoken(FORK_OF_FORK, REPLY)).toEqual({ type: "text", text: "Done.\n\nPush it." });
+    expect(yield* spoken(FORK, OWN_REPLY)).toEqual({ type: "text", text: "Forked and done." });
   }).pipe(Effect.scoped),
 );
 

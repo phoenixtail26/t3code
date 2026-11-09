@@ -18,6 +18,7 @@ import "~/index.css";
 import { act, render, stubGlobal } from "../../test/render";
 import { MessagesTimeline } from "../components/chat/MessagesTimeline";
 import type { SpeakRequest, SpeakResult } from "./api";
+import { registerCommands } from "../shortcuts/dispatcher";
 import { installReadAloudCommands } from "./commands";
 import { readReadAloudState } from "./store";
 
@@ -316,6 +317,7 @@ it("Escape leaves reading alone while thread find or a dialog is open", async ()
   }
   const dialog = document.createElement("div");
   dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
   document.body.append(dialog);
   try {
     await userEvent.keyboard("{Escape}");
@@ -323,8 +325,36 @@ it("Escape leaves reading alone while thread find or a dialog is open", async ()
   } finally {
     dialog.remove();
   }
-  await userEvent.keyboard("{Escape}");
-  expect(readReadAloudState()).toEqual({ state: "idle" });
+  // A scope registered later runs first; when it takes Escape, reading goes on.
+  const claimed: string[] = [];
+  const unregister = registerCommands(
+    {},
+    {
+      onKeyDown: (event) => {
+        if (event.key !== "Escape") return false;
+        claimed.push(event.key);
+        event.preventDefault();
+      },
+    },
+  );
+  try {
+    await userEvent.keyboard("{Escape}");
+    expect(claimed).toEqual(["Escape"]);
+    expect(readReadAloudState().state).toBe("playing");
+  } finally {
+    unregister();
+  }
+  // A toast is a dialog by role but owns no key.
+  const toast = document.createElement("div");
+  toast.setAttribute("role", "dialog");
+  toast.setAttribute("data-slot", "toast-root");
+  document.body.append(toast);
+  try {
+    await userEvent.keyboard("{Escape}");
+    expect(readReadAloudState()).toEqual({ state: "idle" });
+  } finally {
+    toast.remove();
+  }
 });
 
 it("playback ends on its own once the last buffer has played", async () => {
