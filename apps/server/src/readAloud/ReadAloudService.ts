@@ -4,19 +4,23 @@
 // spoken sentences from Claude Haiku, goes the same way at the end of a turn.
 import type { MessageId, OrchestrationV2ConversationMessage, ThreadId } from "@t3tools/contracts";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
+import { HttpClient, HttpClientRequest } from "effect/http";
 
 import * as ProjectionStoreV2 from "../orchestration-v2/ProjectionStore.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
+import { containsDictation, HearsayHistoryPage } from "./dictatedHistory.ts";
 import { speakableText } from "./speakableText.ts";
 import { readAloudSummaryModelSelection } from "./summaryModel.ts";
 import { buildReadAloudSummaryPrompt, capSummary } from "./summaryPrompt.ts";
@@ -29,6 +33,10 @@ const FORMAT_TIMEOUT = Duration.minutes(3);
 const CHUNK_TIMEOUT = Duration.seconds(60);
 // Under Hearsay's 1 MiB message limit, counted in bytes, whatever the characters.
 const TEXT_PIECE_CHARS = 64 * 1024;
+// The question is asked at send and the turn's end waits for the answer: a Hearsay that is
+// away must not hold a summary up for long.
+const HISTORY_TIMEOUT = Duration.seconds(3);
+const HISTORY_LIMIT = 5;
 
 export class ReadAloudNotConfiguredError extends Schema.TaggedError<
   ReadAloudNotConfiguredError,
@@ -123,8 +131,16 @@ export class ReadAloudService extends Context.Service<
       threadId: ThreadId,
       messageId: MessageId,
     ) => Effect.Effect<Utterance, SpeakReplyError | ReadAloudSummaryError, Scope.Scope>;
+    /**
+     * Whether `text` holds the words of a dictation Hearsay's hotkey app finished in the
+     * last ten minutes, from Hearsay's history. False, never an error, without a URL or when
+     * Hearsay does not answer in time; the text never goes to Hearsay.
+     */
+    readonly wasDictated: (text: string) => Effect.Effect<boolean>;
   }
 >()("t3/readAloud/ReadAloudService") {}
+
+const decodeHistory = Schema.decodeUnknownEffect(Schema.fromJsonString(HearsayHistoryPage));
 
 const HearsayMessage = Schema.Union([
   Schema.Struct({ type: Schema.Literal("format"), sample_rate: Schema.Number }),
@@ -180,6 +196,7 @@ const make = Effect.gen(function* () {
   const projections = yield* ProjectionStoreV2.ProjectionStoreV2;
   const textGeneration = yield* TextGeneration.TextGeneration;
   const fileSystem = yield* FileSystem.FileSystem;
+  const http = yield* HttpClient.HttpClient;
 
   const speak = Effect.fn("ReadAloudService.speak")(function* (text: string) {
     const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
@@ -336,7 +353,40 @@ const make = Effect.gen(function* () {
     return yield* speak(text);
   });
 
-  return ReadAloudService.of({ speak, speakReply, summarise, speakSummary });
+  const wasDictated = Effect.fn("ReadAloudService.wasDictated")(function* (text: string) {
+    const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
+    const url = settings.hearsaySpeech.url.replace(/\/+$/, "");
+    if (!url || text.trim() === "") return false;
+    const token = settings.hearsaySpeech.token;
+    const fail = (reason: string) => new ReadAloudHearsayError({ url, reason });
+    const request = HttpClientRequest.get(`${url}/v1/history`).pipe(
+      HttpClientRequest.setUrlParam("limit", String(HISTORY_LIMIT)),
+      (request) => (token ? HttpClientRequest.bearerToken(request, Redacted.make(token)) : request),
+    );
+    const page = yield* http.execute(request).pipe(
+      Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+      Effect.flatMap((response) =>
+        Effect.gen(function* () {
+          if (response.status !== 200)
+            return yield* fail(`its history answered HTTP ${response.status}`);
+          return yield* response.text;
+        }),
+      ),
+      Effect.flatMap(decodeHistory),
+      Effect.timeoutOrElse({
+        duration: HISTORY_TIMEOUT,
+        orElse: () => Effect.fail(fail(`no history within ${Duration.format(HISTORY_TIMEOUT)}`)),
+      }),
+      Effect.tapError((error) =>
+        Effect.logWarning(`read aloud: Hearsay at ${url} gave no history: ${error.message}`),
+      ),
+      Effect.option,
+    );
+    if (page._tag === "None") return false;
+    return containsDictation(text, page.value.entries, yield* Clock.currentTimeMillis);
+  });
+
+  return ReadAloudService.of({ speak, speakReply, summarise, speakSummary, wasDictated });
 });
 
 export const layer = Layer.effect(ReadAloudService, make);

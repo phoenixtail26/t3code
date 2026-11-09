@@ -125,3 +125,63 @@ export async function speak(input: SpeakRequest): Promise<SpeakResult> {
   if (status < 200 || status >= 300) return { ok: false, error: errorFromBody(status, body) };
   return { ok: true };
 }
+
+/** Mirrors `apps/server/src/readAloud/http.ts`. */
+const READ_ALOUD_DICTATED_PATH = "/api/read-aloud/dictated";
+// The server gives Hearsay three seconds; the rest covers the hop to a remote environment.
+const DICTATED_TIMEOUT_MS = 10_000;
+
+export interface DictatedRequest {
+  readonly environmentId: EnvironmentId;
+  /** The message as sent; the server compares it with Hearsay's history and keeps it. */
+  readonly text: string;
+}
+
+const DictatedAnswer = Schema.Struct({ dictated: Schema.Boolean });
+const decodeDictatedAnswer = Schema.decodeUnknownOption(Schema.fromJsonString(DictatedAnswer));
+
+const dictatedCommand = createRuntimeCommand(connectionAtomRuntime, {
+  label: "web:read-aloud:dictated",
+  execute: Effect.fn("readAloud.dictated")(function* (input: DictatedRequest) {
+    const prepared = readPreparedConnection(input.environmentId);
+    if (prepared === null) return false;
+    const signer = yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner);
+    let requestUrl = "";
+    return yield* executeAuthenticatedEnvironmentHttpRequest({
+      prepared,
+      signer,
+      group: "auth",
+      method: "POST",
+      url: (urls) => {
+        requestUrl = new URL(READ_ALOUD_DICTATED_PATH, urls.session()).toString();
+        return requestUrl;
+      },
+      timeoutMs: DICTATED_TIMEOUT_MS,
+      request: Effect.fn("readAloud.dictated.request")(function* ({ headers }) {
+        const client = yield* HttpClient.HttpClient;
+        const response = yield* client.execute(
+          HttpClientRequest.post(requestUrl).pipe(
+            HttpClientRequest.setHeaders({ ...headers }),
+            HttpClientRequest.bodyJsonUnsafe({ text: input.text }),
+          ),
+        );
+        if (response.status !== 200) return false;
+        const answer = decodeDictatedAnswer(yield* response.text);
+        return answer._tag === "Some" && answer.value.dictated;
+      }),
+    });
+  }),
+});
+
+/**
+ * Whether the server finds `text` among Hearsay's recent hotkey dictations. False whenever
+ * the answer cannot be had: the composer never sees an error from this.
+ */
+export async function wasDictated(input: DictatedRequest): Promise<boolean> {
+  try {
+    const result = await dictatedCommand.run(appAtomRegistry, input);
+    return AsyncResult.isSuccess(result) && result.value;
+  } catch {
+    return false;
+  }
+}

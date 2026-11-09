@@ -15,11 +15,16 @@ import {
 import type { TranscriptionPostProcessingInput } from "@t3tools/provider-core/server/textGeneration";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Clock from "effect/Clock";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { expect } from "vite-plus/test";
 
 import * as ProjectionStoreV2 from "../orchestration-v2/ProjectionStore.ts";
@@ -119,12 +124,14 @@ const layerFor = (
   options: {
     settings?: SettingsOverrides;
     textGeneration?: Layer.Layer<TextGeneration.TextGeneration>;
+    httpClient?: Layer.Layer<HttpClient.HttpClient>;
   } = {},
 ) =>
   ReadAloud.layer.pipe(
     Layer.provide(projections),
     Layer.provide(ServerSettings.layerTest({ ...options.settings, hearsaySpeech: hearsay })),
     Layer.provide(options.textGeneration ?? summariser({ summary: "Done." }).layer),
+    Layer.provide(options.httpClient ?? FetchHttpClient.layer),
     Layer.provide(NodeServices.layer),
   );
 
@@ -408,4 +415,109 @@ it.live("fails plainly, with no socket opened, when the summary cannot be made",
     expect(model.calls).toEqual([]);
     expect(hearsay.handshakes).toEqual([]);
   }).pipe(Effect.scoped),
+);
+
+// Whether a message was dictated with Hearsay's hotkey app, from its history.
+
+const dictatedThrough = (
+  hearsay: { url?: string; token?: string },
+  text: string,
+  httpClient?: Layer.Layer<HttpClient.HttpClient>,
+) =>
+  ReadAloud.ReadAloudService.pipe(
+    Effect.flatMap((service) => service.wasDictated(text)),
+    Effect.provide(layerFor(hearsay, httpClient ? { httpClient } : {})),
+  );
+
+const iso = (ms: number) => DateTime.formatIso(DateTime.makeUnsafe(ms));
+
+/** A history entry as Hearsay writes it, ended `agoMs` before `nowMs`. */
+const dictation = (
+  nowMs: number,
+  text: string,
+  over: Record<string, unknown> = {},
+  agoMs = 30_000,
+) => ({
+  id: `entry-${text.length}`,
+  started_at: iso(nowMs - agoMs - 2_000),
+  ended_at: iso(nowMs - agoMs),
+  state: "done",
+  source: "dictate",
+  text,
+  raw: text.toLowerCase(),
+  partial: text,
+  suspect: false,
+  suspect_reason: null,
+  failure: null,
+  audio_seconds: 2.0,
+  sound_seconds: 1.5,
+  audio_kept: true,
+  ...over,
+});
+
+it.live("finds a recent hotkey dictation in the message, asking five entries with the token", () =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const hearsay = yield* serve({
+      history: [dictation(now, "Hello there."), dictation(now, "Fix the build.")],
+    });
+    const found = yield* dictatedThrough(
+      { url: hearsay.url, token: "secret" },
+      "fix the build\nand push it",
+    );
+    expect(found).toBe(true);
+    expect(hearsay.historyRequests).toHaveLength(1);
+    expect(hearsay.historyRequests[0]!.url).toBe("/v1/history?limit=5");
+    expect(hearsay.historyRequests[0]!.headers.authorization).toBe("Bearer secret");
+    expect(hearsay.historyRequests[0]!.headers.origin).toBeUndefined();
+  }).pipe(Effect.scoped),
+);
+
+it.live("answers false for other words, an entry older than ten minutes and a t3code entry", () =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const hearsay = yield* serve({
+      history: [
+        dictation(now, "Fix the build.", {}, 11 * 60_000),
+        dictation(now, "Run the tests.", { source: "t3code" }),
+        dictation(now, "Push it."),
+      ],
+    });
+    expect(yield* dictatedThrough({ url: hearsay.url }, "Fix the build.")).toBe(false);
+    expect(yield* dictatedThrough({ url: hearsay.url }, "Run the tests.")).toBe(false);
+    expect(yield* dictatedThrough({ url: hearsay.url }, "Something typed.")).toBe(false);
+    expect(yield* dictatedThrough({ url: hearsay.url }, "Push it. Then rest.")).toBe(true);
+    expect(hearsay.historyRequests).toHaveLength(4);
+  }).pipe(Effect.scoped),
+);
+
+it.live(
+  "answers false with no request when no URL is set, and when Hearsay refuses or is away",
+  () =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const hearsay = yield* serve({ history: [dictation(now, "Fix the build.")] });
+      expect(yield* dictatedThrough({}, "Fix the build.")).toBe(false);
+      expect(hearsay.historyRequests).toEqual([]);
+      const refusing = yield* serve({
+        history: [dictation(now, "Fix the build.")],
+        historyStatus: 401,
+      });
+      expect(yield* dictatedThrough({ url: refusing.url }, "Fix the build.")).toBe(false);
+      expect(yield* dictatedThrough({ url: "http://127.0.0.1:9" }, "Fix the build.")).toBe(false);
+    }).pipe(Effect.scoped),
+);
+
+it.effect("answers false after three seconds when Hearsay does not answer", () =>
+  Effect.gen(function* () {
+    const never = Layer.succeed(
+      HttpClient.HttpClient,
+      HttpClient.make(() => Effect.never),
+    );
+    const asked = yield* Effect.forkChild(
+      dictatedThrough({ url: "http://hearsay.test" }, "Fix the build.", never),
+    );
+    yield* TestClock.adjust(Duration.seconds(3));
+    expect(yield* Fiber.join(asked)).toBe(false);
+  }),
 );

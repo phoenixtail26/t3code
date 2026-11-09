@@ -61,7 +61,10 @@ export function bindDictatedMark(
 ): void {
   const key = composerTargetKey(target);
   const text = useComposerDraftStore.getState().getComposerDraft(target)?.prompt ?? "";
-  const dictated = marks.has(key) || (text !== "" && Array.from(ghosts.values()).includes(text));
+  // A ghost is spent by the retry that matches it, so the same words typed later are typed.
+  const ghost = text === "" ? undefined : Array.from(ghosts).find(([, words]) => words === text);
+  if (ghost !== undefined) ghosts.delete(ghost[0]);
+  const dictated = marks.has(key) || ghost !== undefined;
   if (dictated && text !== "") ghosts.set(key, text);
   trackSentTurn({
     environmentId,

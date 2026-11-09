@@ -10,6 +10,7 @@ import type {
 import type { AtomRegistry } from "effect/reactivity";
 
 import { environmentThreadDetails, environmentThreadShells } from "../state/threads";
+import { wasDictated } from "./api";
 import { startReadAloud } from "./player";
 import { readReadAloudMode } from "./setting";
 import { readReadAloudState } from "./store";
@@ -26,7 +27,9 @@ export interface SentTurn {
   readonly onAccepted?: () => void;
 }
 
-interface PendingTurn extends SentTurn {
+interface PendingTurn extends Omit<SentTurn, "dictated"> {
+  /** The server's answer is awaited when voice input did not mark the draft. */
+  dictated: boolean | Promise<boolean>;
   settled: boolean;
   accepted: boolean;
   /** The shell's latest run when the thread was first seen; undefined until then. */
@@ -58,10 +61,16 @@ function hasUserActivation(): boolean {
   return activation === undefined || activation.hasBeenActive;
 }
 
-/** Whether the setting, as it stands, could ask for this turn's summary. */
-function wanted(dictated: boolean): boolean {
+/** Whether the setting, as it stands, could ask for this turn's summary; an unanswered question might. */
+function wanted(dictated: boolean | Promise<boolean>): boolean {
   const mode = readReadAloudMode();
-  return mode === "always" || (mode === "dictated" && dictated);
+  return mode === "always" || (mode === "dictated" && dictated !== false);
+}
+
+/** Runs `decide` with the mark once it is known: at once, or when the server answers. */
+function withMark(turn: PendingTurn, decide: (dictated: boolean) => void): void {
+  if (typeof turn.dictated === "boolean") decide(turn.dictated);
+  else void turn.dictated.then(decide);
 }
 
 function observeDetail(turn: PendingTurn, thread: EnvironmentThread | null): void {
@@ -85,15 +94,18 @@ function observeDetail(turn: PendingTurn, thread: EnvironmentThread | null): voi
       !message.streaming &&
       message.text.trim() !== "",
   );
-  if (reply === undefined || !wanted(turn.dictated)) return;
-  // A reply the person asked to hear is not cut off by a summary; and a page nobody has
-  // touched since it loaded cannot play sound (a reload loses the mark anyway).
-  if (readReadAloudState().state !== "idle" || !hasUserActivation()) return;
-  startReadAloud({
-    environmentId: turn.environmentId,
-    threadId: turn.threadId,
-    messageId: reply.id,
-    mode: "summary",
+  if (reply === undefined) return;
+  withMark(turn, (dictated) => {
+    if (registry === null || !wanted(dictated)) return;
+    // A reply the person asked to hear is not cut off by a summary; and a page nobody has
+    // touched since it loaded cannot play sound (a reload loses the mark anyway).
+    if (readReadAloudState().state !== "idle" || !hasUserActivation()) return;
+    startReadAloud({
+      environmentId: turn.environmentId,
+      threadId: turn.threadId,
+      messageId: reply.id,
+      mode: "summary",
+    });
   });
 }
 
@@ -133,13 +145,21 @@ function observeShell(turn: PendingTurn, shell: EnvironmentThreadShell | null): 
 
 /** Watches the turn this client just sent until its run ends. */
 export function trackSentTurn(turn: SentTurn): void {
+  if (registry === null) return;
+  // Words voice input did not write may still be a dictation the hotkey app pasted: only
+  // the server can tell, from Hearsay's history, and only this setting needs to know.
+  const dictated =
+    !turn.dictated && turn.text !== "" && readReadAloudMode() === "dictated"
+      ? wasDictated({ environmentId: turn.environmentId, text: turn.text })
+      : turn.dictated;
   // Nothing to say for this turn as the setting stands: no subscription either.
-  if (registry === null || !wanted(turn.dictated)) return;
+  if (!wanted(dictated)) return;
   const previous = pending.get(turn.messageId);
   if (previous !== undefined) settle(previous);
   if (pending.size >= MAX_PENDING) settle(pending.values().next().value!);
   const entry: PendingTurn = {
     ...turn,
+    dictated,
     settled: false,
     accepted: false,
     firstRun: undefined,
@@ -148,6 +168,12 @@ export function trackSentTurn(turn: SentTurn): void {
     unsubscribeDetail: null,
   };
   pending.set(turn.messageId, entry);
+  if (typeof dictated !== "boolean")
+    void dictated.then((answer) => {
+      entry.dictated = answer;
+      // A typed message after all: the thread need not be watched for it.
+      if (!entry.settled && !wanted(answer)) settle(entry);
+    });
   const unsubscribe = registry.subscribe(
     environmentThreadShells.quietThreadShellAtom({
       environmentId: turn.environmentId,

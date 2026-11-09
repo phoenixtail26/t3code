@@ -23,6 +23,8 @@ import * as ProjectionStoreV2 from "../orchestration-v2/ProjectionStore.ts";
 import * as ReadAloudService from "./ReadAloudService.ts";
 
 export const READ_ALOUD_SPEAK_PATH = "/api/read-aloud/speak";
+/** Asked at send with the message's text; answers `{ dictated }` from Hearsay's history. */
+export const READ_ALOUD_DICTATED_PATH = "/api/read-aloud/dictated";
 /** The PCM's sample rate, on the response; the body is mono Int16 little-endian. */
 export const READ_ALOUD_SAMPLE_RATE_HEADER = "read-aloud-sample-rate";
 
@@ -33,6 +35,8 @@ const SpeakRequest = Schema.Struct({
   mode: Schema.optional(Schema.Literals(["full", "summary"])),
 });
 const decodeSpeakRequest = Schema.decodeUnknownEffect(Schema.fromJsonString(SpeakRequest));
+const DictatedRequest = Schema.Struct({ text: Schema.String });
+const decodeDictatedRequest = Schema.decodeUnknownEffect(Schema.fromJsonString(DictatedRequest));
 
 // The same check as the fork's dictation routes, so the desktop and the phone reach it alike.
 const authenticate = Effect.fn("readAloud.authenticate")(function* () {
@@ -116,6 +120,23 @@ export const readAloudRoutes = HttpRouter.use(
           ProjectionStoreReadError: failure(500),
         }),
       ),
+    );
+
+    yield* router.add(
+      "POST",
+      READ_ALOUD_DICTATED_PATH,
+      Effect.gen(function* () {
+        yield* authenticate();
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const input = yield* request.text.pipe(
+          Effect.flatMap(decodeDictatedRequest),
+          Effect.option,
+        );
+        if (input._tag === "None")
+          return errorResponse(400, "The request must carry the message's text.");
+        const dictated = yield* readAloud.wasDictated(input.value.text);
+        return HttpServerResponse.jsonUnsafe({ dictated });
+      }).pipe(Effect.catchTags(authErrors)),
     );
   }),
 );

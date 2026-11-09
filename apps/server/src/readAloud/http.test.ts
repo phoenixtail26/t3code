@@ -11,11 +11,12 @@ import {
   type AuthEnvironmentScope,
   type OrchestrationV2ConversationMessage,
 } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { HttpRouter, HttpServer } from "effect/http";
+import { FetchHttpClient, HttpRouter, HttpServer } from "effect/http";
 import type * as NetAddress from "effect/net/NetAddress";
 import { expect } from "vite-plus/test";
 
@@ -24,7 +25,12 @@ import * as ProjectionStoreV2 from "../orchestration-v2/ProjectionStore.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import { fakeHearsay, type FakeHearsayScript } from "./fakeHearsay.ts";
-import { READ_ALOUD_SAMPLE_RATE_HEADER, READ_ALOUD_SPEAK_PATH, readAloudRoutes } from "./http.ts";
+import {
+  READ_ALOUD_DICTATED_PATH,
+  READ_ALOUD_SAMPLE_RATE_HEADER,
+  READ_ALOUD_SPEAK_PATH,
+  readAloudRoutes,
+} from "./http.ts";
 import * as ReadAloud from "./ReadAloudService.ts";
 
 const THREAD = ThreadId.make("thread-1");
@@ -107,6 +113,7 @@ const withRoute = Effect.fn("test.readAloud.withRoute")(function* (
         Layer.provide(projections),
         Layer.provide(ServerSettings.layerTest({ hearsaySpeech: hearsay })),
         Layer.provide(summariser(summaryFails)),
+        Layer.provide(FetchHttpClient.layer),
       ),
     ),
     Layer.provide(NodeServices.layer),
@@ -119,9 +126,9 @@ const withRoute = Effect.fn("test.readAloud.withRoute")(function* (
   const server = yield* HttpServer.HttpServer;
   const address = server.address as NetAddress.InetAddress;
   const host = address._tag === "InetAddressV6" ? "[::1]" : "127.0.0.1";
-  const url = `http://${host}:${address.port}${READ_ALOUD_SPEAK_PATH}`;
-  return (body: unknown, signal?: AbortSignal) =>
-    fetch(url, {
+  const origin = `http://${host}:${address.port}`;
+  return (body: unknown, signal?: AbortSignal, path: string = READ_ALOUD_SPEAK_PATH) =>
+    fetch(`${origin}${path}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: typeof body === "string" ? body : JSON.stringify(body),
@@ -274,5 +281,70 @@ it.live("cancels on Hearsay's socket when the client gives up while the voice st
       "end",
       "cancel",
     ]);
+  }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
+);
+
+const iso = (ms: number) => DateTime.formatIso(DateTime.makeUnsafe(ms));
+
+/** A hotkey dictation Hearsay finished half a minute before `nowMs`. */
+const recent = (nowMs: number, text: string, source = "dictate") => ({
+  id: "entry-1",
+  started_at: iso(nowMs - 32_000),
+  ended_at: iso(nowMs - 30_000),
+  state: "done",
+  source,
+  text,
+  raw: text,
+  partial: text,
+  suspect: false,
+  suspect_reason: null,
+  failure: null,
+  audio_seconds: 2.0,
+  sound_seconds: 1.5,
+  audio_kept: true,
+});
+
+it.live(
+  "says whether a message holds a recent hotkey dictation, without sending it to Hearsay",
+  () =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const hearsay = yield* serve({ history: [recent(now, "Fix the build.")] });
+      const post = yield* withRoute({ url: hearsay.url, token: "secret" });
+      const ask = (body: unknown) =>
+        Effect.promise(() => post(body, undefined, READ_ALOUD_DICTATED_PATH));
+      const dictated = yield* ask({ text: "Fix the build. Then push." });
+      expect(dictated.status).toBe(200);
+      expect(yield* Effect.promise(() => dictated.json())).toEqual({ dictated: true });
+      const typed = yield* ask({ text: "Run the tests." });
+      expect(yield* Effect.promise(() => typed.json())).toEqual({ dictated: false });
+      expect(hearsay.historyRequests.map((request) => request.url)).toEqual([
+        "/v1/history?limit=5",
+        "/v1/history?limit=5",
+      ]);
+      expect(hearsay.historyRequests[0]!.headers.authorization).toBe("Bearer secret");
+      expect(hearsay.handshakes).toEqual([]);
+      const bad = yield* ask({ words: "Fix the build." });
+      expect(bad.status).toBe(400);
+      expect(yield* errorOf(bad)).toBe("The request must carry the message's text.");
+      const readOnly = yield* withRoute({ url: hearsay.url }, [AuthOrchestrationReadScope]);
+      const forbidden = yield* Effect.promise(() =>
+        readOnly({ text: "Fix the build." }, undefined, READ_ALOUD_DICTATED_PATH),
+      );
+      expect(forbidden.status).toBe(403);
+    }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
+);
+
+it.live("answers false, with no request, when no Hearsay URL is set", () =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const hearsay = yield* serve({ history: [recent(now, "Fix the build.")] });
+    const post = yield* withRoute({ url: "" });
+    const response = yield* Effect.promise(() =>
+      post({ text: "Fix the build." }, undefined, READ_ALOUD_DICTATED_PATH),
+    );
+    expect(response.status).toBe(200);
+    expect(yield* Effect.promise(() => response.json())).toEqual({ dictated: false });
+    expect(hearsay.historyRequests).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
 );

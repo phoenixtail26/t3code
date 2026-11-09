@@ -54,6 +54,10 @@ const state = vi.hoisted(() => ({
   /** When set, the real client-runtime thread state stands behind the detail atoms. */
   details: null as null | { threadAtom: unknown; statusAtom: unknown },
   calls: [] as Array<Pick<SpeakRequest, "environmentId" | "threadId" | "messageId" | "mode">>,
+  /** The texts the dictated route was asked about, and the server's answer to each. */
+  asked: [] as string[],
+  answers: [] as Promise<boolean>[],
+  answer: ((_text: string) => Promise.resolve(false)) as (text: string) => Promise<boolean>,
 }));
 
 vi.mock(import("./api"), async () => ({
@@ -67,6 +71,12 @@ vi.mock(import("./api"), async () => ({
     input.onFormat(24_000);
     input.onChunk(new Uint8Array([0, 0x40]));
     return { ok: true };
+  },
+  wasDictated: (input: { text: string }): Promise<boolean> => {
+    state.asked.push(input.text);
+    const answer = state.answer(input.text);
+    state.answers.push(answer);
+    return answer;
   },
 }));
 vi.mock(import("../state/threads"), async (original) => {
@@ -189,6 +199,9 @@ async function setup() {
   clearDictatedMarks();
   window.localStorage.clear();
   state.calls = [];
+  state.asked = [];
+  state.answers = [];
+  state.answer = () => Promise.resolve(false);
   state.shells.clear();
   state.threads.clear();
   state.details = null;
@@ -262,11 +275,15 @@ it("stays silent for a typed turn, and for a dictated one when the setting is of
   const { registry, shellAtom, thread } = await setup();
   using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
   send(false);
+  // The typed words are put to the server once, at send; the audio route is never hit.
+  expect(state.asked).toEqual(["build it, typed"]);
   registry.set(thread, detail({ sent: SENT, status: "completed", reply: {} }));
   registry.set(shellAtom, shell(RUN, "completed"));
+  await Promise.all(state.answers);
   expect(state.calls).toEqual([]);
   setReadAloudMode("off");
   send(true, SENT_2);
+  expect(state.asked).toHaveLength(1);
   registry.set(
     thread,
     detail(
@@ -288,6 +305,65 @@ it("summarises every turn this client sent when the setting is always", async ()
   registry.set(thread, detail({ sent: SENT, status: "completed", reply: {} }));
   registry.set(shellAtom, shell(RUN, "completed"));
   expect(state.calls.map((call) => call.mode)).toEqual(["summary"]);
+  // Nothing needed asking: the setting speaks whatever was sent.
+  expect(state.asked).toEqual([]);
+});
+
+it("summarises a typed-looking turn the server finds in Hearsay's history, waiting for the answer", async () => {
+  using _audio = stubGlobal("AudioContext", FakeAudioContext);
+  const { registry, shellAtom, thread } = await setup();
+  using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
+  let answer: (dictated: boolean) => void = () => {};
+  state.answer = () =>
+    new Promise<boolean>((resolve) => {
+      answer = resolve;
+    });
+  // The hotkey app pasted the words; the composer saw a paste, so the server is asked.
+  send(false);
+  expect(state.asked).toEqual(["build it, typed"]);
+  expect(pendingTurnCount()).toBe(1);
+  // The turn ends before Hearsay has answered: the decision waits for it.
+  registry.set(thread, detail({ sent: SENT, status: "completed", reply: {} }));
+  registry.set(shellAtom, shell(RUN, "completed"));
+  expect(state.calls).toEqual([]);
+  answer(true);
+  await vi.waitFor(() =>
+    expect(state.calls).toEqual([
+      { environmentId: ENVIRONMENT_ID, threadId: THREAD_ID, messageId: REPLY, mode: "summary" },
+    ]),
+  );
+  stopReadAloud();
+  // An answer that comes first is kept for the run's end; a voice-marked draft asks nothing.
+  state.answer = () => Promise.resolve(true);
+  send(false, SENT_2);
+  await Promise.all(state.answers);
+  send(true, MessageId.make("user-3"));
+  expect(state.asked).toEqual(["build it, typed", "build it, typed"]);
+  registry.set(
+    thread,
+    detail(
+      { sent: SENT, status: "completed", reply: {} },
+      { sent: SENT_2, runId: RUN_2, status: "completed", reply: { id: REPLY_2 } },
+    ),
+  );
+  registry.set(shellAtom, shell(RUN_2, "completed"));
+  await vi.waitFor(() =>
+    expect(state.calls.map((call) => call.messageId)).toEqual([REPLY, REPLY_2]),
+  );
+});
+
+it("asks nothing for a message with no words, and drops a turn the server calls typed", async () => {
+  using _audio = stubGlobal("AudioContext", FakeAudioContext);
+  const { registry } = await setup();
+  using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
+  // An attachment-only send has no words to look up.
+  bindDictatedMark(THREAD_REF, ENVIRONMENT_ID, THREAD_ID, SENT);
+  expect(state.asked).toEqual([]);
+  expect(pendingTurnCount()).toBe(0);
+  send(false, SENT_2);
+  expect(pendingTurnCount()).toBe(1);
+  await Promise.all(state.answers);
+  expect(pendingTurnCount()).toBe(0);
 });
 
 it("keeps a dictated turn's summary when a typed follow-up is sent on the same thread", async () => {
@@ -374,7 +450,34 @@ it("keeps the mark for the retry when a send fails and the draft comes back", as
   expect(pendingTurnCount()).toBe(1);
   drafts.setPrompt(THREAD_REF, "something typed");
   bindDictatedMark(THREAD_REF, ENVIRONMENT_ID, THREAD_ID, MessageId.make("user-3"));
+  await Promise.all(state.answers);
   expect(pendingTurnCount()).toBe(1);
+});
+
+it("spends the ghost a retry matches, so the same words typed later under the old key are typed", async () => {
+  using _audio = stubGlobal("AudioContext", FakeAudioContext);
+  const { registry, shellAtom, thread } = await setup();
+  using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
+  const drafts = useComposerDraftStore.getState();
+  // Dictated under the draft id, the send fails, and the retry goes out under the thread's key.
+  drafts.setPrompt(DRAFT, "build it, spoken");
+  markDraftDictated(DRAFT);
+  bindDictatedMark(DRAFT, ENVIRONMENT_ID, THREAD_ID, SENT);
+  drafts.setPrompt(DRAFT, "");
+  drafts.setPrompt(THREAD_REF, "build it, spoken");
+  bindDictatedMark(THREAD_REF, ENVIRONMENT_ID, THREAD_ID, SENT_2);
+  drafts.setPrompt(THREAD_REF, "");
+  registry.set(
+    thread,
+    detail({ sent: SENT_2, runId: RUN_2, status: "completed", reply: { id: REPLY_2 } }),
+  );
+  registry.set(shellAtom, shell(RUN_2, "completed"));
+  expect(state.calls.map((call) => call.messageId)).toEqual([REPLY_2]);
+  expect(state.asked).toEqual([]);
+  // The same words typed afresh under the draft id are no dictation: the server is asked.
+  drafts.setPrompt(DRAFT, "build it, spoken");
+  bindDictatedMark(DRAFT, ENVIRONMENT_ID, THREAD_ID, MessageId.make("user-3"));
+  expect(state.asked).toEqual(["build it, spoken"]);
 });
 
 it("says nothing for a run that failed, and never cuts off a reply being read", async () => {

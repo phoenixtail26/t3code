@@ -26,12 +26,20 @@ export interface FakeHearsayScript {
   readonly closeAfterChunks?: number;
   /** Refuse the handshake, as Hearsay does for a web origin. */
   readonly refuse?: boolean;
+  /** The entries `GET /v1/history` answers with, newest first. */
+  readonly history?: ReadonlyArray<unknown>;
+  /** Waited for before the history is answered, as a service that is busy would. */
+  readonly holdHistory?: Deferred.Deferred<void>;
+  /** Answer the history with this status and `{ error }` instead of a page. */
+  readonly historyStatus?: number;
 }
 
 interface FakeHearsay {
   url: string;
   readonly handshakes: Array<Record<string, string | undefined>>;
   readonly received: Array<Record<string, unknown>>;
+  /** Each `GET /v1/history` as it came: its path with the query, and its headers. */
+  readonly historyRequests: Array<{ url: string; headers: Record<string, string | undefined> }>;
   /** Called with each message as it arrives. */
   onMessage: (message: Record<string, unknown>) => void;
   readonly cancelled: Deferred.Deferred<void>;
@@ -47,6 +55,7 @@ export const fakeHearsay = Effect.fn("test.fakeHearsay")(function* (
     url: "",
     handshakes: [],
     received: [],
+    historyRequests: [],
     onMessage: () => {},
     cancelled: yield* Deferred.make<void>(),
     finished: yield* Deferred.make<void>(),
@@ -74,7 +83,22 @@ export const fakeHearsay = Effect.fn("test.fakeHearsay")(function* (
     yield* Deferred.succeed(state.finished, undefined);
     yield* writer.write(new Socket.CloseEvent(1000));
   });
-  const routes = HttpRouter.add(
+  const history = HttpRouter.add(
+    "GET",
+    "/v1/history",
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      state.historyRequests.push({ url: request.url, headers: { ...request.headers } });
+      if (script.holdHistory) yield* Deferred.await(script.holdHistory);
+      if (script.historyStatus !== undefined)
+        return HttpServerResponse.jsonUnsafe(
+          { error: `history refused with ${script.historyStatus}` },
+          { status: script.historyStatus },
+        );
+      return HttpServerResponse.jsonUnsafe({ entries: script.history ?? [], next: null });
+    }),
+  );
+  const speak = HttpRouter.add(
     "GET",
     "/v1/speak",
     Effect.gen(function* () {
@@ -109,7 +133,10 @@ export const fakeHearsay = Effect.fn("test.fakeHearsay")(function* (
     NodeHttpServer.layer(() => NodeHttp.createServer(), { port: 0, host: "127.0.0.1" }),
   );
   yield* Layer.build(
-    HttpRouter.serve(routes, { disableLogger: true, disableListenLog: true }),
+    HttpRouter.serve(Layer.merge(speak, history), {
+      disableLogger: true,
+      disableListenLog: true,
+    }),
   ).pipe(Effect.provide(serverContext));
   const server = Context.get(serverContext, HttpServer.HttpServer);
   const address = server.address as NetAddress.InetAddress;

@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off - writes the WAV beside the repo for a person to check.
+// @effect-diagnostics nodeBuiltinImport:off globalFetch:off globalFetchInEffect:off - writes the WAV beside the repo for a person to check; the route is driven by a real client.
 /* oxlint-disable t3code/no-wall-clock-in-tests -- the timing is reported for the person who runs this, never asserted; it runs only behind READ_ALOUD_HEARSAY_URL */
 // Opt-in, against a real `hearsay serve` you started yourself (never the one on 47700):
 //   READ_ALOUD_HEARSAY_URL=http://127.0.0.1:47790 vp test run src/readAloud/real.test.ts
@@ -7,19 +7,24 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
+import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
-import { ClaudeSettings } from "@t3tools/contracts";
+import { AuthOrchestrationOperateScope, ClaudeSettings } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { FetchHttpClient, HttpRouter, HttpServer } from "effect/http";
+import type * as NetAddress from "effect/net/NetAddress";
 import { expect } from "vite-plus/test";
 
+import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ProjectionStoreV2 from "../orchestration-v2/ProjectionStore.ts";
 import { makeClaudeTextGeneration } from "../textGeneration/ClaudeTextGeneration.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
+import { READ_ALOUD_DICTATED_PATH, readAloudRoutes } from "./http.ts";
 import * as ReadAloud from "./ReadAloudService.ts";
 import { speakableText } from "./speakableText.ts";
 
@@ -82,6 +87,7 @@ const layer = ReadAloud.layer.pipe(
       withSummary ? claudeTextGeneration : Layer.mock(TextGeneration.TextGeneration)({}),
     ),
   ),
+  Layer.provide(FetchHttpClient.layer),
   Layer.provide(NodeServices.layer),
 );
 
@@ -176,4 +182,57 @@ it.live.skipIf(!url)("speaks a reply through a real Hearsay and writes the WAV",
     NodeFS.appendFileSync(NodePath.join(scratch, "real-speak.jsonl"), `${timing}\n`);
     yield* Effect.log(timing);
   }).pipe(Effect.scoped, Effect.provide(layer)),
+);
+
+// The dictated check against the real history: a hotkey dictation made on this Hearsay (the
+// fake engines are enough), then the route asked with its words and with other words.
+const routed = Effect.fn("test.readAloud.routed")(function* () {
+  const routes = readAloudRoutes.pipe(Layer.provide(layer), Layer.provide(NodeServices.layer));
+  const principal = Layer.mock(EnvironmentAuth.EnvironmentAuth)({
+    authenticateHttpRequest: () =>
+      Effect.succeed({
+        sessionId: "session" as never,
+        subject: "test",
+        method: "bearer-access-token",
+        scopes: [AuthOrchestrationOperateScope],
+      }),
+  });
+  yield* Layer.build(
+    HttpRouter.serve(routes, { disableLogger: true, disableListenLog: true }).pipe(
+      Layer.provide(principal),
+    ),
+  );
+  const server = yield* HttpServer.HttpServer;
+  const address = server.address as NetAddress.InetAddress;
+  const host = address._tag === "InetAddressV6" ? "[::1]" : "127.0.0.1";
+  return (text: string) =>
+    Effect.promise(() =>
+      fetch(`http://${host}:${address.port}${READ_ALOUD_DICTATED_PATH}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      }).then((response) => response.json() as Promise<{ dictated: boolean }>),
+    );
+});
+
+it.live.skipIf(!url)("marks a message holding a dictation the real Hearsay just finished", () =>
+  Effect.gen(function* () {
+    // One second of silence as 16 kHz Int16 PCM; the fake recogniser answers any non-empty body.
+    const transcribed = yield* Effect.promise(() =>
+      fetch(`${url}/v1/transcribe?source=dictate`, {
+        method: "POST",
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+        body: new Uint8Array(32_000),
+      }),
+    );
+    expect(transcribed.status).toBe(200);
+    const { text } = (yield* Effect.promise(() => transcribed.json())) as { text: string };
+    expect(text.trim()).not.toBe("");
+    const ask = yield* routed();
+    expect(yield* ask(`${text} and then push it`)).toEqual({ dictated: true });
+    expect(yield* ask("nothing anyone said today")).toEqual({ dictated: false });
+    yield* Effect.log(
+      JSON.stringify({ url, dictation: text, entry: transcribed.headers.get("hearsay-entry") }),
+    );
+  }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
 );

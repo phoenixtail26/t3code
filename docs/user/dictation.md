@@ -153,11 +153,18 @@ there is no button and the key does nothing.
 T3 Code can also tell you how a turn went without being asked. **Settings →
 Voice → Speak a summary after a turn** sets it for the device you are on:
 **After dictated messages** (the default) speaks a short summary of the reply when a
-turn ends whose message you spoke with **Voice input** (the **Start voice
-input** button or `mod+shift+d`, above); **After every message** does so for
+turn ends whose message you dictated, with **Voice input** (the **Start voice
+input** button or `mod+shift+d`, above) or with Hearsay's own dictation hotkey
+pasting into the composer; **After every message** does so for
 every turn sent from this device; **Off** never does. Text that arrived any
-other way, including **Dictation** (`mod+shift+u`) and a dictation app pasting
-into the composer, counts as typed.
+other way, including **Dictation** (`mod+shift+u`) and a paste from anywhere
+else, counts as typed.
+
+A hotkey dictation is recognised when you send: the server asks Hearsay for
+its last few dictations and counts the message as dictated when it contains
+the words of one that finished in the last ten minutes. Your message is never
+sent to Hearsay for this. If Hearsay is away or slow to answer, the message
+counts as typed and the turn ends in silence.
 
 The summary is a few plain sentences saying what was done and what you should
 do next, so it is heard a few seconds after the turn ends. The server makes it
