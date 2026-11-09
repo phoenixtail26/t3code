@@ -520,14 +520,39 @@ ours and take theirs (upstream #14882 was rejected as too large to carry).
 Upstream shipped it (sync of 2026-11-07: `apps/server/src/speech/`, streaming
 partials, Silero VAD, dictionary hinting, `mod+shift+d`). Both now run side by
 side: two mic buttons in the composer, two voice sections in Settings. The
-owner is holding the removal until Hearsay works and the T3 half of its plan
-is re-pointed at upstream's `SpeechService` — do not delete ours unasked.
+owner is holding the removal of ours (`DictationService`, `mod+shift+u`) for
+phase 6 of the Hearsay spec, a week of real use — do not delete ours unasked.
 
-Planned next (2026-11-05, not started): the engine moves out to Hearsay, a
-separate local speech service shared with system-wide dictation and Raymond.
-`DictationService` forwards to it and read aloud is added here. Spec:
-`D:\Dev\hearsay\.claude\plans\hearsay.md`, phases 4 and 5. Read it before
-changing dictation or adding any voice feature.
+Hearsay (merged 2026-11-09, `g3code` @ 050a98db00): the owner's local speech
+service; T3 Code is one of its thin clients. Spec:
+`D:\Dev\hearsay\.claude\plans\hearsay.md`, run log `hearsay-run.md` beside it.
+Read it before changing dictation or adding any voice feature. With a Hearsay
+URL set on Settings → Voice, upstream's voice input (the "Start voice input"
+button, `mod+shift+d`, the phone PWA through the same server) is transcribed
+by Hearsay through a fork-owned wrapper behind upstream's `SpeechService`
+(`apps/server/src/speech/HearsaySpeechService.ts`), and the bundled engine
+does not run. With no URL it is upstream's, untouched. User doc:
+`docs/user/dictation.md`, "Transcribe through Hearsay". The owner proved it by
+hand on the desktop dev instance and on the phone over Tailscale.
+
+Next from the spec: read aloud (phase 5), then live partial text while
+speaking (not built: the text arrives when recording stops).
+
+Open items, each held because it costs a touch of an upstream file:
+
+- **needs-decision** Show Hearsay's own failure sentence for a failure during
+  a transcription: one import and one line in `apps/server/src/speech/stream.ts`.
+- **needs-decision** The bin on Hearsay's model card refuses with "The
+  environment rejected the request (invalid_command).": one condition line in
+  `VoiceSettingsPanel.tsx` plus a fork helper, or an optional `removable`
+  contract field.
+- **needs-decision** "Test model" shows Hearsay's cleaned text where
+  upstream's note promises the raw: needs a marker in
+  `packages/contracts/src/speech.ts` and `useEnvironmentSpeechInput.ts`.
+- **needs-decision** The Hearsay token is stored as a plain setting; upstream
+  has a secret-field mechanism (`settingsSecrets.ts`).
+- **needs-decision** The Hearsay URL and token rows are missing from settings
+  search: two lines in `settingsSearch.ts`.
 
 Built (phases 1-6, overnight 2026-10-13): server service in a child process
 with a FIFO queue, model download on first use into
