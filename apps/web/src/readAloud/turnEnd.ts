@@ -3,7 +3,6 @@
 // aloud when the setting asks for it. Only the client that sent the message holds a turn
 // here, so the other window or the phone stays quiet.
 import type { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
-import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThread } from "@t3tools/client-runtime/state/models";
 import type { AtomRegistry } from "effect/reactivity";
 
@@ -18,6 +17,8 @@ export interface SentTurn {
   /** The user message this client sent. */
   readonly messageId: MessageId;
   readonly dictated: boolean;
+  /** The draft's words as sent, for whoever needs to recognise them at send time. */
+  readonly text: string;
 }
 
 interface PendingTurn extends SentTurn {
@@ -25,18 +26,19 @@ interface PendingTurn extends SentTurn {
   unsubscribe: () => void;
 }
 
-// A turn whose message never reaches its thread (a send that failed after the mark) would
+// A turn whose message never reaches its thread (a send rejected after the bind) would
 // otherwise be watched for good; the oldest goes when this many wait.
 const MAX_PENDING = 8;
 const ENDED = new Set(["completed", "interrupted", "failed", "cancelled", "rolled_back"]);
 
 let registry: AtomRegistry.AtomRegistry | null = null;
-const pending = new Map<string, PendingTurn>();
+// Keyed by the sent message, so a follow-up on the same thread settles on its own run.
+const pending = new Map<MessageId, PendingTurn>();
 
-function settle(key: string, turn: PendingTurn): void {
+function settle(turn: PendingTurn): void {
   turn.settled = true;
   turn.unsubscribe();
-  if (pending.get(key) === turn) pending.delete(key);
+  if (pending.get(turn.messageId) === turn) pending.delete(turn.messageId);
 }
 
 function hasUserActivation(): boolean {
@@ -44,14 +46,20 @@ function hasUserActivation(): boolean {
   return activation === undefined || activation.hasBeenActive;
 }
 
-function observe(key: string, turn: PendingTurn, thread: EnvironmentThread | null): void {
+/** Whether the setting, as it stands, could ask for this turn's summary. */
+function wanted(dictated: boolean): boolean {
+  const mode = readReadAloudMode();
+  return mode === "always" || (mode === "dictated" && dictated);
+}
+
+function observe(turn: PendingTurn, thread: EnvironmentThread | null): void {
   if (turn.settled || thread === null) return;
   const { messages, runs } = thread.projection;
   const sent = messages.find((message) => message.id === turn.messageId);
   if (sent === undefined || sent.runId === null) return;
   const run = runs.find((candidate) => candidate.id === sent.runId);
   if (run === undefined || !ENDED.has(run.status)) return;
-  settle(key, turn);
+  settle(turn);
   if (run.status !== "completed") return;
   const reply = messages.findLast(
     (message) =>
@@ -60,9 +68,7 @@ function observe(key: string, turn: PendingTurn, thread: EnvironmentThread | nul
       !message.streaming &&
       message.text.trim() !== "",
   );
-  if (reply === undefined) return;
-  const mode = readReadAloudMode();
-  if (mode === "off" || (mode === "dictated" && !turn.dictated)) return;
+  if (reply === undefined || !wanted(turn.dictated)) return;
   // A reply the person asked to hear is not cut off by a summary; and a page nobody has
   // touched since it loaded cannot play sound (a reload loses the mark anyway).
   if (readReadAloudState().state !== "idle" || !hasUserActivation()) return;
@@ -76,20 +82,19 @@ function observe(key: string, turn: PendingTurn, thread: EnvironmentThread | nul
 
 /** Watches the turn this client just sent until its run ends. */
 export function trackSentTurn(turn: SentTurn): void {
-  if (registry === null) return;
-  const ref = { environmentId: turn.environmentId, threadId: turn.threadId };
-  const key = scopedThreadKey(ref);
-  const previous = pending.get(key);
-  if (previous !== undefined) settle(key, previous);
-  if (pending.size >= MAX_PENDING) {
-    const [oldestKey, oldest] = pending.entries().next().value!;
-    settle(oldestKey, oldest);
-  }
+  // Nothing to say for this turn as the setting stands: no subscription either.
+  if (registry === null || !wanted(turn.dictated)) return;
+  const previous = pending.get(turn.messageId);
+  if (previous !== undefined) settle(previous);
+  if (pending.size >= MAX_PENDING) settle(pending.values().next().value!);
   const entry: PendingTurn = { ...turn, settled: false, unsubscribe: () => {} };
-  pending.set(key, entry);
+  pending.set(turn.messageId, entry);
   const unsubscribe = registry.subscribe(
-    environmentThreadDetails.threadAtom(ref),
-    (thread) => observe(key, entry, thread),
+    environmentThreadDetails.threadAtom({
+      environmentId: turn.environmentId,
+      threadId: turn.threadId,
+    }),
+    (thread) => observe(entry, thread),
     { immediate: true },
   );
   // The immediate call may have settled the turn before the subscription could be kept.
@@ -101,7 +106,7 @@ export function trackSentTurn(turn: SentTurn): void {
 export function installReadAloudTurnEnd(atoms: AtomRegistry.AtomRegistry): () => void {
   registry = atoms;
   return () => {
-    for (const [key, turn] of Array.from(pending)) settle(key, turn);
+    for (const turn of Array.from(pending.values())) settle(turn);
     registry = null;
   };
 }

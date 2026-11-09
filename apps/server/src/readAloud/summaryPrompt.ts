@@ -19,6 +19,19 @@ Rules:
 
 Put the spoken summary in the "transcription" field.`;
 
+// The prompt asks for three sentences at most; the model sometimes runs on, so the rest is cut.
+const MAX_SENTENCES = 3;
+
+/** The first three sentences of what the model returned, whatever it ran on to. */
+export function capSummary(summary: string): string {
+  return summary
+    .trim()
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => sentence.length > 0)
+    .slice(0, MAX_SENTENCES)
+    .join(" ");
+}
+
 /** The whole prompt the summary model sees. */
 export function buildReadAloudSummaryPrompt(reply: string): string {
   const text = reply.trim();

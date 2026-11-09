@@ -153,11 +153,18 @@ there is no button and the key does nothing.
 T3 Code can also tell you how a turn went without being asked. **Settings →
 Voice → Read replies aloud** sets it for the device you are on: **After
 dictated messages** (the default) speaks a short summary of the reply when a
-turn whose message you dictated ends; **After every message** does so for
-every turn sent from this device; **Off** never does. The summary is a few
-plain sentences made by Claude Haiku on the server, saying what was done and
-what you should do next, so it is heard a few seconds after the turn ends.
-It plays only on the window or phone that sent the message, and only if that
-page stayed open: reloading before the turn ends loses it. Stop it as you
-would stop any reading. The row shows while the environment has a Hearsay
-URL.
+turn ends whose message you spoke with **Voice input** (the **Start voice
+input** button or `mod+shift+d`, above); **After every message** does so for
+every turn sent from this device; **Off** never does. Text that arrived any
+other way, including **Dictation** (`mod+shift+u`) and a dictation app pasting
+into the composer, counts as typed.
+
+The summary is a few plain sentences saying what was done and what you should
+do next, made on the server by Claude Haiku when a Claude instance is enabled
+there, else by the server's text generation model, so it is heard a few
+seconds after the turn ends. It plays only on the window or phone that sent
+the message, and only if that page stayed open: reloading before the turn
+ends loses it. A turn that failed or was stopped ends in silence, and a
+summary that falls due while something else is being read is skipped. Stop a
+summary as you would stop any reading. The row shows while the environment
+has a Hearsay URL.

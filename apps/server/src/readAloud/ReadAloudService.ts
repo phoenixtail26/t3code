@@ -19,7 +19,7 @@ import * as ServerSettings from "../serverSettings.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import { speakableText } from "./speakableText.ts";
 import { readAloudSummaryModelSelection } from "./summaryModel.ts";
-import { buildReadAloudSummaryPrompt } from "./summaryPrompt.ts";
+import { buildReadAloudSummaryPrompt, capSummary } from "./summaryPrompt.ts";
 
 const OPEN_TIMEOUT = Duration.seconds(10);
 // Covers the voice's load on first use (105 s measured in a fresh Hearsay process on a cold
@@ -330,8 +330,8 @@ const make = Effect.gen(function* () {
   ) {
     const message = yield* findReply(threadId, messageId);
     if (!speakableText(message.text)) return yield* new ReadAloudNothingToReadError({ messageId });
-    // The model is asked for plain speech; the pass guards against a stray mark anyway.
-    const text = speakableText(yield* summarise(message.text));
+    // The model is asked for three plain sentences; the cap and the pass hold it to that.
+    const text = speakableText(capSummary(yield* summarise(message.text)));
     if (!text) return yield* new ReadAloudSummaryError({ reason: "the model answered nothing" });
     return yield* speak(text);
   });

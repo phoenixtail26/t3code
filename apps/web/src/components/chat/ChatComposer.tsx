@@ -1877,7 +1877,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         focusEditorAfterReplace: false,
       });
       if (!applied) return;
-      markDraftDictated(composerDraftTargetKey);
+      markDraftDictated(composerDraftTarget);
       const cursor = collapseExpandedComposerCursor(text, selection.start, isLiteralPendingAnswer);
       setComposerCursor(cursor);
       window.requestAnimationFrame(() => composerEditorRef.current?.focusAt(cursor));

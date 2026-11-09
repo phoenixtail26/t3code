@@ -339,7 +339,7 @@ it.live("speaks a summary of the reply made by Claude Haiku, its stray marks dro
     yield* speakSummaryThrough(hearsay.url, { textGeneration: model.layer });
     expect(hearsay.received).toEqual([
       { type: "start" },
-      { type: "text", text: "Done. The build is green.\n\nPush it when ready." },
+      { type: "text", text: "Done. The build is green. Push it when ready." },
       { type: "end" },
     ]);
     expect(model.calls).toHaveLength(1);
@@ -353,6 +353,21 @@ it.live("speaks a summary of the reply made by Claude Haiku, its stray marks dro
     // The model ran in a scoped scratch directory, gone once the summary was made.
     expect(call.cwd).toContain("t3-read-aloud-summary-");
     expect(NodeFS.existsSync(call.cwd)).toBe(false);
+  }).pipe(Effect.scoped),
+);
+
+it.live("speaks at most the first three sentences of what the model returns", () =>
+  Effect.gen(function* () {
+    const hearsay = yield* serve();
+    const model = summariser({
+      summary:
+        "Waiting on you. The test traces to four commits. You choose between merging and dropping. Nothing has changed yet. Which do you want?",
+    });
+    yield* speakSummaryThrough(hearsay.url, { textGeneration: model.layer });
+    expect(hearsay.received[1]).toEqual({
+      type: "text",
+      text: "Waiting on you. The test traces to four commits. You choose between merging and dropping.",
+    });
   }).pipe(Effect.scoped),
 );
 

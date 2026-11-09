@@ -5,14 +5,13 @@ import {
   ThreadId,
   type OrchestrationV2ThreadProjection,
 } from "@t3tools/contracts";
-import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThread } from "@t3tools/client-runtime/state/models";
 import { Atom, AtomRegistry } from "effect/reactivity";
 import { expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
 import { stubGlobal } from "../../test/render";
-import { useComposerDraftStore } from "~/composerDraftStore";
+import { DraftId, useComposerDraftStore, type ComposerThreadTarget } from "~/composerDraftStore";
 import type { SpeakRequest, SpeakResult } from "./api";
 import { bindDictatedMark, clearDictatedMarks, markDraftDictated } from "./dictatedMark";
 import { startReadAloud, stopReadAloud } from "./player";
@@ -52,10 +51,13 @@ vi.mock(import("../state/threads"), async (original) => {
 const ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const THREAD_ID = ThreadId.make("thread-auto");
 const THREAD_REF = { environmentId: ENVIRONMENT_ID, threadId: THREAD_ID };
-const DRAFT_KEY = scopedThreadKey(THREAD_REF);
+const DRAFT = DraftId.make("draft-auto");
 const SENT = MessageId.make("user-1");
 const REPLY = MessageId.make("reply-1");
 const RUN = RunId.make("run-1");
+const SENT_2 = MessageId.make("user-2");
+const REPLY_2 = MessageId.make("reply-2");
+const RUN_2 = RunId.make("run-2");
 
 class FakeSource {
   buffer: AudioBuffer | null = null;
@@ -90,28 +92,37 @@ class FakeAudioContext {
 
 type RunStatus = OrchestrationV2ThreadProjection["runs"][number]["status"];
 
-/** The thread as the client sees it: the sent message, its run, and the reply once there. */
-function projection(input: {
-  runId?: RunId | null;
-  status?: RunStatus;
-  reply?: { streaming?: boolean; text?: string } | null;
-}): EnvironmentThread {
-  const runId = input.runId === undefined ? RUN : input.runId;
-  const messages = [
-    { id: SENT, role: "user", runId, text: "Build it.", streaming: false },
-    ...(input.reply
-      ? [
-          {
-            id: REPLY,
-            role: "assistant",
-            runId: RUN,
-            text: input.reply.text ?? "Built.",
-            streaming: input.reply.streaming ?? false,
-          },
-        ]
-      : []),
-  ];
-  const runs = runId === null ? [] : [{ id: runId, status: input.status ?? "running" }];
+interface Turn {
+  readonly sent: MessageId;
+  /** The run the message started; null while it waits in the queue. */
+  readonly runId?: RunId | null;
+  readonly status?: RunStatus;
+  readonly reply?: { id?: MessageId; streaming?: boolean; text?: string } | null;
+}
+
+/** The thread as the client sees it: each sent message, its run, and the reply once there. */
+function projection(...turns: Turn[]): EnvironmentThread {
+  const messages = turns.flatMap((turn) => {
+    const runId = turn.runId === undefined ? RUN : turn.runId;
+    return [
+      { id: turn.sent, role: "user", runId, text: "Build it.", streaming: false },
+      ...(turn.reply
+        ? [
+            {
+              id: turn.reply.id ?? REPLY,
+              role: "assistant",
+              runId,
+              text: turn.reply.text ?? "Built.",
+              streaming: turn.reply.streaming ?? false,
+            },
+          ]
+        : []),
+    ];
+  });
+  const runs = turns.flatMap((turn) => {
+    const runId = turn.runId === undefined ? RUN : turn.runId;
+    return runId === null ? [] : [{ id: runId, status: turn.status ?? "running" }];
+  });
   return {
     environmentId: ENVIRONMENT_ID,
     projection: { messages, runs } as unknown as OrchestrationV2ThreadProjection,
@@ -127,15 +138,21 @@ async function setup() {
   const thread = Atom.make<EnvironmentThread | null>(null);
   state.threads.set(`${ENVIRONMENT_ID}:${THREAD_ID}`, thread);
   const registry = AtomRegistry.make();
-  useComposerDraftStore.getState().setPrompt(THREAD_REF, "");
+  const drafts = useComposerDraftStore.getState();
+  drafts.setPrompt(THREAD_REF, "");
+  drafts.setPrompt(DRAFT, "");
   // The page has been touched, as it was when the microphone was pressed.
   await userEvent.click(document.body);
   return { registry, thread };
 }
 
-function send(dictated: boolean) {
-  if (dictated) markDraftDictated(DRAFT_KEY);
-  bindDictatedMark(THREAD_REF, ENVIRONMENT_ID, THREAD_ID, SENT);
+/** Sends the draft under `target` as `messageId`, dictated or typed, the way the composer does. */
+function send(dictated: boolean, messageId = SENT, target: ComposerThreadTarget = THREAD_REF) {
+  const drafts = useComposerDraftStore.getState();
+  drafts.setPrompt(target, dictated ? "build it, spoken" : "build it, typed");
+  if (dictated) markDraftDictated(target);
+  bindDictatedMark(target, ENVIRONMENT_ID, THREAD_ID, messageId);
+  drafts.setPrompt(target, "");
 }
 
 it("defaults to dictated and keeps the choice in this browser", () => {
@@ -154,16 +171,19 @@ it("summarises a dictated turn's reply once its run completes, and nothing soone
   using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
   send(true);
   expect(pendingTurnCount()).toBe(1);
-  registry.set(thread, projection({ runId: null }));
-  registry.set(thread, projection({ status: "running", reply: { streaming: true } }));
+  registry.set(thread, projection({ sent: SENT, runId: null }));
+  registry.set(thread, projection({ sent: SENT, reply: { streaming: true } }));
   expect(state.calls).toEqual([]);
-  registry.set(thread, projection({ status: "completed", reply: {} }));
+  registry.set(thread, projection({ sent: SENT, status: "completed", reply: {} }));
   expect(state.calls).toEqual([
     { environmentId: ENVIRONMENT_ID, threadId: THREAD_ID, messageId: REPLY, mode: "summary" },
   ]);
   expect(pendingTurnCount()).toBe(0);
   // The run is over; a later change to the thread says nothing more.
-  registry.set(thread, projection({ status: "completed", reply: { text: "Built again." } }));
+  registry.set(
+    thread,
+    projection({ sent: SENT, status: "completed", reply: { text: "Built again." } }),
+  );
   expect(state.calls).toHaveLength(1);
 });
 
@@ -172,12 +192,21 @@ it("stays silent for a typed turn, and for a dictated one when the setting is of
   const { registry, thread } = await setup();
   using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
   send(false);
-  registry.set(thread, projection({ status: "completed", reply: {} }));
+  registry.set(thread, projection({ sent: SENT, status: "completed", reply: {} }));
   expect(state.calls).toEqual([]);
   setReadAloudMode("off");
-  send(true);
-  registry.set(thread, projection({ status: "running", reply: null }));
-  registry.set(thread, projection({ status: "completed", reply: {} }));
+  send(true, SENT_2);
+  registry.set(
+    thread,
+    projection({ sent: SENT, status: "completed", reply: {} }, { sent: SENT_2, runId: RUN_2 }),
+  );
+  registry.set(
+    thread,
+    projection(
+      { sent: SENT, status: "completed", reply: {} },
+      { sent: SENT_2, runId: RUN_2, status: "completed", reply: { id: REPLY_2 } },
+    ),
+  );
   expect(state.calls).toEqual([]);
   expect(pendingTurnCount()).toBe(0);
 });
@@ -188,8 +217,48 @@ it("summarises every turn this client sent when the setting is always", async ()
   using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
   setReadAloudMode("always");
   send(false);
-  registry.set(thread, projection({ status: "completed", reply: {} }));
+  registry.set(thread, projection({ sent: SENT, status: "completed", reply: {} }));
   expect(state.calls.map((call) => call.mode)).toEqual(["summary"]);
+});
+
+it("keeps a dictated turn's summary when a typed follow-up is sent on the same thread", async () => {
+  using _audio = stubGlobal("AudioContext", FakeAudioContext);
+  const { registry, thread } = await setup();
+  using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
+  send(true);
+  send(false, SENT_2);
+  // The dictated run completes first, then the typed follow-up's run.
+  registry.set(
+    thread,
+    projection({ sent: SENT, status: "completed", reply: {} }, { sent: SENT_2, runId: RUN_2 }),
+  );
+  expect(state.calls.map((call) => call.messageId)).toEqual([REPLY]);
+  stopReadAloud();
+  registry.set(
+    thread,
+    projection(
+      { sent: SENT, status: "completed", reply: {} },
+      { sent: SENT_2, runId: RUN_2, status: "completed", reply: { id: REPLY_2 } },
+    ),
+  );
+  expect(state.calls.map((call) => call.messageId)).toEqual([REPLY]);
+  expect(pendingTurnCount()).toBe(0);
+});
+
+it("keeps the mark on a draft the store files under a draft id", async () => {
+  using _audio = stubGlobal("AudioContext", FakeAudioContext);
+  const { registry, thread } = await setup();
+  using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
+  const drafts = useComposerDraftStore.getState();
+  drafts.setPrompt(DRAFT, "build it, spoken");
+  markDraftDictated(DRAFT);
+  // Other drafts come and go without touching this one.
+  drafts.setPrompt(THREAD_REF, "something else");
+  drafts.setPrompt(THREAD_REF, "");
+  bindDictatedMark(DRAFT, ENVIRONMENT_ID, THREAD_ID, SENT);
+  drafts.setPrompt(DRAFT, "");
+  registry.set(thread, projection({ sent: SENT, status: "completed", reply: {} }));
+  expect(state.calls.map((call) => call.messageId)).toEqual([REPLY]);
 });
 
 it("forgets the mark when the dictated draft is emptied before it is sent", async () => {
@@ -198,12 +267,12 @@ it("forgets the mark when the dictated draft is emptied before it is sent", asyn
   using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
   const drafts = useComposerDraftStore.getState();
   drafts.setPrompt(THREAD_REF, "fix the build");
-  markDraftDictated(DRAFT_KEY);
+  markDraftDictated(THREAD_REF);
   drafts.setPrompt(THREAD_REF, "fix the build and the tests");
   drafts.setPrompt(THREAD_REF, "");
   drafts.setPrompt(THREAD_REF, "typed afresh");
   bindDictatedMark(THREAD_REF, ENVIRONMENT_ID, THREAD_ID, SENT);
-  registry.set(thread, projection({ status: "completed", reply: {} }));
+  registry.set(thread, projection({ sent: SENT, status: "completed", reply: {} }));
   expect(state.calls).toEqual([]);
 });
 
@@ -212,15 +281,20 @@ it("says nothing for a run that failed, and never cuts off a reply being read", 
   const { registry, thread } = await setup();
   using _watcher = { [Symbol.dispose]: installReadAloudTurnEnd(registry) };
   send(true);
-  registry.set(thread, projection({ status: "failed", reply: {} }));
+  registry.set(thread, projection({ sent: SENT, status: "failed", reply: {} }));
   expect(state.calls).toEqual([]);
   expect(pendingTurnCount()).toBe(0);
   // A reply the person asked for is playing when the next dictated turn ends.
   startReadAloud({ environmentId: ENVIRONMENT_ID, threadId: THREAD_ID, messageId: REPLY });
   await vi.waitFor(() => expect(state.calls).toHaveLength(1));
-  send(true);
-  registry.set(thread, projection({ status: "running", reply: null }));
-  registry.set(thread, projection({ status: "completed", reply: {} }));
+  send(true, SENT_2);
+  registry.set(
+    thread,
+    projection(
+      { sent: SENT, status: "failed", reply: {} },
+      { sent: SENT_2, runId: RUN_2, status: "completed", reply: { id: REPLY_2 } },
+    ),
+  );
   expect(state.calls).toHaveLength(1);
   expect(state.calls[0]!.mode).toBeUndefined();
   stopReadAloud();
