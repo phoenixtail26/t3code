@@ -34,11 +34,22 @@ The next dictation downloads it again.
 
 ## Transcribe through Hearsay
 
-T3 Code's own voice input (the microphone button and `mod+shift+d`) can hand
-its recordings to a Hearsay speech service running on the environment that
-transcribes for you, instead of the bundled engine. Its settings are on the
-**Voice** page, **Settings → Voice**, which is a different place from the
-**Voice** section of the General page that the rest of this guide describes.
+T3 Code has two ways to speak into the composer, and Hearsay serves only one
+of them:
+
+- **Voice input** is the microphone button whose tooltip reads **Start voice
+  input**, and `mod+shift+d`. It is set up with **Transcribe with** on the
+  **Voice** page. This is the one that can transcribe through Hearsay.
+- **Dictation** is the microphone button whose tooltip reads **Dictate**,
+  `mod+shift+u`, and **Dictate into composer** in the command palette. It is
+  what the rest of this guide describes, it always uses its own bundled
+  model, and Hearsay does not serve it.
+
+Voice input can hand its recordings to a Hearsay speech service running on
+the environment that transcribes for you, instead of the bundled engine. Its
+settings are on the **Voice** page, **Settings → Voice**, which is a
+different place from the **Voice** section of the General page that
+Dictation uses.
 
 In **Settings → Voice → Transcription**, directly under **Transcribe with**
 once an environment is chosen there:
@@ -50,10 +61,12 @@ once an environment is chosen there:
   started while the URL is set. A bundled model that was already loaded
   before you set the URL stays in memory until its **Unload model** time
   runs out; if that is **Never**, restart T3 Code to release it.
-- **Hearsay token** is the token from Hearsay's config. Leave it empty unless
-  Hearsay is bound to an address other than loopback, where it requires one.
-  It is an ordinary setting: it is stored in the environment's
-  `settings.json` and sent to every client of that environment.
+- **Hearsay token** is the token from Hearsay's config. It is needed
+  whenever Hearsay's config sets a token, on loopback too; Hearsay must set
+  one to listen on any address that is not loopback. Leave it empty when
+  Hearsay's config has none. It is an ordinary setting: it is stored in the
+  environment's `settings.json` and sent to every client of that
+  environment.
 
 With the URL set, the model card shows Hearsay's recogniser: **Download**
 starts the download in Hearsay and the card shows its progress; recording
@@ -61,9 +74,10 @@ is offered once Hearsay reports the model ready. Cancelling stops a download
 that is still running. The model cannot be removed from T3 Code, because
 Hearsay's other clients use it too: remove it in Hearsay's settings window.
 
-Hearsay handles the dictionary and filler words, so the **Transcription
-options** section says so and disables its controls: change them in
-Hearsay's settings window. **Hardware** and **Unload model** under
+Hearsay transcribes, so the **Transcription options** (silence filtering,
+filler words and the dictionaries) are not used: the section says so and
+disables its controls. Set the dictionary and filler words in Hearsay's
+settings window. **Hardware** and **Unload model** under
 **Advanced** are disabled too, since Hearsay runs the model. The **Cleanup**
 section, which runs on the transcript afterwards, still applies.
 
@@ -78,14 +92,16 @@ clear the URL. What a failure looks like depends on when it happens:
   answer in time: T3 Code shows its usual transcription failure, and the
   reason is in the server log, for example
   `Hearsay at http://127.0.0.1:47700 did not answer: engine failed to load`.
-  Recording again retries.
+  Recording again retries. While Hearsay's recogniser stays broken, the
+  model card on the Voice page reads "Hearsay's last attempt failed" with
+  Hearsay's reason.
 
 Each forwarded recording is logged as
 `speech: forwarded to Hearsay at <url>, entry <id>`, where the id is the
 entry in Hearsay's history.
 
-Hearsay's dictation hotkey app and the composer dictation below
-(`mod+shift+u`) are unaffected by these settings.
+Hearsay's own dictation hotkey app and Dictation (`mod+shift+u`) are
+unaffected by these settings.
 
 ## Clean up the text
 

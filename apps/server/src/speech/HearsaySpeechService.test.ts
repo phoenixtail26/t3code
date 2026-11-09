@@ -290,9 +290,11 @@ it.live("maps Hearsay's model states onto upstream's status and model list", () 
       supportsStreaming: false,
       supportsBufferedStreaming: true,
     });
-    expect((yield* speech.models(false)).models).toMatchObject([
+    const healthy = (yield* speech.models(false)).models;
+    expect(healthy).toMatchObject([
       { id: HEARSAY_RECOGNIZER_MODEL_ID, state: "installed", active: true },
     ]);
+    expect(healthy[0]?.description).not.toContain("last attempt failed");
 
     hearsay.reply = () => ({
       status: 200,
@@ -312,6 +314,9 @@ it.live("maps Hearsay's model states onto upstream's status and model list", () 
       body: statusBody({ state: "ready" }, { failures: { recognizer: "engine failed to load" } }),
     });
     expect(yield* speech.status).toMatchObject({ supported: true, state: "ready" });
+    expect((yield* speech.models(false)).models[0]?.description).toContain(
+      "Hearsay's last attempt failed: engine failed to load",
+    );
 
     hearsay.reply = () => ({
       status: 200,

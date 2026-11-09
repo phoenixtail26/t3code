@@ -92,7 +92,7 @@ const describe = (cause: unknown): string => {
 
 type Options = {
   readonly downloadPoll: Duration.Duration;
-  /** How long a download is polled before it fails; the client's own bound on the request. */
+  /** How long a download is polled before it fails with the plain message. */
   readonly downloadCap: Duration.Duration;
 };
 
@@ -228,10 +228,12 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
     const model = recognizer(status);
     if (!model) return { models: [] };
     const size = model.size_bytes ?? 0;
+    // The gate stays open on a `failures` entry, so the card is where a broken engine shows.
+    const failure = status.failures.recognizer;
     const entry: EnvironmentSpeechModel = {
       id: HEARSAY_RECOGNIZER_MODEL_ID,
       name: HEARSAY_MODEL_NAME,
-      description: `Hearsay's recogniser at ${hearsay.url}. Change its dictionary and filler words, or remove it, in Hearsay's settings window.`,
+      description: `Hearsay's recogniser at ${hearsay.url}. Change its dictionary and filler words, or remove it, in Hearsay's settings window.${failure ? ` Hearsay's last attempt failed: ${failure}` : ""}`,
       size,
       languages: ["en"],
       accuracy: 0,
@@ -482,5 +484,6 @@ export const layerWith = (options: Options) =>
 
 export const layer = layerWith({
   downloadPoll: Duration.seconds(1),
-  downloadCap: Duration.minutes(30),
+  // Under the client's own 30 minutes on the request, so the plain message arrives first.
+  downloadCap: Duration.minutes(29),
 });
