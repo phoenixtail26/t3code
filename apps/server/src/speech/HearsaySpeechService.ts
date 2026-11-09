@@ -60,11 +60,11 @@ const HearsayTranscript = Schema.Struct({ text: Schema.String });
 const HearsayModelState = Schema.Struct({
   state: Schema.Literals(["missing", "downloading", "ready"]),
   percent: Schema.optionalKey(Schema.Number),
-  size_bytes: Schema.optionalKey(Schema.Number),
+  size_bytes: Schema.Number,
   error: Schema.optionalKey(Schema.String),
 });
 const HearsayStatus = Schema.Struct({
-  models: Schema.Record(Schema.String, HearsayModelState),
+  models: Schema.Record(Schema.String, Schema.Unknown),
   failures: Schema.Record(Schema.String, Schema.String).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
@@ -72,10 +72,10 @@ const HearsayStatus = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
 });
-type HearsayStatus = typeof HearsayStatus.Type;
 const HearsayErrorBody = Schema.Struct({ error: Schema.String });
 const decodeTranscript = Schema.decodeUnknownEffect(Schema.fromJsonString(HearsayTranscript));
 const decodeStatus = Schema.decodeUnknownEffect(Schema.fromJsonString(HearsayStatus));
+const decodeModel = Schema.decodeUnknownEffect(HearsayModelState);
 const isInvalidAudio = Schema.is(Upstream.SpeechInvalidAudioError);
 const decodeErrorBody = Schema.decodeUnknownOption(Schema.fromJsonString(HearsayErrorBody));
 
@@ -173,6 +173,28 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
   const malformed = (operation: string, hearsay: Target) => (cause: unknown) =>
     fail(operation, hearsay, `unexpected answer: ${describe(cause)}`);
 
+  /** The decoded status with the recogniser's own entry; a status that lists none is a plain failure. */
+  const readStatus = (operation: string, hearsay: Target) => (body: string) =>
+    decodeStatus(body).pipe(
+      Effect.mapError(malformed(operation, hearsay)),
+      Effect.flatMap((status) => {
+        const entry = status.models[HEARSAY_RECOGNIZER_MODEL_ID];
+        if (entry === undefined)
+          return Effect.fail(
+            fail(
+              operation,
+              hearsay,
+              `unexpected answer: its status lists no model ${HEARSAY_RECOGNIZER_MODEL_ID}`,
+            ),
+          );
+        return decodeModel(entry).pipe(
+          Effect.mapError(malformed(operation, hearsay)),
+          Effect.map((model) => ({ ...status, model })),
+        );
+      }),
+    );
+  type RecognizerStatus = Effect.Success<ReturnType<ReturnType<typeof readStatus>>>;
+
   const fetchStatus = Effect.fn("HearsaySpeechService.status")(function* (
     hearsay: Target,
     operation: string,
@@ -183,24 +205,15 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
       HttpClientRequest.get(`${hearsay.url}/v1/status`),
       STATUS_TIMEOUT,
     );
-    return yield* decodeStatus(body).pipe(Effect.mapError(malformed(operation, hearsay)));
+    return yield* readStatus(operation, hearsay)(body);
   });
 
-  // Hearsay's `fake_engines()` and `no_engines()` key the recogniser by its engine name.
-  const recognizer = (status: HearsayStatus) =>
-    status.models[HEARSAY_RECOGNIZER_MODEL_ID] ?? status.models.recognizer;
-
-  const toStatus = (hearsay: Target, status: HearsayStatus): EnvironmentSpeechStatus => {
+  const toStatus = (hearsay: Target, status: RecognizerStatus): EnvironmentSpeechStatus => {
     // A `failures` entry clears only on Hearsay's next load or call, so it must not close the gate.
     const unavailable = status.unavailable.recognizer;
     if (unavailable)
       return { supported: false, reason: `Hearsay at ${hearsay.url}: ${unavailable}` };
-    const model = recognizer(status);
-    if (!model)
-      return {
-        supported: false,
-        reason: `Hearsay at ${hearsay.url} does not list ${HEARSAY_RECOGNIZER_MODEL_ID}`,
-      };
+    const { model } = status;
     return {
       supported: true,
       state:
@@ -211,7 +224,7 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
             : "ready",
       modelId: HEARSAY_RECOGNIZER_MODEL_ID,
       model: HEARSAY_MODEL_NAME,
-      size: model.size_bytes ?? 0,
+      size: model.size_bytes,
       // Hearsay transcribes the whole recording at finish; the socket path buffers it.
       supportsStreaming: false,
       supportsBufferedStreaming: true,
@@ -224,10 +237,9 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
     };
   };
 
-  const toModels = (hearsay: Target, status: HearsayStatus): EnvironmentSpeechModels => {
-    const model = recognizer(status);
-    if (!model) return { models: [] };
-    const size = model.size_bytes ?? 0;
+  const toModels = (hearsay: Target, status: RecognizerStatus): EnvironmentSpeechModels => {
+    const { model } = status;
+    const size = model.size_bytes;
     // The gate stays open on a `failures` entry, so the card is where a broken engine shows.
     const failure = status.failures.recognizer;
     const entry: EnvironmentSpeechModel = {
@@ -279,10 +291,8 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
       HttpClientRequest.post(`${hearsay.url}/v1/models/${modelId}/download`),
       STATUS_TIMEOUT,
     );
-    let status = yield* decodeStatus(started.body).pipe(
-      Effect.mapError(malformed(operation, hearsay)),
-    );
-    while (recognizer(status)?.state === "downloading") {
+    let status = yield* readStatus(operation, hearsay)(started.body);
+    while (status.model.state === "downloading") {
       if ((yield* Clock.currentTimeMillis) >= deadline)
         return yield* fail(
           operation,
@@ -292,8 +302,8 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
       yield* Effect.sleep(options.downloadPoll);
       status = yield* fetchStatus(hearsay, operation);
     }
-    const model = recognizer(status);
-    if (model?.state === "missing" && model.error)
+    const { model } = status;
+    if (model.state === "missing" && model.error)
       return yield* fail(operation, hearsay, model.error);
     return toModels(hearsay, status);
   });
@@ -305,7 +315,7 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
   ) {
     const operation = "model download";
     const status = yield* fetchStatus(hearsay, operation);
-    if (modelId !== HEARSAY_RECOGNIZER_MODEL_ID || recognizer(status)?.state !== "downloading")
+    if (modelId !== HEARSAY_RECOGNIZER_MODEL_ID || status.model.state !== "downloading")
       return toModels(hearsay, status);
     const { body } = yield* call(
       hearsay,
@@ -313,8 +323,7 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
       HttpClientRequest.delete(`${hearsay.url}/v1/models/${HEARSAY_RECOGNIZER_MODEL_ID}`),
       STATUS_TIMEOUT,
     );
-    const stopped = yield* decodeStatus(body).pipe(Effect.mapError(malformed(operation, hearsay)));
-    return toModels(hearsay, stopped);
+    return toModels(hearsay, yield* readStatus(operation, hearsay)(body));
   });
 
   // The recogniser is shared with Hearsay's other clients; T3 Code does not delete it.

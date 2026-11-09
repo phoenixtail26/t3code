@@ -117,7 +117,11 @@ const statusBody = (
     | { state: "missing"; error?: string },
   extra: Record<string, unknown> = {},
 ) => ({
-  models: { [HEARSAY_RECOGNIZER_MODEL_ID]: { ...state, size_bytes: 1000 } },
+  models: {
+    [HEARSAY_RECOGNIZER_MODEL_ID]: { ...state, size_bytes: 1000 },
+    "nemotron-streaming-en-0.6b-160ms-int8": { state: "missing", size_bytes: 2000 },
+    "kokoro-82m-v1.0": { state: "ready", size_bytes: 3000 },
+  },
   loaded: [],
   failures: {},
   last: null,
@@ -329,11 +333,17 @@ it.live("maps Hearsay's model states onto upstream's status and model list", () 
       supported: false,
       reason: `Hearsay at ${hearsay.url}: install hearsay[stt]`,
     });
+
+    // A Hearsay that does not list the recogniser's model by name is not read another way.
     hearsay.reply = () => ({
       status: 200,
-      body: { ...statusBody({ state: "missing" }), models: { recognizer: { state: "ready" } } },
+      body: { ...statusBody({ state: "ready" }), models: { recognizer: { state: "ready" } } },
     });
-    expect(yield* speech.status).toMatchObject({ supported: true, state: "ready", size: 0 });
+    const unlisted = `Hearsay at ${hearsay.url} did not answer: unexpected answer: its status lists no model ${HEARSAY_RECOGNIZER_MODEL_ID}`;
+    expect(yield* speech.status).toEqual({ supported: false, reason: unlisted });
+    const listing = yield* speech.models(false).pipe(Effect.exit);
+    expect(String(Exit.isFailure(listing) ? listing.cause : "")).toContain(unlisted);
+    hearsay.reply = () => ({ status: 200, body: statusBody({ state: "ready" }) });
     expect(yield* speech.updateAcceleration("cpu")).toMatchObject({
       supported: true,
       acceleration: "cpu",
