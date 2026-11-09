@@ -1,5 +1,6 @@
 import { EasDeviceHostConfigs, SimlockDeviceHostConfigs, SshDeviceHostConfigs } from "./device.ts";
 import { DictationSettings, DictationSettingsPatch } from "./dictation.ts";
+import { HearsaySpeechSettings, HearsaySpeechSettingsPatch } from "./hearsaySpeech.ts";
 import {
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
@@ -1485,6 +1486,7 @@ export const ServerSettings = Schema.Struct({
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   pushNotifications: PushNotificationSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   dictation: DictationSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  hearsaySpeech: HearsaySpeechSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   sourceControlHosts: Schema.Record(Schema.String, SourceControlHostSettings).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
@@ -1853,6 +1855,7 @@ export const ServerSettingsPatch = Schema.Struct({
     }),
   ),
   dictation: Schema.optionalKey(DictationSettingsPatch),
+  hearsaySpeech: Schema.optionalKey(HearsaySpeechSettingsPatch),
   /** Merges per host, replacing patched fields whole; redaction markers retain secrets, empty secrets remove them. A non-empty token map keeps the saved tokens of hosts it omits; an empty map clears them all. */
   sourceControlHosts: Schema.optionalKey(Schema.Record(Schema.String, SourceControlHostSettings)),
   // Replace whole maps to avoid half-merged driver configs.

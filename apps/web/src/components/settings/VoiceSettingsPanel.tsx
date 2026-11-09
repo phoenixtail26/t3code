@@ -120,6 +120,7 @@ import { searchableSetting } from "./settingsSearch";
 import { useOptionalSettingsScope, useSettingsScope } from "./SettingsScopeContext";
 import { useScopedModelDisabledReason } from "./useScopedModelAvailability";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
+import { HearsayManagedSection, HearsaySpeechSettingsRows } from "./fork/HearsaySpeechSettings";
 
 const OFF = "off";
 function CloudSpeechLogo({ provider }: { provider: CloudSpeechProvider }) {
@@ -1467,8 +1468,13 @@ export function VoiceSettingsPanel() {
           />
         ) : null}
         {prepared && <AdvancedSpeechSettings prepared={prepared} catalog={catalog} />}
+        {prepared && <HearsaySpeechSettingsRows environmentId={prepared.environmentId} />}
       </SettingsSection>
-      <SettingsSection id="voice-recognition" title="Transcription options">
+      <HearsayManagedSection
+        environmentId={prepared?.environmentId ?? null}
+        id="voice-recognition"
+        title="Transcription options"
+      >
         <SettingsRow
           {...searchableSetting("speech-silence-filtering")}
           title="Silence filtering"
@@ -1522,7 +1528,7 @@ export function VoiceSettingsPanel() {
           </div>
         </SettingsRow>
         <ProjectDictionaryRow />
-      </SettingsSection>
+      </HearsayManagedSection>
 
       <SettingsSection id={searchableSetting("speech-post-processing").id} title="Cleanup">
         <SettingsRow
