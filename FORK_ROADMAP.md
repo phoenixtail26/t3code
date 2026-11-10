@@ -535,8 +535,55 @@ does not run. With no URL it is upstream's, untouched. User doc:
 `docs/user/dictation.md`, "Transcribe through Hearsay". The owner proved it by
 hand on the desktop dev instance and on the phone over Tailscale.
 
-Next from the spec: read aloud (phase 5), then live partial text while
-speaking (not built: the text arrives when recording stops).
+Read aloud (phase 5, merged 2026-11-10, `g3code` @ 5c342d4ff7): built as E1,
+E2 and E5 of the Hearsay run log, each reviewed. With a Hearsay URL set, a
+speaker button beside the copy button on each assistant reply, and
+`mod+alt+r` for the last finished reply of the open thread, read the reply
+aloud in Hearsay's voice with its code blocks skipped; the same key, Escape
+or the button stops it. Settings → Voice, inside the Hearsay rows, has
+"Speak a summary after a turn" (`off`, `dictated`, `always`; per device;
+default `dictated`): after a turn whose message was dictated, through
+upstream's voice input via Hearsay or through Hearsay's own hotkey app (found
+in Hearsay's history within ten minutes), a short summary, Claude Haiku
+through the text generation service, at most three sentences, is spoken on
+the window or PWA that sent it; a typed message ends silently. User doc:
+`docs/user/dictation.md`, "Read aloud".
+
+Where it lives: `apps/server/src/readAloud/` (`ReadAloudService`; the routes
+`POST /api/read-aloud/speak` and `POST /api/read-aloud/dictated` inside the
+fork's dictation route layer, `layerDictationRoutes`); `apps/web/src/readAloud/`
+(the player, button, command, setting, dictated mark, and the turn-end
+watcher hosted under `UserPresenceReporter`); the eval
+`evals/read-aloud-summary/`. The whole upstream touch, 10 lines in 7 files:
+`TimelineAssistantRows.tsx` +2, `packages/contracts/src/keybindings.ts` +1,
+`packages/shared/src/keybindings.ts` +1, `ChatComposer.tsx` +2,
+`useComposerSend.ts` +2, `evals/package.json` +1, `evals/README.md` +1. The
+four lines in `ChatComposer.tsx` and `useComposerSend.ts` are where the next
+upstream sync meets it: both files changed heavily upstream. Proof: Done 4 in
+the Hearsay spec, the owner's run from section 8 of `spike/proof/README.md`
+there.
+
+For phase 6: when the fork's own dictation (`DictationService`,
+`mod+shift+u`) goes, the read aloud routes ride its route layer's mount in
+`server.ts`. Keep that mount, or move the routes to a mount of their own.
+
+Open on read aloud, for the owner after some use:
+
+- **needs-decision** Whether a dictation edited before sending (one misheard
+  word fixed) should still count as dictated; today every word must be
+  present, so it ends silent.
+- **needs-decision** Whether the history match should be word-bounded: a
+  short hotkey dictation such as "Yes." into another app can make a typed
+  message sent within ten minutes count.
+- **needs-decision** Dictated plan follow-ups and approval-feedback messages
+  end silent; covering them costs upstream lines.
+- **needs-decision** The summary model is pinned to Claude Haiku through
+  `claude -p`, 2.3 to 4.1 s a call; upstream's newer Anthropic API text
+  generator (after the sync, with an API key) would be faster.
+
+Next from the spec: read aloud is built and merged (phase 5; the owner's proof
+run pending), then live partial text while speaking (not built: the text
+arrives when recording stops).
 
 Open items, each held because it costs a touch of an upstream file:
 
