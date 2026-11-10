@@ -30,6 +30,7 @@ import {
   READ_ALOUD_SAMPLE_RATE_HEADER,
   READ_ALOUD_SPEAK_PATH,
   readAloudRoutes,
+  utteranceStreamPrefix,
 } from "./http.ts";
 import * as ReadAloud from "./ReadAloudService.ts";
 
@@ -138,6 +139,10 @@ const withRoute = Effect.fn("test.readAloud.withRoute")(function* (
 
 const serve = (script?: FakeHearsayScript) => fakeHearsay(script);
 
+/** The body as the client reads it: the rate prefix, then the PCM. */
+const withPrefix = (sampleRate: number, pcm: ReadonlyArray<number>) =>
+  new Uint8Array([...utteranceStreamPrefix(sampleRate), ...pcm]);
+
 const errorOf = (response: Response) =>
   Effect.promise(() => response.json() as Promise<{ error: string }>).pipe(
     Effect.map((body) => body.error),
@@ -154,7 +159,7 @@ it.live("streams a reply's speech with its code blocks never sent to Hearsay", (
     expect(response.headers.get("cache-control")).toContain("no-transform");
     expect(response.headers.get(READ_ALOUD_SAMPLE_RATE_HEADER)).toBe("24000");
     const body = new Uint8Array(yield* Effect.promise(() => response.arrayBuffer()));
-    expect(body).toEqual(new Uint8Array([1, 0, 2, 0, 3, 0]));
+    expect(body).toEqual(withPrefix(24_000, [1, 0, 2, 0, 3, 0]));
     expect(hearsay.received).toEqual([
       { type: "start" },
       { type: "text", text: "Done.\n\nPush it." },
@@ -175,7 +180,7 @@ it.live("speaks the summary of a reply in summary mode, and 502 when it cannot b
     expect(response.status).toBe(200);
     expect(response.headers.get(READ_ALOUD_SAMPLE_RATE_HEADER)).toBe("24000");
     expect(new Uint8Array(yield* Effect.promise(() => response.arrayBuffer()))).toEqual(
-      new Uint8Array([1, 0]),
+      withPrefix(24_000, [1, 0]),
     );
     expect(hearsay.received).toEqual([
       { type: "start" },
@@ -247,8 +252,15 @@ it.live("cancels the utterance on Hearsay's socket when the client aborts", () =
     const post = yield* withRoute({ url: hearsay.url });
     const response = yield* Effect.promise(() => post({ threadId: THREAD, messageId: REPLY }));
     const reader = response.body!.getReader();
-    const first = yield* Effect.promise(() => reader.read());
-    expect(first.value).toEqual(new Uint8Array([1, 0]));
+    // The prefix and the first chunk, whether they arrive together or apart.
+    const expected = withPrefix(24_000, [1, 0]);
+    let seen = new Uint8Array(0);
+    while (seen.byteLength < expected.byteLength) {
+      const next = yield* Effect.promise(() => reader.read());
+      seen = new Uint8Array([...seen, ...(next.value ?? [])]);
+      if (next.done) break;
+    }
+    expect(seen).toEqual(expected);
     // Cancelling the body reader aborts the request, as a client going away does.
     yield* Effect.promise(() => reader.cancel());
     yield* Deferred.await(hearsay.cancelled);

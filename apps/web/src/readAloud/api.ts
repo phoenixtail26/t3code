@@ -15,9 +15,11 @@ import { AsyncResult } from "effect/reactivity";
 import { connectionAtomRuntime } from "../connection/runtime";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { readPreparedConnection } from "../state/session";
+import { createUtteranceReader, type ReadAloudStreamError } from "./stream";
 
 /** Mirrors `apps/server/src/readAloud/http.ts`. */
 const READ_ALOUD_SPEAK_PATH = "/api/read-aloud/speak";
+/** Readable only on the server's own origin; the body carries the rate for every other page. */
 const SAMPLE_RATE_HEADER = "read-aloud-sample-rate";
 // Long enough for the longest reply; stopping ends the request sooner.
 const SPEAK_TIMEOUT_MS = 30 * 60_000;
@@ -82,10 +84,11 @@ const speakCommand = createRuntimeCommand(connectionAtomRuntime, {
           if (response.status < 200 || response.status >= 300) {
             return { status: response.status, body: yield* response.text };
           }
-          input.onFormat(Number(response.headers[SAMPLE_RATE_HEADER]));
-          yield* Stream.runForEach(response.stream, (chunk) =>
-            Effect.sync(() => input.onChunk(chunk)),
-          );
+          const reader = createUtteranceReader(response.headers[SAMPLE_RATE_HEADER], input);
+          const fed = (failure: ReadAloudStreamError | null) =>
+            failure === null ? Effect.void : Effect.fail(failure);
+          yield* Stream.runForEach(response.stream, (chunk) => fed(reader.push(chunk)));
+          yield* fed(reader.end());
           return { status: response.status, body: "" };
         });
         return yield* Effect.raceFirst(

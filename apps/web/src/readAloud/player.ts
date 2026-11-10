@@ -18,10 +18,10 @@ interface Playback {
 
 let playback: Playback | null = null;
 
-type Scheduler = ReturnType<typeof schedulePcm>;
+type Scheduler = ReturnType<typeof createPcmScheduler>;
 
 /** Int16 little-endian PCM as Web Audio's Float32 samples; an odd trailing byte is carried. */
-function schedulePcm(context: AudioContext, sampleRate: number) {
+export function createPcmScheduler(context: BaseAudioContext, sampleRate: number) {
   let carry: number | null = null;
   let nextStart = 0;
   let outstanding = 0;
@@ -119,7 +119,7 @@ export function startReadAloud(target: ReadAloudTarget): void {
       ...(target.mode ? { mode: target.mode } : {}),
       stop: stopped,
       onFormat: (sampleRate) => {
-        scheduling.current = schedulePcm(context, sampleRate);
+        scheduling.current = createPcmScheduler(context, sampleRate);
       },
       onChunk: (pcm) => {
         if (current.stopped || !scheduling.current) return;

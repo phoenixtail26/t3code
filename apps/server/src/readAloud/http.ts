@@ -28,6 +28,18 @@ export const READ_ALOUD_DICTATED_PATH = "/api/read-aloud/dictated";
 /** The PCM's sample rate, on the response; the body is mono Int16 little-endian. */
 export const READ_ALOUD_SAMPLE_RATE_HEADER = "read-aloud-sample-rate";
 
+/**
+ * The body starts with the rate too: "RAPC", then the rate as a uint32 LE (mirrored in
+ * `apps/web/src/readAloud/stream.ts`). A page on another origin than the server, such as the
+ * desktop renderer at t3code-dev://app, sees only the CORS-safelisted response headers.
+ */
+export function utteranceStreamPrefix(sampleRate: number): Uint8Array {
+  const prefix = new Uint8Array(8);
+  prefix.set([0x52, 0x41, 0x50, 0x43]);
+  new DataView(prefix.buffer).setUint32(4, sampleRate, true);
+  return prefix;
+}
+
 const SpeakRequest = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,
@@ -90,8 +102,11 @@ export const readAloudRoutes = HttpRouter.use(
             ? yield* readAloud.speakSummary(threadId, messageId)
             : yield* readAloud.speakReply(threadId, messageId);
         return HttpServerResponse.stream(
-          utterance.audio.pipe(
-            Stream.tapError((error) => Effect.logWarning(`read aloud: ${error.message}`)),
+          Stream.concat(
+            Stream.make(utteranceStreamPrefix(utterance.sampleRate)),
+            utterance.audio.pipe(
+              Stream.tapError((error) => Effect.logWarning(`read aloud: ${error.message}`)),
+            ),
           ),
           {
             contentType: "application/octet-stream",
