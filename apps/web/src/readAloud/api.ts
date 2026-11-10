@@ -38,8 +38,13 @@ export interface SpeakRequest {
 
 export type SpeakResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
+/** The route's answer, or the stream's own failure, which upstream's wrapper must not reword. */
+type SpeakAnswer =
+  | { readonly status: number; readonly body: string }
+  | { readonly streamFailure: string };
+
 /** The request ended because the person stopped; there is no answer to read. */
-const STOPPED = { status: 200, body: "" } as const;
+const STOPPED: SpeakAnswer = { status: 200, body: "" };
 
 class ReadAloudEnvironmentOfflineError extends Schema.TaggedError<
   ReadAloudEnvironmentOfflineError,
@@ -90,7 +95,11 @@ const speakCommand = createRuntimeCommand(connectionAtomRuntime, {
           yield* Stream.runForEach(response.stream, (chunk) => fed(reader.push(chunk)));
           yield* fed(reader.end());
           return { status: response.status, body: "" };
-        });
+        }).pipe(
+          Effect.catchTags({
+            ReadAloudStreamError: (failure) => Effect.succeed({ streamFailure: failure.message }),
+          }),
+        );
         return yield* Effect.raceFirst(
           exchange,
           Effect.promise(() => input.stop).pipe(Effect.as(STOPPED)),
@@ -124,6 +133,7 @@ export async function speak(input: SpeakRequest): Promise<SpeakResult> {
     const squashed = Cause.squash(result.cause);
     return { ok: false, error: squashed instanceof Error ? squashed.message : String(squashed) };
   }
+  if ("streamFailure" in result.value) return { ok: false, error: result.value.streamFailure };
   const { status, body } = result.value;
   if (status < 200 || status >= 300) return { ok: false, error: errorFromBody(status, body) };
   return { ok: true };
