@@ -2,6 +2,7 @@ import { pipe } from "effect/Function";
 import {
   fileBasename,
   stripSlashPrefixedWindowsDrive,
+  isHostPath,
   isWindowsAbsolutePath,
 } from "@t3tools/shared/path";
 import { formatFilePathPosition, splitFilePathPosition } from "@t3tools/shared/fileLinks";
@@ -16,16 +17,6 @@ function trimTrailingPathSeparators(path: string): string {
 
 function stripRelativePrefixes(path: string): string {
   return path.replace(/^\.\/+/, "").replace(/^\/+/, "");
-}
-
-/**
- * Separators are already normalized to `/` by the caller, so a Windows drive
- * path reads as `C:/…` and a UNC share as `//server/share`. Without recognizing
- * those, an absolute path outside the workspace falls through to the relative
- * branch and gets the workspace label wrongly prefixed (`forsaken/C:/Apollo/…`).
- */
-function isAbsoluteDisplayPath(path: string): boolean {
-  return path.startsWith("/") || /^[A-Za-z]:\//.test(path);
 }
 
 export function formatWorkspaceRelativePath(
@@ -56,7 +47,7 @@ export function formatWorkspaceRelativePath(
     } else if (pathForCompare.startsWith(workspaceWithSeparator)) {
       const relativeSuffix = normalizedPath.slice(normalizedWorkspaceRoot.length + 1);
       displayPath = `${workspaceLabel}/${relativeSuffix}`;
-    } else if (!isAbsoluteDisplayPath(normalizedPath)) {
+    } else if (!isHostPath(normalizedPath)) {
       const relativePath = stripRelativePrefixes(normalizedPath);
       displayPath = pathForCompare.startsWith(workspaceLabelWithSeparator)
         ? normalizedPath

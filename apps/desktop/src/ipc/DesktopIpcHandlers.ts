@@ -1,6 +1,12 @@
+import { startFileDrag } from "./methods/fileDrag.ts";
 import * as Effect from "effect/Effect";
 
 import { receiveProviderAuthCallback, cancelProviderAuthCallback } from "./methods/providerAuth.ts";
+import {
+  appleSpeechAvailable,
+  appleSpeechPrepare,
+  appleSpeechTranscribe,
+} from "./methods/appleSpeech.ts";
 import * as DesktopIpc from "./DesktopIpc.ts";
 import {
   focusMainWindow,
@@ -13,6 +19,7 @@ import { getClientSettings, setClientSettings } from "./methods/clientSettings.t
 import { relaunchApp } from "./methods/lifecycle.ts";
 import { getConnectionCatalog, setConnectionCatalog } from "./methods/connectionCatalog.ts";
 import {
+  getHostEnvironmentId,
   getLocalEnvironmentEnabled,
   setLocalEnvironmentEnabled,
 } from "./methods/localEnvironment.ts";
@@ -46,9 +53,11 @@ import {
   installRelayTelemetryEnabled,
   getSystemLocale,
   getPreferredSystemLanguages,
+  getPrimaryPasteEnabled,
   getWindowFullscreenState,
   openExternal,
   readMedia,
+  restartAudioService,
   openSystemSettings,
   checkSystemPermission,
   pasteAsText,
@@ -56,9 +65,11 @@ import {
   revealWindow,
   pickFolder,
   revealPath,
+  toLocalBackendPath,
   pickProjectFavicon,
   pickThemeFiles,
   setTheme,
+  syncHtmlFullscreen,
   showContextMenu,
 } from "./methods/window.ts";
 import {
@@ -87,6 +98,7 @@ import {
   getCliCommandState,
   installCliCommand,
   uninstallCliCommand,
+  addCliCommandToPath,
 } from "./methods/cliCommand.ts";
 
 export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers")(function* () {
@@ -104,12 +116,16 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* installRelayTelemetryEnabled();
   yield* ipc.handleSync(getSystemLocale);
   yield* ipc.handleSync(getPreferredSystemLanguages);
+  yield* ipc.handleSync(getPrimaryPasteEnabled);
   yield* ipc.handleSync(getWindowFullscreenState);
   yield* ipc.handleSync(getLocalEnvironmentBootstraps);
   yield* ipc.handleSync(getLocalEnvironmentEnabled);
   yield* ipc.handle(setLocalEnvironmentEnabled);
+  yield* ipc.handle(getHostEnvironmentId);
   yield* ipc.handle(getLocalEnvironmentBearerToken);
 
+  yield* ipc.handle(startFileDrag);
+  yield* ipc.handle(restartAudioService);
   yield* ipc.handle(getClientSettings);
   yield* ipc.handle(setClientSettings);
   yield* ipc.handle(getConnectionCatalog);
@@ -152,6 +168,7 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(setWslOnly);
 
   yield* ipc.handle(pickFolder);
+  yield* ipc.handle(toLocalBackendPath);
   yield* ipc.handle(pickProjectFavicon);
   yield* ipc.handle(pickThemeFiles);
   yield* ipc.handle(setTheme);
@@ -163,8 +180,12 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(revealPath);
   yield* ipc.handle(openSystemSettings);
   yield* ipc.handle(checkSystemPermission);
+  yield* ipc.handle(appleSpeechAvailable);
+  yield* ipc.handle(appleSpeechPrepare);
+  yield* ipc.handle(appleSpeechTranscribe);
   yield* ipc.handle(pasteAsText);
   yield* ipc.handle(revealWindow);
+  yield* ipc.handle(syncHtmlFullscreen);
   yield* ipc.handle(probeRemoteEditors);
   yield* ipc.handle(getUpdateState);
   yield* ipc.handle(setUpdateChannel);
@@ -174,6 +195,7 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(getCliCommandState);
   yield* ipc.handle(installCliCommand);
   yield* ipc.handle(uninstallCliCommand);
+  yield* ipc.handle(addCliCommandToPath);
   for (const previewMethod of PreviewIpc.methods) {
     // Explicit types preserve the error/service union of these heterogeneous preview methods.
     yield* ipc.handle<

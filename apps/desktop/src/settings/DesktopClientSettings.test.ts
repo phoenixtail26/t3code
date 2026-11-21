@@ -27,6 +27,7 @@ const clientSettings: ClientSettings = {
   browserDefaultAppearance: "dark",
   browserRecordingFrameRate: 60,
   browserLinkTarget: "app",
+  sideThreadOpenTarget: "main",
   browserAutoShowFloatingPreview: false,
   browserProfiles: [{ id: "work", name: "Work", kind: "persistent" }],
   browserDefaultProfileId: "work",
@@ -34,7 +35,6 @@ const clientSettings: ClientSettings = {
   confirmThreadArchive: true,
   confirmThreadDelete: false,
   confirmThreadUnpin: false,
-  contextWindowMeterEnabled: false,
   desktopNotificationSoundPath: "",
   diffFilesCollapsed: true,
   diffIgnoreWhitespace: true,
@@ -53,7 +53,6 @@ const clientSettings: ClientSettings = {
   glassOpacity: 80,
   onboardingCompletedAt: null,
   panelAnimationDurationMs: 0,
-  planModeEnabled: false,
   proactivePanelsEnabled: true,
   showSkillsInSlashMenu: false,
   persistComposerContextStrip: true,
@@ -70,7 +69,6 @@ const clientSettings: ClientSettings = {
   boringSidebarMultilineRows: false,
   threadDetailsUsageEnabled: false,
   threadDetailsItems: {},
-  legacySidebarEnabled: false,
   sidebarWorkingShelfEnabled: false,
   loadBalancingEnabled: false,
   loadBalancingWeights: { "environment-1": 75, "environment-2": 0 },
@@ -116,7 +114,7 @@ const withClientSettings = <A, E, R>(
       prefix: "t3-desktop-client-settings-test-",
     });
     return yield* effect.pipe(Effect.provide(layer(baseDir)));
-  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)), Effect.scoped);
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)));
 
 describe("DesktopClientSettings", () => {
   it.effect("saves through a symlinked client settings file without replacing the link", () =>
