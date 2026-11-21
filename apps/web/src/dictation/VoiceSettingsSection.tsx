@@ -74,7 +74,7 @@ export function VoiceSettingsSection() {
         resetAction={
           voice.fillerCleanup !== defaults.fillerCleanup ? (
             <SettingResetButton
-              label="filler cleanup"
+              ariaLabel="filler cleanup"
               onClick={() =>
                 updateSettings({ dictation: { fillerCleanup: defaults.fillerCleanup } })
               }
@@ -99,7 +99,7 @@ export function VoiceSettingsSection() {
         resetAction={
           voice.dictionary !== defaults.dictionary ? (
             <SettingResetButton
-              label="dictionary"
+              ariaLabel="dictionary"
               onClick={() => updateSettings({ dictation: { dictionary: defaults.dictionary } })}
             />
           ) : null

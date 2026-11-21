@@ -151,7 +151,6 @@ import { chatMarkdownClipboardPayload } from "../markdown-clipboard";
 import {
   resolveInlineFileMentionMeta,
   isLocalEditorFileHref,
-  resolveInlineCodeFileLinkMeta,
   resolveMarkdownFileLinkMeta,
   rewriteMarkdownFileUriHref,
   type MarkdownFileLinkMeta,

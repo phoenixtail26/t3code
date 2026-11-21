@@ -3,6 +3,7 @@ import { defineConfig } from "vite-plus";
 import * as NodeURL from "node:url";
 import { remoteCacheUrl } from "./infra/task-cache/src/remoteCache.ts";
 import { cachedTestTasks } from "./scripts/lib/cached-tests.ts";
+import { forkEnglishOnlyFiles } from "./fork-tools/lintEnglishOnly.ts";
 
 const TEST_EXCLUDE = [
   "**/.repos/**",
@@ -598,6 +599,8 @@ export default defineConfig({
         ],
         rules: { "t3code/no-untranslated-copy": "error" },
       },
+      // Fork: its own UI ships in English only (list in fork-tools/lintEnglishOnly.ts).
+      { files: forkEnglishOnlyFiles, rules: { "t3code/no-untranslated-copy": "off" } },
       {
         // React Compiler owns memoization; upstream rules do not ban redundant useMemo/useCallback.
         files: ["apps/web/src/**/*.{ts,tsx}"],

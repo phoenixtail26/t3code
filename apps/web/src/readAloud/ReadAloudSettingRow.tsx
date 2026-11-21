@@ -31,7 +31,7 @@ export function ReadAloudSettingRow() {
       resetAction={
         mode !== DEFAULT_READ_ALOUD_MODE ? (
           <SettingResetButton
-            label="Speak a summary after a turn"
+            ariaLabel="Speak a summary after a turn"
             onClick={() => setReadAloudMode(DEFAULT_READ_ALOUD_MODE)}
           />
         ) : null

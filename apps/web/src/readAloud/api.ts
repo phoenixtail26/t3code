@@ -4,7 +4,7 @@
 import type { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
 import { ManagedRelay } from "@t3tools/client-runtime/relay";
 import { executeAuthenticatedEnvironmentHttpRequest } from "@t3tools/client-runtime/state/environment-http-auth";
-import { createRuntimeCommand } from "@t3tools/client-runtime/state/runtime";
+import { createRuntimeCommand, runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -128,7 +128,9 @@ function errorFromBody(status: number, body: string): string {
 }
 
 export async function speak(input: SpeakRequest): Promise<SpeakResult> {
-  const result = await speakCommand.run(appAtomRegistry, input);
+  const result = await runAtomCommand(appAtomRegistry, speakCommand, input, {
+    reportFailure: false,
+  });
   if (!AsyncResult.isSuccess(result)) {
     const squashed = Cause.squash(result.cause);
     return { ok: false, error: squashed instanceof Error ? squashed.message : String(squashed) };
@@ -192,7 +194,9 @@ const dictatedCommand = createRuntimeCommand(connectionAtomRuntime, {
  */
 export async function wasDictated(input: DictatedRequest): Promise<boolean> {
   try {
-    const result = await dictatedCommand.run(appAtomRegistry, input);
+    const result = await runAtomCommand(appAtomRegistry, dictatedCommand, input, {
+      reportFailure: false,
+    });
     return AsyncResult.isSuccess(result) && result.value;
   } catch {
     return false;

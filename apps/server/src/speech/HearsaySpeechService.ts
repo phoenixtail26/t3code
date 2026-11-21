@@ -231,7 +231,10 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
       supportsTranslation: false,
       languages: ["en"],
       supportsLanguageDetection: false,
+      supportsModelLinking: false,
       acceleration: hearsay.settings.speechAcceleration,
+      // Hearsay does not report its backend; the setting is the best answer available.
+      benchmarkTier: hearsay.settings.speechAcceleration === "cpu" ? "cpu" : "accelerated",
       modelUnloadTimeout: hearsay.settings.speechModelUnloadTimeout,
       gpuDevices: [],
     };
@@ -305,7 +308,7 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
     const { model } = status;
     if (model.state === "missing" && model.error)
       return yield* fail(operation, hearsay, model.error);
-    return toModels(hearsay, status);
+    return { ...toModels(hearsay, status), cancelled: model.state === "missing" };
   });
 
   /** Hearsay's DELETE also removes a finished model, so it is sent only while Hearsay says `downloading`. */
@@ -469,6 +472,18 @@ const make = Effect.fn("HearsaySpeechService.make")(function* (options: Options)
     ),
     cancelDownload: route("model download", upstream.cancelDownload, cancelDownload),
     removeModel: route("model removal", upstream.removeModel, refuseRemoval),
+    // Hearsay owns its recogniser file; there is no store of T3 Code's to link into.
+    linkModels: route(
+      "model linking",
+      upstream.linkModels,
+      () =>
+        new HearsaySpeechError({
+          operation: "model linking",
+          cause: new Error(
+            "Hearsay manages its own recogniser; add model files in Hearsay instead.",
+          ),
+        }),
+    ),
     prepareModel: dispatch("model preparation", upstream.prepareModel, () => Effect.void),
     transcribe: route("transcription", upstream.transcribe, (hearsay, pcmBytes) =>
       transcribe(hearsay, "transcription", pcmBytes),

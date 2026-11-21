@@ -4,8 +4,10 @@ import { ClaudeSettings, ProviderInstanceId } from "@t3tools/contracts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as ServerConfig from "../../apps/server/src/config.ts";
 import { buildReadAloudSummaryPrompt } from "../../apps/server/src/readAloud/summaryPrompt.ts";
 import { READ_ALOUD_SUMMARY_MODEL } from "../../apps/server/src/readAloud/summaryModel.ts";
 import { makeClaudeTextGeneration } from "../../apps/server/src/textGeneration/ClaudeTextGeneration.ts";
@@ -125,5 +127,12 @@ await Effect.runPromise(
     yield* fs.writeFileString(path.join(out, "results.json"), yield* encodeRows(rows));
     yield* fs.writeFileString(path.join(out, "summary.md"), lines.join("\n") + "\n");
     yield* Effect.log(lines.join("\n"));
-  }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+  }).pipe(
+    Effect.provide(
+      ServerConfig.layerTest(process.cwd(), { prefix: "t3-read-aloud-eval-state-" }).pipe(
+        Layer.provideMerge(NodeServices.layer),
+      ),
+    ),
+    Effect.scoped,
+  ),
 );

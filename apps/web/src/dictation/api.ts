@@ -11,7 +11,7 @@ import {
 } from "@t3tools/contracts";
 import { ManagedRelay } from "@t3tools/client-runtime/relay";
 import { executeAuthenticatedEnvironmentHttpRequest } from "@t3tools/client-runtime/state/environment-http-auth";
-import { createRuntimeCommand } from "@t3tools/client-runtime/state/runtime";
+import { createRuntimeCommand, runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -137,7 +137,9 @@ async function send<A>(
   input: DictationRequest,
   decode: (response: RawResponse) => A,
 ): Promise<DictationResult<A>> {
-  const result = await dictationRequest.run(appAtomRegistry, input);
+  const result = await runAtomCommand(appAtomRegistry, dictationRequest, input, {
+    reportFailure: false,
+  });
   if (!AsyncResult.isSuccess(result)) {
     return { ok: false, error: describeFailure(result.cause) };
   }

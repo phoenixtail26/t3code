@@ -525,9 +525,10 @@ function makeThreadAtoms(load: () => ThreadSnapshotLoadResult) {
       } as unknown as WsRpcProtocolClient;
       const session = {
         client,
+        // Without pagination a cold open asks the HTTP loader; with it, the socket above.
         initialConfig: Effect.succeed({
           threadResumeCompletionMarker: true,
-          threadSnapshotPagination: true,
+          threadSnapshotPagination: false,
         }),
         subscribeServerConfig: () => Stream.never,
         ready: Effect.void,

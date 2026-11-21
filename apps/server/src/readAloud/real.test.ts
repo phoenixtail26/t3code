@@ -20,6 +20,7 @@ import type * as NetAddress from "effect/net/NetAddress";
 import { expect } from "vite-plus/test";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
+import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ProjectionStoreV2 from "../orchestration-v2/ProjectionStore.ts";
 import { makeClaudeTextGeneration } from "../textGeneration/ClaudeTextGeneration.ts";
@@ -88,6 +89,7 @@ const layer = ReadAloud.layer.pipe(
     ),
   ),
   Layer.provide(FetchHttpClient.layer),
+  Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-read-aloud-test-" })),
   Layer.provide(NodeServices.layer),
 );
 

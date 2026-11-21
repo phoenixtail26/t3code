@@ -47,7 +47,7 @@ export function ExternalSessionsSettingRow() {
       resetAction={
         settings.showExternalSessions !== DEFAULT_UNIFIED_SETTINGS.showExternalSessions ? (
           <SettingResetButton
-            label="external sessions"
+            ariaLabel="external sessions"
             onClick={() =>
               updateSettings({
                 showExternalSessions: DEFAULT_UNIFIED_SETTINGS.showExternalSessions,
@@ -91,7 +91,7 @@ export function StaleClaudeCompactionSettingRow() {
       resetAction={
         settings.staleClaudeCompaction !== DEFAULT_UNIFIED_SETTINGS.staleClaudeCompaction ? (
           <SettingResetButton
-            label="stale Claude thread compaction"
+            ariaLabel="stale Claude thread compaction"
             onClick={() => setMode(DEFAULT_UNIFIED_SETTINGS.staleClaudeCompaction)}
           />
         ) : null
@@ -139,7 +139,7 @@ export function NotificationSoundRow() {
         settings.desktopNotificationSoundPath !==
         DEFAULT_UNIFIED_SETTINGS.desktopNotificationSoundPath ? (
           <SettingResetButton
-            label="notification sound choice"
+            ariaLabel="notification sound choice"
             onClick={() =>
               updateSettings({
                 desktopNotificationSoundPath: DEFAULT_UNIFIED_SETTINGS.desktopNotificationSoundPath,
@@ -246,7 +246,7 @@ export function PushNotificationSettingsSection() {
       resetAction={
         push[key] !== pushDefaults[key] ? (
           <SettingResetButton
-            label={title.toLowerCase()}
+            ariaLabel={title.toLowerCase()}
             onClick={() => updatePush({ [key]: pushDefaults[key] })}
           />
         ) : null
@@ -270,7 +270,7 @@ export function PushNotificationSettingsSection() {
         resetAction={
           push.topicUrl !== pushDefaults.topicUrl ? (
             <SettingResetButton
-              label="ntfy topic URL"
+              ariaLabel="ntfy topic URL"
               onClick={() => updatePush({ topicUrl: pushDefaults.topicUrl })}
             />
           ) : null
@@ -292,7 +292,7 @@ export function PushNotificationSettingsSection() {
         resetAction={
           push.publicBaseUrl !== pushDefaults.publicBaseUrl ? (
             <SettingResetButton
-              label="click-through base URL"
+              ariaLabel="click-through base URL"
               onClick={() => updatePush({ publicBaseUrl: pushDefaults.publicBaseUrl })}
             />
           ) : null
@@ -373,7 +373,7 @@ export function PushNotificationSettingsSection() {
         resetAction={
           push.suppressWhenPresentSeconds !== pushDefaults.suppressWhenPresentSeconds ? (
             <SettingResetButton
-              label="presence suppression window"
+              ariaLabel="presence suppression window"
               onClick={() =>
                 updatePush({ suppressWhenPresentSeconds: pushDefaults.suppressWhenPresentSeconds })
               }

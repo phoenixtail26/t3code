@@ -31,7 +31,7 @@ export function HearsaySpeechSettingsRows({ environmentId }: { environmentId: En
         resetAction={
           hearsay.url !== defaults.url ? (
             <SettingResetButton
-              label="Hearsay URL"
+              ariaLabel="Hearsay URL"
               onClick={() => updateSettings({ hearsaySpeech: { url: defaults.url } })}
             />
           ) : null
@@ -53,7 +53,7 @@ export function HearsaySpeechSettingsRows({ environmentId }: { environmentId: En
         resetAction={
           hearsay.token !== defaults.token ? (
             <SettingResetButton
-              label="Hearsay token"
+              ariaLabel="Hearsay token"
               onClick={() => updateSettings({ hearsaySpeech: { token: defaults.token } })}
             />
           ) : null

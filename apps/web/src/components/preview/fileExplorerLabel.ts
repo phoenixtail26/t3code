@@ -15,11 +15,11 @@ export function revealInFileExplorerLabel(platform: string, resolve: MessageReso
  * For a directory, which is opened so the file manager shows its contents —
  * as opposed to a file, which is revealed selected inside its parent.
  */
-export function openInFileExplorerLabel(platform: string): string {
+export function openInFileExplorerLabel(platform: string, resolve: MessageResolver = m): string {
   const normalized = platform.toLowerCase();
-  if (normalized.includes("mac")) return "Open in Finder";
-  if (normalized.includes("win")) return "Open in File Explorer";
-  return "Open in Files";
+  if (normalized.includes("mac")) return resolve(msg("Open in Finder"));
+  if (normalized.includes("win")) return resolve(msg("Open in File Explorer"));
+  return resolve(msg("Open in Files"));
 }
 
 export function revealInFileExplorerLabelForOs(

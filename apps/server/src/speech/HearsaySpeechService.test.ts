@@ -47,6 +47,8 @@ const store = Layer.succeed(
     isReady: () => Effect.succeed(true),
     installedPath: () => Effect.succeed("test.gguf"),
     download: () => Effect.succeed("test.gguf"),
+    link: () => Effect.succeed([]),
+    linkedFrom: () => Effect.undefined,
     remove: () => Effect.void,
   }),
 );
