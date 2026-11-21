@@ -309,6 +309,20 @@ permissions:
     skills: false
   expo-sqlite:
     skills: false
+  # Fork: pnpm 12 on Windows waits forever (no prompt, even with CI=1) for the skills
+  # of a dependency this list does not mention. Deny every other one that ships skills/.
+  "@react-grab/cli":
+    skills: false
+  "@tanstack/devtools-event-client":
+    skills: false
+  "@tanstack/router-core":
+    skills: false
+  "@tanstack/virtual-file-routes":
+    skills: false
+  e2e:
+    skills: false
+  get-tsconfig:
+    skills: false
 
 # @cursor/sdk finds its platform package (sandbox helper, rg, tree-sitter) by
 # walking up from the entry script for node_modules/@cursor/sdk-<platform>-<arch>.
