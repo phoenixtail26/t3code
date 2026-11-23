@@ -28,7 +28,9 @@ vi.mock("./useDictation", () => {
       return () => h.listeners.delete(listener);
     },
     registerComposer: () => () => {},
+    registerFieldButton: () => () => {},
     toggle: (...args: unknown[]) => h.toggle(...args),
+    toggleField: () => {},
     cancel: () => h.cancel(),
   };
   return {
@@ -39,7 +41,8 @@ vi.mock("./useDictation", () => {
 });
 
 import { DictationButton } from "./DictationButton";
-import { SHOW_FORK_DICTATION_BUTTON, SHOW_UPSTREAM_SPEECH_BUTTON } from "./upstreamSpeechButton";
+import { DictationFieldButton } from "./DictationFieldButton";
+import { SHOW_FORK_DICTATION_BUTTON } from "./forkDictationButton";
 
 const target = {
   environmentId: EnvironmentId.make("env-1"),
@@ -92,10 +95,9 @@ function fieldState(phase: "recording" | "transcribing", element: HTMLElement, i
 }
 
 describe("DictationButton", () => {
-  // The composer's one microphone is upstream's voice input; ChatComposer renders it on
-  // SHOW_UPSTREAM_SPEECH_BUTTON and the fork's button hides behind SHOW_FORK_DICTATION_BUTTON.
-  it("leaves the composer's microphone to upstream's voice input", () => {
-    expect(SHOW_UPSTREAM_SPEECH_BUTTON).toBe(true);
+  // The composer's one microphone is upstream's voice input; the fork's buttons hide behind
+  // SHOW_FORK_DICTATION_BUTTON while their shortcut, palette item and pills keep working.
+  it("leaves the microphone to upstream's voice input", () => {
     expect(SHOW_FORK_DICTATION_BUTTON).toBe(false);
   });
 
@@ -152,6 +154,31 @@ describe("DictationButton", () => {
     await using _screen = await renderButton();
     await act(async () => h.emit({ ...fieldState("recording", textarea), ownerKey: "other" }));
     expect(floating()).toBeNull();
+  });
+
+  it("renders no field button beside a field when idle and the in-place pill while it dictates", async () => {
+    using _reset = resetDictationMock();
+    const container = document.createElement("div");
+    container.id = "field-host";
+    await using _screen = await render(
+      <div>
+        <textarea data-testid="field" />
+        <DictationFieldButton />
+      </div>,
+      { container, router: false },
+    );
+    const field = container.querySelector<HTMLTextAreaElement>('[data-testid="field"]')!;
+    const inHost = (testId: string) => container.querySelector(`[data-testid="${testId}"]`);
+    expect(inHost("dictation-field-button")).toBeNull();
+    expect(inHost("dictation-pill")).toBeNull();
+
+    await act(async () => h.emit(fieldState("recording", field, true)));
+    expect(inHost("dictation-field-button")).toBeNull();
+    expect(inHost("dictation-pill")?.getAttribute("data-dictation-phase")).toBe("recording");
+
+    await act(async () => h.emit({ phase: "idle" }));
+    expect(inHost("dictation-pill")).toBeNull();
+    expect(inHost("dictation-field-button")).toBeNull();
   });
 
   it("stopping from the floating pill toggles this composer's dictation", async () => {

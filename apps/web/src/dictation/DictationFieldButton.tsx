@@ -1,7 +1,7 @@
-// Fork feature: dictation. A mic button for a text field outside the
-// composer, mounted with one JSX element beside that field (the quote-comment
-// popover). It dictates into the nearest field in its ancestry and shows the
-// pill in place of the button while that dictation runs.
+// Fork feature: dictation. Mounted with one JSX element beside a text field outside
+// the composer (the quote-comment popover): registers the nearest field in its ancestry
+// for mod+shift+u and shows the pill in place while that dictation runs. The mic button
+// itself is behind SHOW_FORK_DICTATION_BUTTON.
 import { MicIcon } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 
@@ -9,6 +9,7 @@ import { Button } from "../components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../components/ui/tooltip";
 import { DictationPill } from "./DictationPill";
 import { findNearestField, type DictationField } from "./field";
+import { SHOW_FORK_DICTATION_BUTTON } from "./forkDictationButton";
 import { dictation, useDictationState } from "./useDictation";
 
 export function DictationFieldButton() {
@@ -30,7 +31,7 @@ export function DictationFieldButton() {
     <span ref={hostRef} className="inline-flex">
       {mine ? (
         <DictationPill state={state} onStop={() => dictation.toggle(state.ownerKey)} />
-      ) : (
+      ) : !SHOW_FORK_DICTATION_BUTTON ? null : (
         <Tooltip>
           <TooltipTrigger
             render={

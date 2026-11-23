@@ -520,9 +520,9 @@ ours and take theirs (upstream #14882 was rejected as too large to carry).
 Upstream shipped it (sync of 2026-11-07: `apps/server/src/speech/`, streaming
 partials, Silero VAD, dictionary hinting, `mod+shift+d`). Both now run side by
 side, with two voice sections in Settings. The composer shows one mic button,
-upstream's (decided 2026-11-23: `apps/web/src/dictation/upstreamSpeechButton.ts`
-holds both flags, and ours renders no button); ours is reached by
-`mod+shift+u` and the palette item. The owner is holding the removal of ours
+upstream's (decided 2026-11-23: `apps/web/src/dictation/forkDictationButton.ts`
+holds the flag under which our composer and quote-comment buttons render
+nothing); ours is reached by `mod+shift+u` and the palette item. The owner is holding the removal of ours
 (`DictationService`, `mod+shift+u`) for phase 6 of the Hearsay spec, a week of
 real use — do not delete ours unasked.
 

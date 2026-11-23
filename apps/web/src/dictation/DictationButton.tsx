@@ -12,7 +12,7 @@ import { composerTargetKey, type ComposerThreadTarget } from "../composerDraftSt
 import { DictationPill } from "./DictationPill";
 import { FloatingDictationPill } from "./FloatingDictationPill";
 import { appendDictationToDraft } from "./draft";
-import { SHOW_FORK_DICTATION_BUTTON } from "./upstreamSpeechButton";
+import { SHOW_FORK_DICTATION_BUTTON } from "./forkDictationButton";
 import { dictation, useDictationState } from "./useDictation";
 
 export interface DictationButtonProps {

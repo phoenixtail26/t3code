@@ -44,8 +44,9 @@ of them:
   **Start voice input**, and `mod+shift+d`. It is set up with **Transcribe
   with** on the **Voice** page. This is the one that can transcribe through
   Hearsay.
-- **Dictation** has no button in the composer: it is `mod+shift+u` and
-  **Dictate into composer** in the command palette. It is what the rest of
+- **Dictation** has no button of its own, in the composer or beside a quote
+  comment: it is `mod+shift+u` and **Dictate into composer** in the command
+  palette. It is what the rest of
   this guide describes, it always uses its own bundled model, and Hearsay
   does not serve it. It stays until it is removed.
 

@@ -274,7 +274,6 @@ import { Kbd } from "../ui/kbd";
 import { useSoftwareKeyboardOpen } from "../../hooks/useSoftwareKeyboardOpen";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { DictationButton } from "../../dictation/DictationButton";
-import { SHOW_UPSTREAM_SPEECH_BUTTON } from "../../dictation/upstreamSpeechButton";
 import { usePanelAnimationSettings } from "../../panelAnimations";
 import { readEnvironmentScope, readPreparedConnection } from "../../state/session";
 import type { ReviewCommentContext } from "../../reviewCommentContext";
@@ -3911,7 +3910,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     keepFullHistory={props.keepFullHistory}
                     onToggleKeepFullHistory={props.onToggleKeepFullHistory}
                   >
-                    {speechInput.available && SHOW_UPSTREAM_SPEECH_BUTTON ? (
+                    {speechInput.available ? (
                       <>
                         <ComposerSpeechRecordingPill
                           state={speechInput.state}
