@@ -7,10 +7,13 @@ Dictation is English only.
 
 ## Dictate a prompt
 
-Start and stop recording with the microphone button beside the attachment
-button, with `mod+shift+u`, or with **Dictate into composer** in the command
-palette. Press `Escape` while recording to discard it. Recordings stop on their
-own after 5 minutes and are transcribed.
+The composer's one microphone button, **Start voice input**, is Voice input
+(`mod+shift+d`), not Dictation; see
+[Transcribe through Hearsay](#transcribe-through-hearsay) for the difference.
+Start and stop a Dictation recording with `mod+shift+u` or with **Dictate into
+composer** in the command palette; its recording pill shows in the composer
+footer meanwhile. Press `Escape` while recording to discard it. Recordings
+stop on their own after 5 minutes and are transcribed.
 
 If you switch threads or start dictating in another composer while recording,
 the current recording stops and its text goes into the thread where you started
@@ -37,13 +40,14 @@ The next dictation downloads it again.
 T3 Code has two ways to speak into the composer, and Hearsay serves only one
 of them:
 
-- **Voice input** is the microphone button whose tooltip reads **Start voice
-  input**, and `mod+shift+d`. It is set up with **Transcribe with** on the
-  **Voice** page. This is the one that can transcribe through Hearsay.
-- **Dictation** is the microphone button whose tooltip reads **Dictate**,
-  `mod+shift+u`, and **Dictate into composer** in the command palette. It is
-  what the rest of this guide describes, it always uses its own bundled
-  model, and Hearsay does not serve it.
+- **Voice input** is the composer's microphone button, whose tooltip reads
+  **Start voice input**, and `mod+shift+d`. It is set up with **Transcribe
+  with** on the **Voice** page. This is the one that can transcribe through
+  Hearsay.
+- **Dictation** has no button in the composer: it is `mod+shift+u` and
+  **Dictate into composer** in the command palette. It is what the rest of
+  this guide describes, it always uses its own bundled model, and Hearsay
+  does not serve it. It stays until it is removed.
 
 Voice input can hand its recordings to a Hearsay speech service running on
 the environment that transcribes for you, instead of the bundled engine. Its

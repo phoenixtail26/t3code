@@ -1,7 +1,7 @@
-// Fork feature: dictation. The composer footer mic button; its pill replaces it
-// while dictating. A dictation into another field still belongs to this
-// composer (environment, fallback draft): the button stays and the pill
-// floats beside that field unless the field has its own button.
+// Fork feature: dictation. Registers the composer for mod+shift+u and the palette item
+// and shows its pill while dictating; the footer mic button itself is behind
+// SHOW_FORK_DICTATION_BUTTON. A dictation into another field still belongs to this
+// composer (environment, fallback draft): the pill floats beside that field unless it has one.
 import type { EnvironmentId } from "@t3tools/contracts";
 import { MicIcon } from "lucide-react";
 import { useEffect, useEffectEvent } from "react";
@@ -12,6 +12,7 @@ import { composerTargetKey, type ComposerThreadTarget } from "../composerDraftSt
 import { DictationPill } from "./DictationPill";
 import { FloatingDictationPill } from "./FloatingDictationPill";
 import { appendDictationToDraft } from "./draft";
+import { SHOW_FORK_DICTATION_BUTTON } from "./upstreamSpeechButton";
 import { dictation, useDictationState } from "./useDictation";
 
 export interface DictationButtonProps {
@@ -66,24 +67,26 @@ export function DictationButton(props: DictationButtonProps) {
 
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={() => dictation.toggle(ownerKey)}
-              aria-label="Dictate"
-              data-testid="dictation-button"
-            />
-          }
-        >
-          <MicIcon />
-        </TooltipTrigger>
-        <TooltipPopup>Dictate</TooltipPopup>
-      </Tooltip>
+      {SHOW_FORK_DICTATION_BUTTON ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => dictation.toggle(ownerKey)}
+                aria-label="Dictate"
+                data-testid="dictation-button"
+              />
+            }
+          >
+            <MicIcon />
+          </TooltipTrigger>
+          <TooltipPopup>Dictate</TooltipPopup>
+        </Tooltip>
+      ) : null}
       {mine && state.field !== undefined && !state.field.inline ? (
         <FloatingDictationPill anchor={state.field.target.element} state={state} onStop={stop} />
       ) : null}

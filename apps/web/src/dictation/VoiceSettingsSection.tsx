@@ -66,6 +66,11 @@ export function VoiceSettingsSection() {
 
   return (
     <SettingsSection id="voice" title="Voice">
+      <p className="px-3 py-2 text-xs text-muted-foreground sm:px-4">
+        Dictation runs from mod+shift+u or Dictate into composer in the command palette, on this
+        server&apos;s own model. The composer&apos;s microphone button is Voice input, set up on the
+        Voice page; with a Hearsay URL set there, Hearsay transcribes it.
+      </p>
       <SettingsRow
         serverScoped
         settingKeys={["dictation"]}

@@ -519,9 +519,12 @@ ours and take theirs (upstream #14882 was rejected as too large to carry).
 
 Upstream shipped it (sync of 2026-11-07: `apps/server/src/speech/`, streaming
 partials, Silero VAD, dictionary hinting, `mod+shift+d`). Both now run side by
-side: two mic buttons in the composer, two voice sections in Settings. The
-owner is holding the removal of ours (`DictationService`, `mod+shift+u`) for
-phase 6 of the Hearsay spec, a week of real use — do not delete ours unasked.
+side, with two voice sections in Settings. The composer shows one mic button,
+upstream's (decided 2026-11-23: `apps/web/src/dictation/upstreamSpeechButton.ts`
+holds both flags, and ours renders no button); ours is reached by
+`mod+shift+u` and the palette item. The owner is holding the removal of ours
+(`DictationService`, `mod+shift+u`) for phase 6 of the Hearsay spec, a week of
+real use — do not delete ours unasked.
 
 Hearsay (merged 2026-11-09, `g3code` @ 050a98db00): the owner's local speech
 service; T3 Code is one of its thin clients. Spec:

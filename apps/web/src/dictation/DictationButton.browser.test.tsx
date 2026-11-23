@@ -39,6 +39,7 @@ vi.mock("./useDictation", () => {
 });
 
 import { DictationButton } from "./DictationButton";
+import { SHOW_FORK_DICTATION_BUTTON, SHOW_UPSTREAM_SPEECH_BUTTON } from "./upstreamSpeechButton";
 
 const target = {
   environmentId: EnvironmentId.make("env-1"),
@@ -91,10 +92,17 @@ function fieldState(phase: "recording" | "transcribing", element: HTMLElement, i
 }
 
 describe("DictationButton", () => {
-  it("shows the button when idle and the in-place pill for its own composer dictation", async () => {
+  // The composer's one microphone is upstream's voice input; ChatComposer renders it on
+  // SHOW_UPSTREAM_SPEECH_BUTTON and the fork's button hides behind SHOW_FORK_DICTATION_BUTTON.
+  it("leaves the composer's microphone to upstream's voice input", () => {
+    expect(SHOW_UPSTREAM_SPEECH_BUTTON).toBe(true);
+    expect(SHOW_FORK_DICTATION_BUTTON).toBe(false);
+  });
+
+  it("renders no button when idle and the in-place pill for its own composer dictation", async () => {
     using _reset = resetDictationMock();
     await using _screen = await renderButton();
-    expect(inComposer("dictation-button")).not.toBeNull();
+    expect(inComposer("dictation-button")).toBeNull();
     expect(inComposer("dictation-pill")).toBeNull();
     expect(floating()).toBeNull();
 
@@ -116,7 +124,7 @@ describe("DictationButton", () => {
     expect(pill).not.toBeNull();
     expect(pill?.closest("#composer")).toBeNull();
     expect(inComposer("dictation-pill")).toBeNull();
-    expect(inComposer("dictation-button")).not.toBeNull();
+    expect(inComposer("dictation-button")).toBeNull();
     expect((pill as HTMLElement).style.top).toBe("296px");
     expect((pill as HTMLElement).style.left).toBe("400px");
     expect(pill?.querySelector('[data-dictation-phase="recording"]')).not.toBeNull();
@@ -126,7 +134,7 @@ describe("DictationButton", () => {
 
     await act(async () => h.emit({ phase: "idle" }));
     expect(floating()).toBeNull();
-    expect(inComposer("dictation-button")).not.toBeNull();
+    expect(inComposer("dictation-button")).toBeNull();
   });
 
   it("leaves the floating pill out when the field has its own button", async () => {
