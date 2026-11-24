@@ -1,7 +1,7 @@
 /**
  * Pure parsing of Claude Code session JSONL lines (DESIGN.md "Pure parser
  * modules"). The on-disk format is undocumented and per-line, so parsing uses
- * defensive `typeof` guards like `../provider/claudeUsage.ts`, not a schema library.
+ * defensive `typeof` guards, not a schema library.
  */
 
 /** Lines longer than this are skipped without ever reaching `JSON.parse` —

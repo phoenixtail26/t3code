@@ -11,9 +11,8 @@ unversioned, so treat every rule here as "observed", not "guaranteed".
 Claude Code persists each session as
 `<configDir>/projects/<project-slug>/<session-uuid>.jsonl` (one JSON object
 per line, LF separators even on Windows, trailing newline, no BOM).
-`configDir` resolution: `claudeSessionsRoot.ts` (mirrors the usage-meter's
-`resolveClaudeCredentialsPath`; default `~/.claude`, honoring a non-empty
-instance `homePath`). Like the usage meter, callers currently pass `""` —
+`configDir` resolution: `claudeSessionsRoot.ts` (default `~/.claude`, honoring a
+non-empty instance `homePath`). Callers currently pass `""` —
 custom `CLAUDE_CONFIG_DIR` instances are out of scope for now.
 
 - **Sessions are ONLY the top-level `*.jsonl` files.** A session may have a

@@ -496,10 +496,6 @@ delivers both surfaces the owner asked for at once.
 
 ## 10. Smaller candidates
 
-- Usage meter: per-model breakdown when upstream adds more scoped limits;
-  optional statusline-style compact mode.
-- Custom `CLAUDE_CONFIG_DIR`/homePath support in the usage proxy
-  (`claudeUsage.ts` documents the limitation), plus macOS keychain credentials.
 - Notification history: a list of recent attention events, so a toast missed
   while the machine was locked is still discoverable in the app.
 - Fork/adopt polish (all from the 2026-07-31 dogfooding pass): re-fetch the

@@ -11,7 +11,6 @@ export const forkEnglishOnlyFiles = [
   "apps/web/src/components/ExternalSessionsSection.tsx",
   "apps/web/src/components/settings/NotificationSoundControl.tsx",
   "apps/web/src/components/sidebar/ForkSidebarPills.tsx",
-  "apps/web/src/components/sidebar/SidebarClaudeUsagePill.tsx",
   "apps/web/src/components/sidebar/SidebarNewBuildPill.tsx",
   "apps/web/src/components/sidebar/newBuildAvailable.logic.ts",
   "apps/web/src/hooks/useSidebarEdgeSwipe.ts",

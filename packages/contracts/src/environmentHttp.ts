@@ -52,7 +52,6 @@ import {
   ThreadId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
-import { ClaudeUsageSummary } from "./claudeUsage.ts";
 import {
   CloudSpeechApiKey,
   CloudSpeechError,
@@ -824,25 +823,17 @@ class EnvironmentProjectsHttpApi extends HttpApiGroup.make("projects")
   ) {}
 
 /**
- * Fork-only endpoints: the Claude plan-usage meter and the presence heartbeat
- * that suppresses phone pushes while the user is at the machine. Kept in their
- * own group so upstream's groups never carry fork handlers.
+ * Fork-only endpoints: the presence heartbeat that suppresses phone pushes while
+ * the user is at the machine. Kept in its own group so upstream's groups never
+ * carry fork handlers.
  */
-class EnvironmentForkHttpApi extends HttpApiGroup.make("fork")
-  .add(
-    HttpApiEndpoint.get("claudeUsage", "/api/claude/usage", {
-      headers: OptionalBearerHeaders,
-      success: ClaudeUsageSummary,
-      error: EnvironmentOrchestrationSnapshotErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
-  )
-  .add(
-    HttpApiEndpoint.post("reportPresence", "/api/presence", {
-      headers: OptionalBearerHeaders,
-      success: Schema.Void,
-      error: EnvironmentOrchestrationSnapshotErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
-  ) {}
+class EnvironmentForkHttpApi extends HttpApiGroup.make("fork").add(
+  HttpApiEndpoint.post("reportPresence", "/api/presence", {
+    headers: OptionalBearerHeaders,
+    success: Schema.Void,
+    error: EnvironmentOrchestrationSnapshotErrors,
+  }).middleware(EnvironmentAuthenticatedAuth),
+) {}
 
 class EnvironmentPullRequestsHttpApi extends HttpApiGroup.make("pullRequests").add(
   HttpApiEndpoint.post("diff", "/api/pull-requests/diff", {

@@ -53,14 +53,10 @@ extended toward the orchestrator role.
    providers while the instance id sticks, minting mismatched bindings whose
    turns fail with "Provider instance 'codex' is disabled". New projects now
    default to the first ready/enabled provider instance. Upstreamable.
-3. **Claude plan-usage meter** — sidebar footer shows the session (5h) window
-   percent at all times; weekly/scoped limits that cross warning/error get an
-   alert row + escalation toasts; click/hover shows the full breakdown with
-   reset countdowns. Server proxies Anthropic's OAuth usage endpoint (the data
-   behind Claude Code's `/usage`) with the CLI's stored credentials, 60s cache,
-   stale-while-error. Files: `packages/contracts/src/claudeUsage.ts`,
-   `apps/server/src/provider/claudeUsage.ts`,
-   `apps/web/src/components/sidebar/SidebarClaudeUsagePill.tsx`.
+3. **Claude plan-usage meter** — removed 2026-11-24. Upstream's Thread details
+   (Settings → Appearance → Thread details → Usage limits) lists the same
+   session, weekly and model-scoped windows per thread, so the fork's sidebar
+   pill, `/api/claude/usage` proxy and `claudeUsage` contract went.
 4. **Run tooling**: `start-t3code-desktop.ps1` (daily driver, Electron, no
    pairing) / `start-t3code.ps1` (headless server + browser). Start Menu
    shortcut "T3 Code (fork)". The winget upstream install was removed —

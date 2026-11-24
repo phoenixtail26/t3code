@@ -121,9 +121,8 @@ const make = Effect.gen(function* () {
   const watcherScope = yield* Scope.make("sequential");
   yield* Effect.addFinalizer(() => Scope.close(watcherScope, Exit.void));
 
-  // Matches the usage-meter precedent (claudeUsage.ts): only the default
-  // config dir is consulted; custom homePath instances are not plumbed
-  // through yet (DESIGN.md, "Source of truth on disk").
+  // Only the default config dir is consulted; custom homePath instances are
+  // not plumbed through yet (DESIGN.md, "Source of truth on disk").
   const sessionsRoot = resolveClaudeSessionsRoot("");
 
   // `sessions` and `tails` are only mutated while holding `mutex`. The two

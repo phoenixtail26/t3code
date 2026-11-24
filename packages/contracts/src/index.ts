@@ -51,7 +51,6 @@ export * from "./threadPullRequest.ts";
 export * from "./threadSearch.ts";
 export * from "./threadTags.ts";
 export * from "./threadTitle.ts";
-export * from "./claudeUsage.ts";
 export * from "./externalSessions.ts";
 export * from "./dictation.ts";
 export * from "./threadFork.ts";
